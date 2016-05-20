@@ -72,12 +72,24 @@ max_px(px_t p1, px_t p2)
 	return p1 > p2 ? p1 : p2;
 }
 
+static inline __attribute__((const, pure)) quo_t
+max_quo(quo_t q1, quo_t q2)
+{
+	return q1.b > q2.b ? q1 : q2;
+}
+
+static inline __attribute__((const, pure)) quo_t
+min_quo(quo_t q1, quo_t q2)
+{
+	return q1.a < q2.a ? q1 : q2;
+}
+
 
 static tv_t metr;
-static px_t _1stb, _1sta;
-static px_t lastb, lasta;
-static px_t maxb, mina;
-static px_t minb, maxa;
+static quo_t _1st;
+static quo_t last;
+static quo_t maxb;
+static quo_t mina;
 static px_t maxdd, maxdu;
 static px_t mindb, maxdb;
 static px_t minda, maxda;
@@ -85,7 +97,7 @@ static px_t minda, maxda;
 static void
 crst(void)
 {
-	_1stb = _1sta = __DEC32_MAX__;
+	_1st = (quo_t){__DEC32_MAX__, 0.df};
 	return;
 }
 
@@ -98,24 +110,24 @@ cndl(void)
 	bi = snprintf(buf, sizeof(buf), "%lu", metr);
 	/* open */
 	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, _1stb);
+	bi += pxtostr(buf + bi, sizeof(buf) - bi, _1st.b);
 	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, _1sta);
+	bi += pxtostr(buf + bi, sizeof(buf) - bi, _1st.a);
 	/* high */
 	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxb);
+	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxb.b);
 	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxa);
+	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxb.a);
 	/* low */
 	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, minb);
+	bi += pxtostr(buf + bi, sizeof(buf) - bi, mina.b);
 	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, mina);
+	bi += pxtostr(buf + bi, sizeof(buf) - bi, mina.a);
 	/* close */
 	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, lastb);
+	bi += pxtostr(buf + bi, sizeof(buf) - bi, last.b);
 	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, lasta);
+	bi += pxtostr(buf + bi, sizeof(buf) - bi, last.a);
 	/* max-inc */
 	buf[bi++] = '\t';
 	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxdb);
@@ -142,9 +154,9 @@ cndl(void)
 static int
 push_beef(char *ln, size_t UNUSED(lz))
 {
-	char *on;
-	px_t b, a;
 	tv_t oldm = metr;
+	quo_t this;
+	char *on;
 
 	/* time value up first */
 	with (long unsigned int s, x) {
@@ -163,7 +175,7 @@ push_beef(char *ln, size_t UNUSED(lz))
 	}
 
 	/* do we need to draw another candle? */
-	if (UNLIKELY(metr > oldm && _1stb != __DEC32_MAX__)) {
+	if (UNLIKELY(metr > oldm && _1st.b != __DEC32_MAX__)) {
 		/* yip */
 		cndl();
 	}
@@ -186,41 +198,37 @@ push_beef(char *ln, size_t UNUSED(lz))
 	on++;
 
 	/* snarf quotes */
-	if (!(b = strtopx(on, &on)) || *on++ != '\t' ||
-	    !(a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
+	if (!(this.b = strtopx(on, &on)) || *on++ != '\t' ||
+	    !(this.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
 
 	/* ok do the calc'ing */
-	if (UNLIKELY(_1stb == __DEC32_MAX__)) {
-		_1stb = minb = maxb = lastb = b;
-		_1sta = mina = maxa = lasta = a;
+	if (UNLIKELY(_1st.b == __DEC32_MAX__)) {
+		_1st = last = maxb = mina = this;
 		mindb = maxdb = maxdd = 0.df;
 		minda = maxda = maxdu = 0.df;
 		return 0;
 	}
 	/* min+max */
-	maxb = max_px(maxb, b);
-	maxa = max_px(maxa, a);
-	minb = min_px(minb, b);
-	mina = min_px(mina, a);
+	maxb = max_quo(maxb, this);
+	mina = min_quo(mina, this);
 
 	/* lucky we've got lastb/lasta */
-	with (px_t db = b - lastb, da = a - lasta) {
+	with (px_t db = this.b - last.b, da = this.a - last.a) {
 		maxdb = max_px(maxdb, db);
 		mindb = min_px(mindb, db);
 		maxda = max_px(maxda, da);
 		minda = min_px(minda, da);
 	}
 
-	with (px_t du = b - minb, dd = a - maxa) {
+	with (px_t du = this.a - mina.b, dd = this.b - maxb.a) {
 		maxdu = max_px(maxdu, du);
 		maxdd = min_px(maxdd, dd);
 	}
 
-	/* always set these */
-	lastb = b;
-	lasta = a;
+	/* keep some state */
+	last = this;
 	return 0;
 }
 
