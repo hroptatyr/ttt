@@ -85,6 +85,8 @@ min_quo(quo_t q1, quo_t q2)
 }
 
 
+static tv_t intv = 60U;
+
 static tv_t metr;
 static quo_t _1st;
 static quo_t last;
@@ -171,7 +173,7 @@ push_beef(char *ln, size_t UNUSED(lz))
 			return -1;
 		}
 		/* assign with minute resolution */
-		metr = s / 60U;
+		metr = s / intv;
 	}
 
 	/* do we need to draw another candle? */
@@ -246,6 +248,15 @@ main(int argc, char *argv[])
 	if (yuck_parse(argi, argc, argv) < 0) {
 		rc = 1;
 		goto out;
+	}
+
+	if (argi->interval_arg) {
+		if (!(intv = strtoul(argi->interval_arg, NULL, 10))) {
+			errno = 0, serror("\
+Error: cannot read interval argument, must be positive.");
+			rc = 1;
+			goto out;
+		}
 	}
 
 	{
