@@ -86,6 +86,7 @@ min_quo(quo_t q1, quo_t q2)
 
 
 static tv_t intv = 60U;
+static px_t thresh = 0.000036df;
 
 static tv_t metr;
 static quo_t _1st;
@@ -95,11 +96,13 @@ static quo_t mina;
 static px_t maxdd, maxdu;
 static px_t mindb, maxdb;
 static px_t minda, maxda;
+static px_t lpnl, spnl;
 
 static void
 crst(void)
 {
 	_1st = (quo_t){__DEC32_MAX__, 0.df};
+	lpnl = spnl = 0.df;
 	return;
 }
 
@@ -145,12 +148,145 @@ cndl(void)
 	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxdd);
 	buf[bi++] = '\t';
 	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxdu);
+	/* optimal profits l/s */
+	buf[bi++] = '\t';
+	bi += pxtostr(buf + bi, sizeof(buf) - bi, lpnl);
+	buf[bi++] = '\t';
+	bi += pxtostr(buf + bi, sizeof(buf) - bi, spnl);
 
 	buf[bi++] = '\n';
 	fwrite(buf, 1, bi, stdout);
 
 	crst();
 	return 0;
+}
+
+static void
+optim(bool lastp)
+{
+	static tik_t hi_bid = {.p = -__DEC32_MAX__};
+	static tik_t lo_ask = {.p = __DEC32_MAX__};
+	static tik_t h2_bid;
+	static tik_t l2_ask;
+	static tv_t omtr;
+	static enum {
+		RGM_FLAT,
+		RGM_LONG,
+		RGM_SHORT,
+	} rgm;
+	/* last trades */
+	static tik_t bot;
+	static tik_t sld;
+
+	static void buy(tik_t x)
+	{
+		/* calc profits */
+		spnl += sld.p ? sld.p - x.p : 0.df;
+		lo_ask = l2_ask;
+		bot = x;
+
+		switch (rgm) {
+		case RGM_FLAT:
+			rgm = RGM_LONG;
+			break;
+		case RGM_LONG:
+			abort();
+			break;
+		case RGM_SHORT:
+			rgm = RGM_FLAT;
+			break;
+		}
+	}
+
+	static void sell(tik_t x)
+	{
+		/* calc profits */
+		lpnl += bot.p ? x.p - bot.p : 0.df;
+		hi_bid = h2_bid;
+		sld = x;
+
+		switch (rgm) {
+		case RGM_FLAT:
+			rgm = RGM_SHORT;
+			break;
+		case RGM_LONG:
+			rgm = RGM_FLAT;
+			break;
+		case RGM_SHORT:
+			abort();
+			break;
+		}
+	}
+
+	if (UNLIKELY(lastp)) {
+		assert(rgm == RGM_FLAT);
+		if (hi_bid.p - lo_ask.p > thresh &&
+		    h2_bid.p - lo_ask.p > thresh) {
+			if (hi_bid.t < lo_ask.t) {
+				sell(hi_bid);
+				buy(lo_ask);
+			} else if (hi_bid.t > lo_ask.t) {
+				buy(lo_ask);
+				sell(hi_bid);
+			}
+		} else if (hi_bid.p - lo_ask.p > thresh &&
+			   hi_bid.p - l2_ask.p > thresh) {
+			if (lo_ask.t < hi_bid.t) {
+				buy(lo_ask);
+				sell(hi_bid);
+			} else if (lo_ask.t > hi_bid.t) {
+				sell(hi_bid);
+				buy(lo_ask);
+			}
+		}
+
+		hi_bid = (tik_t){.p = -__DEC32_MAX__};
+		lo_ask = (tik_t){.p = __DEC32_MAX__};
+		h2_bid = (tik_t){};
+		l2_ask = (tik_t){};
+		rgm = RGM_FLAT;
+		omtr = 0U;
+		bot.p = 0.df;
+		sld.p = 0.df;
+		return;
+	}
+
+	if (last.b > hi_bid.p) {
+		if (hi_bid.p - lo_ask.p > thresh &&
+		    hi_bid.p - l2_ask.p > thresh) {
+			if (lo_ask.t < hi_bid.t) {
+				buy(lo_ask);
+				sell(hi_bid);
+			} else if (lo_ask.t > hi_bid.t) {
+				sell(hi_bid);
+				buy(lo_ask);
+			}
+		}
+		/* track-keeping */
+		hi_bid = (tik_t){omtr, last.b};
+		l2_ask = (tik_t){omtr, last.a};
+	} else if (last.b > h2_bid.p) {
+		h2_bid = (tik_t){omtr, last.b};
+	}
+	if (last.a < lo_ask.p) {
+		if (hi_bid.p - lo_ask.p > thresh &&
+		    h2_bid.p - lo_ask.p > thresh) {
+			if (hi_bid.t < lo_ask.t) {
+				sell(hi_bid);
+				buy(lo_ask);
+			} else if (hi_bid.t > lo_ask.t) {
+				buy(lo_ask);
+				sell(hi_bid);
+			}
+		}
+		/* track-keeping */
+		lo_ask = (tik_t){omtr, last.a};
+		h2_bid = (tik_t){omtr, last.b};
+	} else if (last.a < l2_ask.p) {
+		l2_ask = (tik_t){omtr, last.a};
+	}
+	omtr++;
+	return;
 }
 
 static int
@@ -178,6 +314,8 @@ push_beef(char *ln, size_t UNUSED(lz))
 
 	/* do we need to draw another candle? */
 	if (UNLIKELY(metr > oldm && _1st.b != __DEC32_MAX__)) {
+		/* yield */
+		optim(true);
 		/* yip */
 		cndl();
 	}
@@ -231,6 +369,9 @@ push_beef(char *ln, size_t UNUSED(lz))
 
 	/* keep some state */
 	last = this;
+
+	/* skim for optim */
+	optim(false);
 	return 0;
 }
 
