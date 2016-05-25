@@ -291,11 +291,11 @@ offline(FILE *qfp)
 	char *line = NULL;
 	size_t llen = 0UL;
 	ssize_t nrd;
+	quo_t q;
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
 		tv_t omtr;
 		ord_t o;
-		quo_t q;
 		char *on;
 
 		if (UNLIKELY((omtr = strtotv(line, &on)) < metr)) {
@@ -337,6 +337,22 @@ offline(FILE *qfp)
 			send_acc(acc);
 		}
 	}
+	/* finalise with the last known quote */
+	while ((nrd = getline(&line, &llen, qfp)) > 0) {
+		char *on;
+
+		metr = strtotv(line, &on);
+		/* instrument next */
+		on = strchr(on, '\t');
+		q.b = strtopx(++on, &on);
+		q.a = strtopx(++on, &on);
+	}
+	with (exe_t x = exec_mkt((ord_t){RGM_CANCEL, .q = acc.base}, q)) {
+		send_exe(x);
+		acc = alloc(acc, x, comm);
+		send_acc(acc);
+	}
+
 	free(line);
 	return 0;
 }
