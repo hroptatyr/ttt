@@ -112,7 +112,7 @@ cndl(void)
 	char buf[256U];
 	size_t bi;
 
-	bi = snprintf(buf, sizeof(buf), "%lu", metr);
+	bi = snprintf(buf, sizeof(buf), "%lu.000000000", metr * intv);
 	/* open */
 	buf[bi++] = '\t';
 	bi += pxtostr(buf + bi, sizeof(buf) - bi, _1st.b);
