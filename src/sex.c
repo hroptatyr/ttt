@@ -298,7 +298,9 @@ offline(FILE *qfp)
 		quo_t q;
 		char *on;
 
-		omtr = strtotv(line, &on);
+		if (UNLIKELY((omtr = strtotv(line, &on)) < metr)) {
+			continue;
+		}
 		/* read the order */
 		switch (*on) {
 		case 'L'/*ONG*/:
