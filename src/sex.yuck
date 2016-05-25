@@ -2,9 +2,9 @@ Usage: sex QUOTES < ORDERS
 
 Simulate executions of ORDERS using QUOTES.
 
-  --max-holding-time=T  Never hold positions longer than T msecs,
-                        default: 60000
   --exe-delay=N         In offline mode assume we can execute
                         in under N nanoseconds (default: 60000000)
   --commission=PX       Commissions per roundtrip.  These will be
                         accrued in a separate account.
+  --quantity=QX         Trade QX contracts per order.
+  --absqty              Position absolute quantities.

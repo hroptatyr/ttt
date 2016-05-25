@@ -91,8 +91,9 @@ typedef struct {
 } ord_t;
 
 static tv_t exe_age = 60U;
-static tv_t holdt = -1ULL;
+static qx_t qty = 1.dd;
 static px_t comm = 0.df;
+static unsigned int absq;
 
 #define FRONT	(0U)
 #define HIND	(1U)
@@ -192,6 +193,19 @@ strtotv(const char *ln, char **endptr)
 	return r;
 }
 
+static inline __attribute__((const, pure)) qx_t
+min_qx(qx_t q1, qx_t q2)
+{
+	return q1 < q2 ? q1 : q2;
+}
+
+static inline __attribute__((const, pure)) qx_t
+max_qx(qx_t q1, qx_t q2)
+{
+	return q1 > q2 ? q1 : q2;
+}
+
+
 static ssize_t
 send_exe(exe_t x)
 {
@@ -303,11 +317,15 @@ offline(FILE *qfp)
 		}
 		/* read the order */
 		switch (*on) {
+			qx_t adq;
+
 		case 'L'/*ONG*/:
-			o = (ord_t){RGM_LONG, .q = 10000.dd};
+			adq = absq ? min_qx(acc.base, qty) : 0.dd;
+			o = (ord_t){RGM_LONG, .q = qty - adq};
 			break;
 		case 'S'/*HORT*/:
-			o = (ord_t){RGM_SHORT, .q = 10000.dd};
+			adq = absq ? max_qx(acc.base, -qty) : 0.dd;
+			o = (ord_t){RGM_SHORT, .q = qty + adq};
 			break;
 		case 'C'/*ANCEL*/:
 		case 'E'/*MERG*/:
@@ -381,13 +399,15 @@ Error: QUOTES file is mandatory.");
 		exe_age = strtoul(argi->exe_delay_arg, NULL, 10);
 	}
 
-	if (argi->max_holding_time_arg) {
-		holdt = strtoul(argi->max_holding_time_arg, NULL, 10) - 1ULL;
-	}
-
 	if (argi->commission_arg) {
 		comm = strtopx(argi->commission_arg, NULL);
 	}
+
+	if (argi->quantity_arg) {
+		qty = strtoqx(argi->quantity_arg, NULL);
+	}
+
+	absq = argi->absqty_flag;
 
 	if (UNLIKELY((qfp = fopen(*argi->args, "r")) < 0)) {
 		serror("\
