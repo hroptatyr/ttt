@@ -94,6 +94,7 @@ static tv_t exe_age = 60U;
 static qx_t qty = 1.dd;
 static px_t comm = 0.df;
 static unsigned int absq;
+static unsigned int maxq;
 
 #define FRONT	(0U)
 #define HIND	(1U)
@@ -320,12 +321,14 @@ offline(FILE *qfp)
 			qx_t adq;
 
 		case 'L'/*ONG*/:
-			adq = absq ? min_qx(acc.base, qty) : 0.dd;
-			o = (ord_t){RGM_LONG, .q = qty - adq};
+			adq = !maxq ? qty : acc.base <= 0.dd ? qty : 0.dd;
+			adq += absq && acc.base < 0.dd ? qty : 0.dd;
+			o = (ord_t){RGM_LONG, .q = adq};
 			break;
 		case 'S'/*HORT*/:
-			adq = absq ? max_qx(acc.base, -qty) : 0.dd;
-			o = (ord_t){RGM_SHORT, .q = qty + adq};
+			adq = !maxq ? qty : acc.base >= 0.dd ? qty : 0.dd;
+			adq += absq && acc.base > 0.dd ? qty : 0.dd;
+			o = (ord_t){RGM_SHORT, .q = adq};
 			break;
 		case 'C'/*ANCEL*/:
 		case 'E'/*MERG*/:
@@ -408,6 +411,7 @@ Error: QUOTES file is mandatory.");
 	}
 
 	absq = argi->absqty_flag;
+	maxq = argi->maxqty_flag;
 
 	if (UNLIKELY((qfp = fopen(*argi->args, "r")) < 0)) {
 		serror("\
