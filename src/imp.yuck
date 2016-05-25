@@ -1,0 +1,3 @@
+Usage: imp QUOTES < ORDERS
+
+Calculate impact of ORDERS.
