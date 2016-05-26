@@ -53,7 +53,8 @@ typedef struct {
 	px_t a;
 } quo_t;
 
-static px_t comm = 0.df;
+static tv_t intv = 10000U;
+static tv_t maxt = -1ULL;
 
 #define FRONT	(0U)
 #define HIND	(1U)
@@ -185,6 +186,7 @@ offline(FILE *qfp)
 	tv_t *pnx = _pnx;
 	px_t *ppx = _ppx;
 	size_t npos = 0U;
+	size_t mpos = 0U;
 	size_t zpos = countof(_ptv);
 	char *line = NULL;
 	size_t llen = 0UL;
@@ -196,17 +198,37 @@ offline(FILE *qfp)
 		char *on;
 
 		metr = strtotv(line, &on);
-		for (size_t i = 0U; i < npos; i++) {
-			if (UNLIKELY(pnx[i] <= metr)) {
-				if (UNLIKELY(isinfd32(ppx[i]))) {
-					if (ppx[i] > 0) {
-						ppx[i] = q.a;
-					} else {
-						ppx[i] = -q.b;
-					}
+		for (size_t i = mpos; i < npos && pnx[i] <= metr; i++) {
+			if (UNLIKELY(isinfd32(ppx[i]))) {
+				if (ppx[i] > 0) {
+					ppx[i] = q.a;
+				} else {
+					ppx[i] = -q.b;
 				}
-				send_eva(ptv[i], pnx[i], ppx[i], q);
-				pnx[i] += 10000U;
+			}
+			send_eva(ptv[i], pnx[i], ppx[i], q);
+			pnx[i] += intv;
+
+			if (UNLIKELY(pnx[i] > ptv[i] + maxt)) {
+				/* phase him out */
+				mpos = i + 1U;
+			}
+		}
+		/* more house keeping */
+		if (mpos >= zpos / 2U) {
+			/* yay, we've got some spares */
+			if (LIKELY(mpos < npos)) {
+				/* move, move, move */
+				const size_t nleft = npos - mpos;
+
+				memmove(ptv, ptv + mpos, nleft * sizeof(*ptv));
+				memmove(pnx, pnx + mpos, nleft * sizeof(*pnx));
+				memmove(ppx, ppx + mpos, nleft * sizeof(*ppx));
+				mpos = 0U;
+				npos = nleft;
+			} else {
+				/* just reset him */
+				mpos = npos = 0U;
 			}
 		}
 		/* instrument next */
@@ -249,6 +271,16 @@ offline(FILE *qfp)
 				memcpy(nuptv, ptv, zpos * sizeof(*ptv));
 				memcpy(nupnx, pnx, zpos * sizeof(*pnx));
 				memcpy(nuppx, ppx, zpos * sizeof(*ppx));
+
+				if (ptv != _ptv) {
+					free(ptv);
+					free(pnx);
+					free(ppx);
+				}
+
+				ptv = nuptv;
+				pnx = nupnx;
+				ppx = nuppx;
 				zpos = nuzp;
 			}
 			break;
@@ -275,7 +307,7 @@ offline(FILE *qfp)
 }
 
 
-#include "sex.yucc"
+#include "imp.yucc"
 
 int
 main(int argc, char *argv[])
@@ -292,6 +324,24 @@ main(int argc, char *argv[])
 Error: QUOTES file is mandatory.");
 		rc = 1;
 		goto out;
+	}
+
+	if (argi->interval_arg) {
+		if (UNLIKELY(!(intv = strtoul(argi->interval_arg, NULL, 10)))) {
+			errno = 0, serror("\
+Error: interval parameter must be positive.");
+			rc = 1;
+			goto out;
+		}
+		/* we operate in MSECS */
+		intv *= MSECS;
+	}
+
+	if (argi->max_lag_arg) {
+		maxt = strtol(argi->max_lag_arg, NULL, 10);
+		if (maxt < -1ULL) {
+			maxt *= MSECS;
+		}
 	}
 
 	if (UNLIKELY((qfp = fopen(*argi->args, "r")) < 0)) {

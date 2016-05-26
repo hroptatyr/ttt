@@ -1,3 +1,7 @@
 Usage: imp QUOTES < ORDERS
 
 Calculate impact of ORDERS.
+
+  --interval=T          Output impacts every T seconds, default 10
+  --max-lag=T           Stop tracking opportunities after T seconds,
+                        default: -1 (== unlimited)
