@@ -178,10 +178,14 @@ send_eva(tv_t top, tv_t now, px_t p, quo_t q)
 static int
 offline(FILE *qfp)
 {
-	static tv_t ptv[4096U];
-	static tv_t pnx[4096U];
-	static px_t ppx[4096U];
+	static tv_t _ptv[4096U];
+	static tv_t _pnx[4096U];
+	static px_t _ppx[4096U];
+	tv_t *ptv = _ptv;
+	tv_t *pnx = _pnx;
+	px_t *ppx = _ppx;
 	size_t npos = 0U;
+	size_t zpos = countof(_ptv);
 	char *line = NULL;
 	size_t llen = 0UL;
 	ssize_t nrd;
@@ -236,7 +240,17 @@ offline(FILE *qfp)
 			/* now we're busy executing */
 			ppx[npos] = pp;
 			ptv[npos] = pnx[npos] = omtr;
-			npos++;
+			if (UNLIKELY(++npos >= zpos)) {
+				const size_t nuzp = 2U * zpos;
+				tv_t *nuptv = malloc(nuzp * sizeof(*ptv));
+				tv_t *nupnx = malloc(nuzp * sizeof(*pnx));
+				px_t *nuppx = malloc(nuzp * sizeof(*ppx));
+
+				memcpy(nuptv, ptv, zpos * sizeof(*ptv));
+				memcpy(nupnx, pnx, zpos * sizeof(*pnx));
+				memcpy(nuppx, ppx, zpos * sizeof(*ppx));
+				zpos = nuzp;
+			}
 			break;
 		}
 	}
@@ -252,6 +266,11 @@ offline(FILE *qfp)
 	}
 
 	free(line);
+	if (ptv != _ptv) {
+		free(ptv);
+		free(pnx);
+		free(ppx);
+	}
 	return 0;
 }
 
