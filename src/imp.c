@@ -161,7 +161,7 @@ send_eva(tv_t top, tv_t now, px_t p, quo_t q)
 	static const char verb[] = "PNL\t";
 	char buf[256U];
 	size_t len;
-	px_t pnl = p > 0.df ? q.b - p : q.a - p;
+	px_t pnl = p > 0.df ? q.b - p : -q.a - p;
 
 	len = snprintf(buf, sizeof(buf), "%lu.%03lu000000",
 		       now / MSECS, now % MSECS);
@@ -194,6 +194,13 @@ offline(FILE *qfp)
 		metr = strtotv(line, &on);
 		for (size_t i = 0U; i < npos; i++) {
 			if (UNLIKELY(pnx[i] <= metr)) {
+				if (UNLIKELY(isinfd32(ppx[i]))) {
+					if (ppx[i] > 0) {
+						ppx[i] = q.a;
+					} else {
+						ppx[i] = -q.b;
+					}
+				}
 				send_eva(ptv[i], pnx[i], ppx[i], q);
 				pnx[i] += 10000U;
 			}
@@ -216,10 +223,10 @@ offline(FILE *qfp)
 			/* read the order */
 			switch (*on) {
 			case 'L'/*ONG*/:
-				pp = q.a;
+				pp = INFD32;
 				break;
 			case 'S'/*HORT*/:
-				pp = -q.b;
+				pp = MINFD32;
 				break;
 			case 'C'/*ANCEL*/:
 			case 'E'/*MERG*/:
