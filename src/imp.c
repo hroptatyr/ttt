@@ -280,7 +280,7 @@ offline(FILE *qfp, bool sump)
 			}
 			pnx[i] += intv;
 
-			if (UNLIKELY(maxt && pnx[i] > ptv[i])) {
+			if (UNLIKELY(maxt && pnx[i] > ptv[i] + maxt)) {
 				/* phase him out */
 				mpos = i + 1U;
 			}
