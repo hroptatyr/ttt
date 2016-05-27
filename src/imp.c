@@ -422,7 +422,7 @@ Error: cannot open QUOTES file `%s'", *argi->args);
 
 	if (argi->summary_flag) {
 		/* set up moment vectors */
-		zeva = maxt / intv ?: 4096U;
+		zeva = (maxt / intv ?: 4095U) + 1U;
 		eva0 = calloc(zeva, sizeof(*eva0));
 		eva1 = calloc(zeva, sizeof(*eva1));
 		eva2 = calloc(zeva, sizeof(*eva2));
