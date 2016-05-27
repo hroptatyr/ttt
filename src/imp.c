@@ -54,7 +54,7 @@ typedef struct {
 } quo_t;
 
 static tv_t intv = 10000U;
-static tv_t maxt = -1ULL;
+static tv_t maxt;
 
 #define FRONT	(0U)
 #define HIND	(1U)
@@ -280,7 +280,7 @@ offline(FILE *qfp, bool sump)
 			}
 			pnx[i] += intv;
 
-			if (UNLIKELY(pnx[i] > ptv[i] + maxt)) {
+			if (UNLIKELY(maxt && pnx[i] > ptv[i])) {
 				/* phase him out */
 				mpos = i + 1U;
 			}
@@ -409,10 +409,8 @@ Error: interval parameter must be positive.");
 	}
 
 	if (argi->max_lag_arg) {
-		maxt = strtol(argi->max_lag_arg, NULL, 10);
-		if (maxt < -1ULL) {
-			maxt *= MSECS;
-		}
+		maxt = strtoul(argi->max_lag_arg, NULL, 10);
+		maxt *= MSECS;
 	}
 
 	if (UNLIKELY((qfp = fopen(*argi->args, "r")) < 0)) {
@@ -424,7 +422,7 @@ Error: cannot open QUOTES file `%s'", *argi->args);
 
 	if (argi->summary_flag) {
 		/* set up moment vectors */
-		zeva = maxt < -1ULL ? maxt / intv : 4096U;
+		zeva = maxt / intv ?: 4096U;
 		eva0 = calloc(zeva, sizeof(*eva0));
 		eva1 = calloc(zeva, sizeof(*eva1));
 		eva2 = calloc(zeva, sizeof(*eva2));
