@@ -160,6 +160,7 @@ static size_t zeva;
 static size_t *eva0;
 static qx_t *eva1;
 static qx_t *eva2;
+static qx_t *eva4;
 
 static ssize_t
 send_eva(tv_t top, tv_t now, px_t pnl)
@@ -180,7 +181,7 @@ send_eva(tv_t top, tv_t now, px_t pnl)
 }
 
 static ssize_t
-send_sum(tv_t lag, px_t pnl, px_t dev)
+send_sum(tv_t lag, px_t pnl, px_t dev, px_t kurt)
 {
 	static const char verb[] = "PNL\t";
 	char buf[256U];
@@ -195,6 +196,8 @@ send_sum(tv_t lag, px_t pnl, px_t dev)
 	len += pxtostr(buf + len, sizeof(buf) - len, pnl);
 	buf[len++] = '\t';
 	len += pxtostr(buf + len, sizeof(buf) - len, dev);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, kurt);
 	buf[len++] = '\n';
 	return fwrite(buf, 1, len, stdout);
 }
@@ -210,10 +213,12 @@ push_eva(tv_t top, tv_t now, px_t pnl)
 		eva0 = realloc(eva0, nuze * sizeof(*eva0));
 		eva1 = realloc(eva1, nuze * sizeof(*eva1));
 		eva2 = realloc(eva2, nuze * sizeof(*eva2));
+		eva4 = realloc(eva4, nuze * sizeof(*eva4));
 		/* clear memory */
 		memset(eva0 + zeva, 0, zeva * sizeof(*eva0));
 		memset(eva1 + zeva, 0, zeva * sizeof(*eva1));
 		memset(eva2 + zeva, 0, zeva * sizeof(*eva2));
+		memset(eva4 + zeva, 0, zeva * sizeof(*eva4));
 
 		zeva = nuze;
 	}
@@ -221,6 +226,7 @@ push_eva(tv_t top, tv_t now, px_t pnl)
 	eva0[ieva]++;
 	eva1[ieva] += pnl;
 	eva2[ieva] += pnl * pnl;
+	eva4[ieva] += pnl * pnl * pnl * pnl;
 	return 0;
 }
 
@@ -228,7 +234,7 @@ static int
 send_sums(void)
 {
 	for (size_t i = 0U; i < zeva; i++) {
-		qx_t mu, sigma;
+		qx_t mu, sigma, kappa;
 
 		if (UNLIKELY(!eva0[i])) {
 			continue;
@@ -236,7 +242,13 @@ send_sums(void)
 		/* calc mean and  */
 		mu = eva1[i] / (qx_t)eva0[i];
 		sigma = sqrtd64(eva2[i] / (qx_t)eva0[i] - mu * mu);
-		send_sum((tv_t)(i * intv), (px_t)mu, (px_t)sigma);
+		kappa = eva0[i] * eva4[i] / eva2[i] +
+			mu * mu * mu * mu / eva2[i] -
+			2.dd * mu * mu * mu / eva2[i] +
+			4.dd * mu * mu -
+			2.dd * mu;
+		kappa /= eva2[i];
+		send_sum((tv_t)(i * intv), (px_t)mu, (px_t)sigma, (px_t)kappa);
 	}
 	return 0;
 }
@@ -426,6 +438,7 @@ Error: cannot open QUOTES file `%s'", *argi->args);
 		eva0 = calloc(zeva, sizeof(*eva0));
 		eva1 = calloc(zeva, sizeof(*eva1));
 		eva2 = calloc(zeva, sizeof(*eva2));
+		eva4 = calloc(zeva, sizeof(*eva4));
 	}
 
 	/* offline mode */
@@ -438,6 +451,7 @@ Error: cannot open QUOTES file `%s'", *argi->args);
 		free(eva0);
 		free(eva1);
 		free(eva2);
+		free(eva4);
 	}
 
 	fclose(qfp);
