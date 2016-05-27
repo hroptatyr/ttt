@@ -16,6 +16,7 @@
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <time.h>
+#include <math.h>
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #endif	/* HAVE_DFP754_H */
@@ -158,9 +159,10 @@ max_qx(qx_t q1, qx_t q2)
 
 static size_t zeva;
 static size_t *eva0;
-static qx_t *eva1;
-static qx_t *eva2;
-static qx_t *eva4;
+static double *eva1;
+static double *eva2;
+static double *eva3;
+static double *eva4;
 
 static ssize_t
 send_eva(tv_t top, tv_t now, px_t pnl)
@@ -181,7 +183,7 @@ send_eva(tv_t top, tv_t now, px_t pnl)
 }
 
 static ssize_t
-send_sum(tv_t lag, px_t pnl, px_t dev, px_t kurt)
+send_sum(tv_t lag, double pnl, double dev, double skew, double kurt)
 {
 	static const char verb[] = "PNL\t";
 	char buf[256U];
@@ -193,11 +195,13 @@ send_sum(tv_t lag, px_t pnl, px_t dev, px_t kurt)
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
 	len += snprintf(buf + len, sizeof(buf) - len, "%lu", lag);
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, pnl);
+	len += snprintf(buf + len, sizeof(buf) - len, "%f", pnl);
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, dev);
+	len += snprintf(buf + len, sizeof(buf) - len, "%f", dev);
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, kurt);
+	len += snprintf(buf + len, sizeof(buf) - len, "%f", skew);
+	buf[len++] = '\t';
+	len += snprintf(buf + len, sizeof(buf) - len, "%f", kurt);
 	buf[len++] = '\n';
 	return fwrite(buf, 1, len, stdout);
 }
@@ -205,28 +209,38 @@ send_sum(tv_t lag, px_t pnl, px_t dev, px_t kurt)
 static ssize_t
 push_eva(tv_t top, tv_t now, px_t pnl)
 {
-	const size_t ieva = (now - top) / intv;
+	const size_t i = (now - top) / intv;
 
-	if (UNLIKELY(ieva >= zeva)) {
+	if (UNLIKELY(i >= zeva)) {
 		const size_t nuze = 2U * zeva;
 
 		eva0 = realloc(eva0, nuze * sizeof(*eva0));
 		eva1 = realloc(eva1, nuze * sizeof(*eva1));
 		eva2 = realloc(eva2, nuze * sizeof(*eva2));
+		eva3 = realloc(eva3, nuze * sizeof(*eva3));
 		eva4 = realloc(eva4, nuze * sizeof(*eva4));
 		/* clear memory */
 		memset(eva0 + zeva, 0, zeva * sizeof(*eva0));
 		memset(eva1 + zeva, 0, zeva * sizeof(*eva1));
 		memset(eva2 + zeva, 0, zeva * sizeof(*eva2));
+		memset(eva3 + zeva, 0, zeva * sizeof(*eva3));
 		memset(eva4 + zeva, 0, zeva * sizeof(*eva4));
 
 		zeva = nuze;
 	}
 
-	eva0[ieva]++;
-	eva1[ieva] += pnl;
-	eva2[ieva] += pnl * pnl;
-	eva4[ieva] += pnl * pnl * pnl * pnl;
+	double nn = (double)eva0[i];
+	double delta = (double)pnl - eva1[i];
+	double delta1 = delta / (nn + 1.);
+	double delta1S = delta1 * delta1;
+	double delta2 = delta * delta1 * nn;
+
+	eva4[i] += delta2 * delta1S * (nn * nn - nn + 1.) +
+		6. * delta1S * eva2[i] - 4. * delta1 * eva3[i];
+	eva3[i] += delta2 * delta1 * (nn - 1.) - 3. * delta1 * eva2[i];
+	eva2[i] += delta2;
+	eva1[i] += delta1;
+	eva0[i]++;
 	return 0;
 }
 
@@ -234,21 +248,19 @@ static int
 send_sums(void)
 {
 	for (size_t i = 0U; i < zeva; i++) {
-		qx_t mu, sigma, kappa;
+		double mu, sigma, skew, kurt;
 
 		if (UNLIKELY(!eva0[i])) {
 			continue;
 		}
+
 		/* calc mean and  */
-		mu = eva1[i] / (qx_t)eva0[i];
-		sigma = sqrtd64(eva2[i] / (qx_t)eva0[i] - mu * mu);
-		kappa = eva0[i] * eva4[i] / eva2[i] +
-			mu * mu * mu * mu / eva2[i] -
-			2.dd * mu * mu * mu / eva2[i] +
-			4.dd * mu * mu -
-			2.dd * mu;
-		kappa /= eva2[i];
-		send_sum((tv_t)(i * intv), (px_t)mu, (px_t)sigma, (px_t)kappa);
+		mu = eva1[i];
+		sigma = sqrt(eva2[i] / ((double)eva0[i] - 1.));
+		skew = sqrt((double)eva0[i]) *
+			eva3[i] / sqrt(eva2[i] * eva2[i] * eva2[i]);
+		kurt = ((double)eva0[i] * eva4[i]) / (eva2[i] * eva2[i]) - 3.;
+		send_sum((tv_t)(i * intv), mu, sigma, skew, kurt);
 	}
 	return 0;
 }
@@ -438,6 +450,7 @@ Error: cannot open QUOTES file `%s'", *argi->args);
 		eva0 = calloc(zeva, sizeof(*eva0));
 		eva1 = calloc(zeva, sizeof(*eva1));
 		eva2 = calloc(zeva, sizeof(*eva2));
+		eva3 = calloc(zeva, sizeof(*eva3));
 		eva4 = calloc(zeva, sizeof(*eva4));
 	}
 
@@ -451,6 +464,7 @@ Error: cannot open QUOTES file `%s'", *argi->args);
 		free(eva0);
 		free(eva1);
 		free(eva2);
+		free(eva3);
 		free(eva4);
 	}
 
