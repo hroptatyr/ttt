@@ -156,13 +156,17 @@ max_qx(qx_t q1, qx_t q2)
 }
 
 
+static size_t zeva;
+static size_t *eva0;
+static qx_t *eva1;
+static qx_t *eva2;
+
 static ssize_t
-send_eva(tv_t top, tv_t now, px_t p, quo_t q)
+send_eva(tv_t top, tv_t now, px_t pnl)
 {
 	static const char verb[] = "PNL\t";
 	char buf[256U];
 	size_t len;
-	px_t pnl = p > 0.df ? q.b - p : -q.a - p;
 
 	len = snprintf(buf, sizeof(buf), "%lu.%03lu000000",
 		       now / MSECS, now % MSECS);
@@ -170,14 +174,76 @@ send_eva(tv_t top, tv_t now, px_t p, quo_t q)
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
 	len += snprintf(buf + len, sizeof(buf) - len, "%lu", now - top);
 	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, pnl);
+	len += pxtostr(buf + len, sizeof(buf) - len, pnl);
 	buf[len++] = '\n';
 	return fwrite(buf, 1, len, stdout);
 }
 
+static ssize_t
+send_sum(tv_t lag, px_t pnl, px_t dev)
+{
+	static const char verb[] = "PNL\t";
+	char buf[256U];
+	size_t len;
+
+	len = snprintf(buf, sizeof(buf), "%lu.%03lu000000",
+		       metr / MSECS, metr % MSECS);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
+	len += snprintf(buf + len, sizeof(buf) - len, "%lu", lag);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, pnl);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, dev);
+	buf[len++] = '\n';
+	return fwrite(buf, 1, len, stdout);
+}
+
+static ssize_t
+push_eva(tv_t top, tv_t now, px_t pnl)
+{
+	const size_t ieva = (now - top) / intv;
+
+	if (UNLIKELY(ieva >= zeva)) {
+		const size_t nuze = 2U * zeva;
+
+		eva0 = realloc(eva0, nuze * sizeof(*eva0));
+		eva1 = realloc(eva1, nuze * sizeof(*eva1));
+		eva2 = realloc(eva2, nuze * sizeof(*eva2));
+		/* clear memory */
+		memset(eva0 + zeva, 0, zeva * sizeof(*eva0));
+		memset(eva1 + zeva, 0, zeva * sizeof(*eva1));
+		memset(eva2 + zeva, 0, zeva * sizeof(*eva2));
+
+		zeva = nuze;
+	}
+
+	eva0[ieva]++;
+	eva1[ieva] += pnl;
+	eva2[ieva] += pnl * pnl;
+	return 0;
+}
+
+static int
+send_sums(void)
+{
+	for (size_t i = 0U; i < zeva; i++) {
+		qx_t mu, sigma;
+
+		if (UNLIKELY(!eva0[i])) {
+			continue;
+		}
+		/* calc mean and  */
+		mu = eva1[i] / (qx_t)eva0[i];
+		sigma = sqrtd64(eva2[i] / (qx_t)eva0[i] - mu * mu);
+		send_sum((tv_t)(i * intv), (px_t)mu, (px_t)sigma);
+	}
+	return 0;
+}
+
 
 static int
-offline(FILE *qfp)
+offline(FILE *qfp, bool sump)
 {
 	static tv_t _ptv[4096U];
 	static tv_t _pnx[4096U];
@@ -193,6 +259,8 @@ offline(FILE *qfp)
 	ssize_t nrd;
 	quo_t q = {0.df, 0.df};
 	tv_t omtr = 0ULL;
+	/* eva routine */
+	ssize_t(*eva)(tv_t, tv_t, px_t) = !sump ? send_eva : push_eva;
 
 	while ((nrd = getline(&line, &llen, qfp)) > 0) {
 		char *on;
@@ -206,7 +274,10 @@ offline(FILE *qfp)
 					ppx[i] = -q.b;
 				}
 			}
-			send_eva(ptv[i], pnx[i], ppx[i], q);
+			with (px_t p = ppx[i],
+			      pnl = p > 0.df ? q.b - p : -q.a - p) {
+				eva(ptv[i], pnx[i], pnl);
+			}
 			pnx[i] += intv;
 
 			if (UNLIKELY(pnx[i] > ptv[i] + maxt)) {
@@ -351,8 +422,25 @@ Error: cannot open QUOTES file `%s'", *argi->args);
 		goto out;
 	}
 
+	if (argi->summary_flag) {
+		/* set up moment vectors */
+		zeva = maxt < -1ULL ? maxt / intv : 4096U;
+		eva0 = calloc(zeva, sizeof(*eva0));
+		eva1 = calloc(zeva, sizeof(*eva1));
+		eva2 = calloc(zeva, sizeof(*eva2));
+	}
+
 	/* offline mode */
-	rc = offline(qfp);
+	rc = offline(qfp, !!argi->summary_flag);
+
+	if (argi->summary_flag) {
+		/* print summary */
+		send_sums();
+		/* unset moment vectors */
+		free(eva0);
+		free(eva1);
+		free(eva2);
+	}
 
 	fclose(qfp);
 out:
