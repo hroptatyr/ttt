@@ -56,6 +56,7 @@ typedef struct {
 
 static tv_t intv = 10000U;
 static tv_t maxt;
+static bool abs_tod_p;
 
 #define FRONT	(0U)
 #define HIND	(1U)
@@ -183,6 +184,24 @@ send_eva(tv_t top, tv_t now, px_t pnl)
 }
 
 static ssize_t
+send_abs(tv_t UNUSED(top), tv_t now, px_t pnl)
+{
+	static const char verb[] = "PNL\t";
+	char buf[256U];
+	size_t len;
+
+	len = snprintf(buf, sizeof(buf), "%lu.%03lu000000",
+		       now / MSECS, now % MSECS);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
+	len += snprintf(buf + len, sizeof(buf) - len, "%lu", now % maxt);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, pnl);
+	buf[len++] = '\n';
+	return fwrite(buf, 1, len, stdout);
+}
+
+static ssize_t
 send_sum(tv_t lag, double pnl, double dev, double skew, double kurt)
 {
 	static const char verb[] = "PNL\t";
@@ -210,6 +229,44 @@ static ssize_t
 push_eva(tv_t top, tv_t now, px_t pnl)
 {
 	const size_t i = (now - top) / intv;
+
+	if (UNLIKELY(i >= zeva)) {
+		const size_t nuze = 2U * zeva;
+
+		eva0 = realloc(eva0, nuze * sizeof(*eva0));
+		eva1 = realloc(eva1, nuze * sizeof(*eva1));
+		eva2 = realloc(eva2, nuze * sizeof(*eva2));
+		eva3 = realloc(eva3, nuze * sizeof(*eva3));
+		eva4 = realloc(eva4, nuze * sizeof(*eva4));
+		/* clear memory */
+		memset(eva0 + zeva, 0, zeva * sizeof(*eva0));
+		memset(eva1 + zeva, 0, zeva * sizeof(*eva1));
+		memset(eva2 + zeva, 0, zeva * sizeof(*eva2));
+		memset(eva3 + zeva, 0, zeva * sizeof(*eva3));
+		memset(eva4 + zeva, 0, zeva * sizeof(*eva4));
+
+		zeva = nuze;
+	}
+
+	double nn = (double)eva0[i];
+	double delta = (double)pnl - eva1[i];
+	double delta1 = delta / (nn + 1.);
+	double delta1S = delta1 * delta1;
+	double delta2 = delta * delta1 * nn;
+
+	eva4[i] += delta2 * delta1S * (nn * nn - nn + 1.) +
+		6. * delta1S * eva2[i] - 4. * delta1 * eva3[i];
+	eva3[i] += delta2 * delta1 * (nn - 1.) - 3. * delta1 * eva2[i];
+	eva2[i] += delta2;
+	eva1[i] += delta1;
+	eva0[i]++;
+	return 0;
+}
+
+static ssize_t
+push_abs(tv_t UNUSED(top), tv_t now, px_t pnl)
+{
+	const size_t i = (now % maxt) / intv;
 
 	if (UNLIKELY(i >= zeva)) {
 		const size_t nuze = 2U * zeva;
@@ -284,7 +341,13 @@ offline(FILE *qfp, bool sump)
 	quo_t q = {0.df, 0.df};
 	tv_t omtr = 0ULL;
 	/* eva routine */
-	ssize_t(*eva)(tv_t, tv_t, px_t) = !sump ? send_eva : push_eva;
+	ssize_t(*eva)(tv_t, tv_t, px_t);
+
+	if (!abs_tod_p) {
+		eva = !sump ? send_eva : push_eva;
+	} else {
+		eva = !sump ? send_abs : push_abs;
+	}
 
 	while ((nrd = getline(&line, &llen, qfp)) > 0) {
 		char *on;
@@ -356,7 +419,8 @@ offline(FILE *qfp, bool sump)
 			}
 			/* now we're busy executing */
 			ppx[npos] = pp;
-			ptv[npos] = pnx[npos] = omtr;
+			ptv[npos] = omtr - (!abs_tod_p ? 0U : (omtr % intv));
+			pnx[npos] = ptv[npos] + (!abs_tod_p ? 0 : intv);
 			if (UNLIKELY(++npos >= zpos)) {
 				const size_t nuzp = 2U * zpos;
 				tv_t *nuptv = malloc(nuzp * sizeof(*ptv));
@@ -435,6 +499,13 @@ Error: interval parameter must be positive.");
 	if (argi->max_lag_arg) {
 		maxt = strtoul(argi->max_lag_arg, NULL, 10);
 		maxt *= MSECS;
+	}
+
+	if ((abs_tod_p = !!argi->abs_tod_flag)) {
+		/* we need a maxt in this case */
+		if (!maxt) {
+			maxt = 86400 * MSECS;
+		}
 	}
 
 	if (UNLIKELY((qfp = fopen(*argi->args, "r")) < 0)) {
