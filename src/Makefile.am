@@ -27,7 +27,7 @@ libdfp_a_SOURCES += dfp754_d64.c dfp754_d64.h
 libdfp_a_CPPFLAGS = $(AM_CPPFLAGS)
 libdfp_a_CPPFLAGS += $(dfp754_CFLAGS)
 
-noinst_PROGRAMS += candle
+bin_PROGRAMS += candle
 candle_SOURCES = candle.c candle.yuck
 candle_SOURCES += version.c version.h
 candle_CPPFLAGS = $(AM_CPPFLAGS)
