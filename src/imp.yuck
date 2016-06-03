@@ -5,6 +5,7 @@ Calculate impact of ORDERS.
   --interval=T          Output impacts every T seconds, default 10
   --max-lag=T           Stop tracking opportunities after T seconds,
                         default: -1 (== unlimited)
+  --exp-intv-scale      Use an exponential scale for the intervals.
   --abs-tod             Consider --max-lag specifying the length of
                         a trading session in seconds, close positions
                         by a time congruent T modulo session length.

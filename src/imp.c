@@ -54,6 +54,16 @@ typedef struct {
 	px_t a;
 } quo_t;
 
+static tv_t intx[] = {
+	5000U, 10000U, 15000U, 30000U,
+	60000U, 120000U, 300000U, 600000U,
+	900000U, 1800000U, 3600000U, 5400000U,
+	7200000U, 10800000U, 1440000U, 18000000U,
+	21600000U, 28800000U, 43200000U, 64800000U,
+	86400000U, 129600000U, 172800000U, 216000000U,
+	259200000U, 302400000U,	345600000U, 388800000U,
+	432000000U, 475200000U, 518400000U, 604800000U,
+};
 static tv_t intv = 10000U;
 static tv_t maxt;
 static bool abs_tod_p;
@@ -83,6 +93,7 @@ static hx_t hxs;
 static tv_t metr;
 static const char *cont;
 static size_t conz;
+static unsigned int intv_scal_exp_p;
 
 static hx_t
 strtohx(const char *x, char **on)
@@ -329,9 +340,11 @@ offline(FILE *qfp, bool sump)
 	static tv_t _ptv[4096U];
 	static tv_t _pnx[4096U];
 	static px_t _ppx[4096U];
+	static unsigned int _ini[4096U];
 	tv_t *ptv = _ptv;
 	tv_t *pnx = _pnx;
 	px_t *ppx = _ppx;
+	unsigned int *ini = _ini;
 	size_t npos = 0U;
 	size_t mpos = 0U;
 	size_t zpos = countof(_ptv);
@@ -353,24 +366,50 @@ offline(FILE *qfp, bool sump)
 		char *on;
 
 		metr = strtotv(line, &on);
-		for (size_t i = mpos; i < npos && pnx[i] <= metr; i++) {
-			if (UNLIKELY(isinfd32(ppx[i]))) {
-				if (ppx[i] > 0) {
-					ppx[i] = q.a;
-				} else {
-					ppx[i] = -q.b;
+		switch (intv_scal_exp_p) {
+		case 0U:
+			for (size_t i = mpos; i < npos && pnx[i] <= metr; i++) {
+				if (UNLIKELY(isinfd32(ppx[i]))) {
+					if (ppx[i] > 0) {
+						ppx[i] = q.a;
+					} else {
+						ppx[i] = -q.b;
+					}
+				}
+				with (px_t p = ppx[i],
+				      pnl = p > 0.df ? q.b - p : -q.a - p) {
+					eva(ptv[i], pnx[i], pnl);
+				}
+				pnx[i] += intv;
+
+				if (UNLIKELY(maxt && pnx[i] > ptv[i] + maxt)) {
+					/* phase him out */
+					mpos = i + 1U;
 				}
 			}
-			with (px_t p = ppx[i],
-			      pnl = p > 0.df ? q.b - p : -q.a - p) {
-				eva(ptv[i], pnx[i], pnl);
+			break;
+		default:
+			for (size_t i = mpos; i < npos; i++) {
+				if (pnx[i] > metr) {
+					continue;
+				} else if (UNLIKELY(isinfd32(ppx[i]))) {
+					if (ppx[i] > 0) {
+						ppx[i] = q.a;
+					} else {
+						ppx[i] = -q.b;
+					}
+				}
+				with (px_t p = ppx[i],
+				      pnl = p > 0.df ? q.b - p : -q.a - p) {
+					eva(ptv[i], pnx[i], pnl);
+				}
+				pnx[i] += intx[ini[i]++];
+				if (UNLIKELY(ini[i] >= countof(intx))) {
+					/* phase him out */
+					mpos = i + 1U;
+				}
 			}
-			pnx[i] += intv;
-
-			if (UNLIKELY(maxt && pnx[i] > ptv[i] + maxt)) {
-				/* phase him out */
-				mpos = i + 1U;
-			}
+			break;
 		}
 		/* more house keeping */
 		if (mpos >= zpos / 2U) {
@@ -485,7 +524,9 @@ Error: QUOTES file is mandatory.");
 		goto out;
 	}
 
-	if (argi->interval_arg) {
+	if (argi->exp_intv_scale_flag) {
+		intv_scal_exp_p = 1U;
+	} else if (argi->interval_arg) {
 		if (UNLIKELY(!(intv = strtoul(argi->interval_arg, NULL, 10)))) {
 			errno = 0, serror("\
 Error: interval parameter must be positive.");
