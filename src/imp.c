@@ -403,7 +403,7 @@ offline(FILE *qfp, bool sump)
 				      pnl = p > 0.df ? q.b - p : -q.a - p) {
 					eva(ptv[i], pnx[i], pnl);
 				}
-				pnx[i] += intx[ini[i]++];
+				pnx[i] = ptv[i] + intx[ini[i]++];
 				if (UNLIKELY(ini[i] >= countof(intx))) {
 					/* phase him out */
 					mpos = i + 1U;
