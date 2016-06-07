@@ -70,6 +70,12 @@ imp_LDADD = libdfp.a
 imp_LDADD += -ldecimal
 BUILT_SOURCES += imp.yucc
 
+bin_PROGRAMS += xevent
+xevent_SOURCES = xevent.c xevent.yuck
+xevent_CPPFLAGS = $(AM_CPPFLAGS)
+xevent_CPPFLAGS += -D_GNU_SOURCE
+BUILT_SOURCES += xevent.yucc
+
 
 ## version rules
 version.c: version.c.in $(top_builddir)/.version

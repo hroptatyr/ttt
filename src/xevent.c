@@ -1,0 +1,183 @@
+#include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdarg.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/resource.h>
+#include "nifty.h"
+
+typedef long unsigned int tv_t;
+
+/* context lines */
+static tv_t nbef, naft;
+static long unsigned int nnfn;
+
+#define MAP_MEM		(MAP_PRIVATE | MAP_ANON)
+#define PROT_MEM	(PROT_READ | PROT_WRITE)
+
+#define NSECS	(1000000000)
+#define MSECS	(1000)
+#define NOT_A_TIME	((tv_t)-1ULL)
+
+
+static __attribute__((format(printf, 1, 2))) void
+serror(const char *fmt, ...)
+{
+#define uerror	errno = 0, serror
+	va_list vap;
+	va_start(vap, fmt);
+	vfprintf(stderr, fmt, vap);
+	va_end(vap);
+	if (errno) {
+		fputc(':', stderr);
+		fputc(' ', stderr);
+		fputs(strerror(errno), stderr);
+	}
+	fputc('\n', stderr);
+	return;
+}
+
+static tv_t
+strtotv(const char *ln, char **endptr)
+{
+	char *on;
+	tv_t r;
+
+	/* time value up first */
+	with (long unsigned int s, x) {
+		if (UNLIKELY(!(s = strtoul(ln, &on, 10)))) {
+			return NOT_A_TIME;
+		} else if (*on == '.') {
+			char *moron;
+
+			x = strtoul(++on, &moron, 10);
+			if (UNLIKELY(moron - on > 9U)) {
+				return NOT_A_TIME;
+			} else if ((moron - on) % 3U) {
+				/* huh? */
+				return NOT_A_TIME;
+			}
+			switch (moron - on) {
+			case 9U:
+				x /= MSECS;
+			case 6U:
+				x /= MSECS;
+			case 3U:
+				break;
+			case 0U:
+			default:
+				break;
+			}
+			on = moron;
+		} else {
+			x = 0U;
+		}
+		r = s * MSECS + x;
+	}
+	/* overread up to 3 tabs */
+	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
+	if (LIKELY(endptr != NULL)) {
+		*endptr = on;
+	}
+	return r;
+}
+
+
+static int
+xevent(FILE *fp)
+{
+	char *line = NULL;
+	size_t llen = 0UL;
+	tv_t next, till;
+	ssize_t nrd;
+	FILE *ofp;
+	int rc = 0;
+
+next:
+	if ((nrd = getline(&line, &llen, stdin)) <= 0) {
+		goto out;
+	}
+	/* otherwise get next from/till pair */
+	till = next = strtotv(line, NULL);
+	next -= nbef;
+	till += naft;
+	/* and open output file in anticipation */
+	with (char fn[32U]) {
+		snprintf(fn, sizeof(fn), "xx%08lu", nnfn++);
+		if ((ofp = fopen(fn, "w")) == NULL) {
+			rc = -1;
+			goto out;
+		}
+	}
+
+	while ((nrd = getline(&line, &llen, fp)) > 0) {
+		char *on;
+		tv_t t;
+
+		if (UNLIKELY((t = strtotv(line, &on)) == NOT_A_TIME)) {
+			continue;
+		} else if (LIKELY(t < next)) {
+			continue;
+		} else if (UNLIKELY(t > till)) {
+			fclose(ofp);
+			goto next;
+		}
+		/* copy line */
+		fwrite(line, 1, nrd, ofp);
+	}
+out:
+	if (line) {
+		free(line);
+	}
+	return rc;
+}
+
+
+#include "xevent.yucc"
+
+int
+main(int argc, char *argv[])
+{
+	static yuck_t argi[1U];
+	int rc = 0;
+	FILE *fp;
+
+	if (yuck_parse(argi, argc, argv) < 0) {
+		return 1;
+	} else if (!argi->nargs) {
+		uerror("Error: no FILE given");
+		rc = 1;
+		goto out;
+	}
+
+	if (argi->before_arg) {
+		nbef = strtoul(argi->before_arg, NULL, 0);
+		nbef *= MSECS;
+	}
+
+	if (argi->after_arg) {
+		naft = strtoul(argi->after_arg, NULL, 0);
+		naft *= MSECS;
+	}
+
+	if (argi->number_arg) {
+		nnfn = strtoul(argi->number_arg, NULL, 0);
+	}
+
+	if ((fp = fopen(*argi->args, "r")) == NULL) {
+		serror("Error: cannot open file `%s'", *argi->args);
+		rc = 1;
+		goto out;
+	} else if (xevent(fp) < 0) {
+		serror("Error: cannot chunk up file `%s'", *argi->args);
+		rc = 1;
+	}
+	/* close and out */
+	fclose(fp);
+out:
+	yuck_free(argi);
+	return rc;
+}
