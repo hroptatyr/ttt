@@ -85,13 +85,19 @@ strtotv(const char *ln, char **endptr)
 	return r;
 }
 
+static ssize_t
+tvtostr(char *restrict buf, size_t bsz, tv_t t)
+{
+	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
+}
+
 
 static int
 xevent(FILE *fp)
 {
 	char *line = NULL;
 	size_t llen = 0UL;
-	tv_t next, till;
+	tv_t next, from, till;
 	ssize_t nrd;
 	FILE *ofp;
 	int rc = 0;
@@ -101,8 +107,8 @@ next:
 		goto out;
 	}
 	/* otherwise get next from/till pair */
-	till = next = strtotv(line, NULL);
-	next -= nbef;
+	till = from = next = strtotv(line, NULL);
+	from -= nbef;
 	till += naft;
 	/* and open output file in anticipation */
 	with (char fn[32U]) {
@@ -119,8 +125,17 @@ next:
 
 		if (UNLIKELY((t = strtotv(line, &on)) == NOT_A_TIME)) {
 			continue;
-		} else if (LIKELY(t < next)) {
+		} else if (LIKELY(t < from)) {
 			continue;
+		} else if (UNLIKELY(t > next)) {
+			char buf[64U];
+			size_t len;
+
+			len = tvtostr(buf, sizeof(buf), next);
+			memcpy(buf + len, "\tSHOCK\t\t\t\t\t\t\n", 13U);
+			len += 13U;
+			fwrite(buf, 1, len, ofp);
+			next = NOT_A_TIME;
 		} else if (UNLIKELY(t > till)) {
 			fclose(ofp);
 			goto next;
