@@ -99,6 +99,7 @@ xevent(FILE *fp)
 	size_t llen = 0UL;
 	tv_t next, from, till;
 	ssize_t nrd;
+	char ofn[32U];
 	FILE *ofp;
 	int rc = 0;
 
@@ -111,12 +112,10 @@ next:
 	from -= nbef;
 	till += naft;
 	/* and open output file in anticipation */
-	with (char fn[32U]) {
-		snprintf(fn, sizeof(fn), "xx%08lu", nnfn++);
-		if ((ofp = fopen(fn, "w")) == NULL) {
-			rc = -1;
-			goto out;
-		}
+	snprintf(ofn, sizeof(ofn), "xx%08lu", nnfn++);
+	if ((ofp = fopen(ofn, "w")) == NULL) {
+		rc = -1;
+		goto out;
 	}
 
 	while ((nrd = getline(&line, &llen, fp)) > 0) {
@@ -138,6 +137,7 @@ next:
 			next = NOT_A_TIME;
 		} else if (UNLIKELY(t > till)) {
 			fclose(ofp);
+			puts(ofn);
 			goto next;
 		}
 		/* copy line */
