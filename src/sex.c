@@ -413,7 +413,7 @@ Error: QUOTES file is mandatory.");
 	absq = argi->absqty_flag;
 	maxq = argi->maxqty_flag;
 
-	if (UNLIKELY((qfp = fopen(*argi->args, "r")) < 0)) {
+	if (UNLIKELY((qfp = fopen(*argi->args, "r")) == NULL)) {
 		serror("\
 Error: cannot open QUOTES file `%s'", *argi->args);
 		rc = 1;
