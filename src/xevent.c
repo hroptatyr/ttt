@@ -14,6 +14,7 @@ typedef long unsigned int tv_t;
 /* context lines */
 static tv_t nbef, naft;
 static long unsigned int nnfn;
+static unsigned int verbp;
 
 #define MAP_MEM		(MAP_PRIVATE | MAP_ANON)
 #define PROT_MEM	(PROT_READ | PROT_WRITE)
@@ -127,7 +128,7 @@ next:
 			continue;
 		} else if (LIKELY(metr < from)) {
 			continue;
-		} else if (UNLIKELY(metr > next)) {
+		} else if (UNLIKELY(metr > next && verbp)) {
 			char buf[64U];
 			size_t len;
 
@@ -182,6 +183,8 @@ main(int argc, char *argv[])
 	if (argi->number_arg) {
 		nnfn = strtoul(argi->number_arg, NULL, 0);
 	}
+
+	verbp = argi->verbose_flag;
 
 	if ((fp = fopen(*argi->args, "r")) == NULL) {
 		serror("Error: cannot open file `%s'", *argi->args);
