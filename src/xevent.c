@@ -98,22 +98,20 @@ xevent(FILE *fp)
 {
 	char *line = NULL;
 	size_t llen = 0UL;
-	tv_t next, from, till, metr;
+	tv_t next, from, till;
 	ssize_t nrd;
 	char ofn[32U];
 	FILE *ofp;
 	int rc = 0;
 
 next:
-	do {
-		if ((nrd = getline(&line, &llen, stdin)) <= 0) {
-			goto out;
-		}
-		/* otherwise get next from/till pair */
-		till = from = next = strtotv(line, NULL);
-		from -= nbef;
-		till += naft;
-	} while (till < metr);
+	if ((nrd = getline(&line, &llen, stdin)) <= 0) {
+		goto out;
+	}
+	/* otherwise get next from/till pair */
+	till = from = next = strtotv(line, NULL);
+	from -= nbef;
+	till += naft;
 	/* and open output file in anticipation */
 	snprintf(ofn, sizeof(ofn), "xx%08lu", nnfn++);
 	if ((ofp = fopen(ofn, "w")) == NULL) {
@@ -123,12 +121,13 @@ next:
 
 	while ((nrd = getline(&line, &llen, fp)) > 0) {
 		char *on;
+		tv_t t;
 
-		if (UNLIKELY((metr = strtotv(line, &on)) == NOT_A_TIME)) {
+		if (UNLIKELY((t = strtotv(line, &on)) == NOT_A_TIME)) {
 			continue;
-		} else if (LIKELY(metr < from)) {
+		} else if (LIKELY(t < from)) {
 			continue;
-		} else if (UNLIKELY(metr > next && verbp)) {
+		} else if (UNLIKELY(t > next && verbp)) {
 			char buf[64U];
 			size_t len;
 
@@ -137,7 +136,7 @@ next:
 			len += 13U;
 			fwrite(buf, 1, len, ofp);
 			next = NOT_A_TIME;
-		} else if (UNLIKELY(metr > till)) {
+		} else if (UNLIKELY(t > till)) {
 			fclose(ofp);
 			puts(ofn);
 			goto next;
