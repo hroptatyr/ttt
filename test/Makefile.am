@@ -14,9 +14,6 @@ EXTRA_DIST = $(BUILT_SOURCES) $(TESTS)
 TESTS =
 TEST_EXTENSIONS =
 BUILT_SOURCES =
-dt_tests =
-bin_tests =
-batch_tests =
 check_PROGRAMS =
 CLEANFILES = $(check_PROGRAMS)
 
@@ -25,5 +22,8 @@ include clitoris.am
 AM_CLIT_LOG_FLAGS = -v --builddir $(top_builddir)/src
 TESTS_ENVIRONMENT = root=$(top_srcdir)
 
+TESTS += sex_01.clit
+TESTS += sex_02.clit
+EXTRA_DIST += EURUSD
 
 ## Makefile.am ends here
