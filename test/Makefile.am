@@ -24,6 +24,8 @@ TESTS_ENVIRONMENT = root=$(top_srcdir)
 
 TESTS += sex_01.clit
 TESTS += sex_02.clit
+TESTS += sex_03.clit
+TESTS += sex_04.clit
 EXTRA_DIST += EURUSD
 
 ## Makefile.am ends here
