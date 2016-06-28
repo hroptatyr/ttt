@@ -322,7 +322,7 @@ yield_ord:
 			adq = !maxq ? qty : acc.base <= 0.dd ? qty : 0.dd;
 			adq += absq && acc.base < 0.dd ? qty : 0.dd;
 			o = (ord_t){RGM_LONG, .q = adq, .lp = __DEC32_MAX__};
-			break;
+			goto ord;
 		case 'S'/*HORT*/:
 			adq = !maxq ? qty : acc.base >= 0.dd ? qty : 0.dd;
 			adq += absq && acc.base > 0.dd ? qty : 0.dd;
