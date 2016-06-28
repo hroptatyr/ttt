@@ -341,23 +341,18 @@ yield_ord:
 				break;
 			}
 			/* otherwise snarf the limit price */
-			if ((unsigned char)(*++on ^ '0') >= 10U) {
-				;
-			} else if (o.lp = strtopx(on, &on), *on != '\t') {
+			o.lp = strtopx(++on, &on);
+			if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
 				break;
 			}
-			/* no room for gtd, imply eternity */
-			o.gtd = NOT_A_TIME;
 			/* oh and a target price */
-			if ((unsigned char)(*++on ^ '0') >= 10U) {
-				;
-			} else if (o.tp = strtopx(on, &on), *on != '\t') {
+			o.tp = strtopx(++on, &on);
+			if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
 				break;
 			}
 			/* and finally a stop/loss */
-			if ((unsigned char)(*++on ^ '0') >= 10U) {
-				;
-			} else if (o.sl = strtopx(on, &on), *on != '\t') {
+			o.sl = strtopx(++on, &on);
+			if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
 				break;
 			}
 		}
