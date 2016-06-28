@@ -303,11 +303,10 @@ offline(FILE *qfp)
 	size_t noq = 0U;
 	char *line = NULL;
 	size_t llen = 0UL;
-	ssize_t nrd;
-	quo_t q;
+	quo_t q, newq;
 
 yield_ord:
-	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+	for (; getline(&line, &llen, stdin) > 0;) {
 		ord_t o;
 		char *on;
 
@@ -377,15 +376,14 @@ yield_ord:
 	omtr = NOT_A_TIME;
 
 yield_quo:
-	while ((nrd = getline(&line, &llen, qfp)) > 0) {
+	for (; getline(&line, &llen, qfp) > 0; q = newq) {
 		char *on;
 
 		metr = strtotv(line, &on);
-
 		/* instrument next */
 		on = strchr(on, '\t');
-		q.b = strtopx(++on, &on);
-		q.a = strtopx(++on, &on);
+		newq.b = strtopx(++on, &on);
+		newq.a = strtopx(++on, &on);
 
 		if (UNLIKELY(metr > omtr)) {
 			/* we need more orders! */
