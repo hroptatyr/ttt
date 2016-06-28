@@ -54,6 +54,7 @@ typedef struct {
 } quo_t;
 
 typedef struct {
+	tv_t t;
 	px_t p;
 	qx_t q;
 	qx_t totq;
@@ -186,14 +187,14 @@ strtotv(const char *ln, char **endptr)
 }
 
 static inline __attribute__((const, pure)) tv_t
-min_tv(tv_t t1, tv_t t2)
+max_tv(tv_t t1, tv_t t2)
 {
-	return t1 < t2 ? t1 : t2;
+	return t1 > t2 ? t1 : t2;
 }
 
 
 static ssize_t
-send_exe(tv_t t, exe_t x)
+send_exe(exe_t x)
 {
 /* exe encodes delta to metronome and delay */
 	static const char vexe[] = "EXE\t";
@@ -203,7 +204,7 @@ send_exe(tv_t t, exe_t x)
 
 	len = snprintf(
 		buf, sizeof(buf), "%lu.%03lu000000",
-		t / MSECS, t % MSECS);
+		x.t / MSECS, x.t % MSECS);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, (x.q ? vexe : vrej), strlenof(vexe)),
 		strlenof(vexe));
@@ -250,7 +251,7 @@ try_exec(ord_t o, quo_t q)
 			break;
 		}
 	buy:
-		return (exe_t){q.a, o.q, o.q};
+		return (exe_t){max_tv(o.t, metr), q.a, o.q, o.q};
 
 	case RGM_SHORT:
 		if (q.b < o.lp) {
@@ -258,7 +259,7 @@ try_exec(ord_t o, quo_t q)
 			break;
 		}
 	sell:
-		return (exe_t){q.b, -o.q, -o.q};
+		return (exe_t){max_tv(o.t, metr), q.b, -o.q, -o.q};
 
 	case RGM_CANCEL:
 	case RGM_EMERGCLOSE:
@@ -300,10 +301,10 @@ offline(FILE *qfp)
 		.base = 0.dd, .term = 0.dd, .comm = 0.dd,
 	};
 	ord_t oq[256U];
-	size_t noq = 0U;
+	size_t ioq = 0U, noq = 0U;
 	char *line = NULL;
 	size_t llen = 0UL;
-	quo_t q, newq;
+	quo_t q;
 
 yield_ord:
 	for (; getline(&line, &llen, stdin) > 0;) {
@@ -315,6 +316,7 @@ yield_ord:
 		}
 		/* read the order */
 		switch (*on) {
+			px_t p;
 			qx_t adq;
 			hx_t hx;
 
@@ -341,7 +343,10 @@ yield_ord:
 				break;
 			}
 			/* otherwise snarf the limit price */
-			o.lp = strtopx(++on, &on);
+			if ((p = strtopx(++on, &on))) {
+				o.gtd = NOT_A_TIME;
+				o.lp = p;
+			}
 			if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
 				break;
 			}
@@ -371,21 +376,19 @@ yield_ord:
 	omtr = NOT_A_TIME;
 
 yield_quo:
-	for (; getline(&line, &llen, qfp) > 0; q = newq) {
+	while (getline(&line, &llen, qfp) > 0) {
 		char *on;
+		tv_t newm;
+		quo_t newq;
 
-		metr = strtotv(line, &on);
+		newm = strtotv(line, &on);
 		/* instrument next */
 		on = strchr(on, '\t');
 		newq.b = strtopx(++on, &on);
 		newq.a = strtopx(++on, &on);
 
-		if (UNLIKELY(metr > omtr)) {
-			/* we need more orders! */
-			goto yield_ord;
-		}
 		/* process limit order queue */
-		for (size_t i = 0U; i < noq && oq[i].t <= metr; i++) {
+		for (size_t i = ioq, n = noq; i < n && oq[i].t < newm; i++) {
 			exe_t x;
 
 			if (!oq[i].r) {
@@ -398,16 +401,17 @@ yield_quo:
 				continue;
 			}
 			/* otherwise send post-trade details */
-			send_exe(min_tv(oq[i].gtd, metr), x);
+			send_exe(x);
 			acc = alloc(acc, x, comm);
-			send_acc(min_tv(oq[i].gtd, metr), acc);
+			send_acc(x.t, acc);
 
 			/* check for brackets */
 			if (oq[i].tp) {
 				oq[noq++] = (ord_t){
 					(rgm_t)(oq[i].r ^ RGM_CANCEL),
-					.t = metr,
-					.q = -x.q,
+					.t = omtr = x.t,
+					.gtd = NOT_A_TIME,
+					.q = x.q,
 					.lp = oq[i].tp,
 					.sl = oq[i].sl,
 				};
@@ -416,21 +420,29 @@ yield_quo:
 			 * an order's regime */
 			oq[i].r = RGM_UNK;
 		}
+		/* fast forward dead orders */
+		for (; ioq < noq && !oq[ioq].r; ioq++);
 		/* gc'ing again */
-		if (UNLIKELY(noq >= countof(oq) / 2U)) {
-			size_t j = 0U;
-			for (size_t i = 0U; i < noq; i++) {
-				if (oq[i].r) {
-					oq[j++] = oq[i];
-				}
-			}
-			noq = j;
+		if (UNLIKELY(ioq >= countof(oq) / 2U)) {
+			memmove(oq, oq + ioq, (noq - ioq) * sizeof(*oq));
+			noq -= ioq;
+			ioq = 0U;
+		}
+
+		/* shift quotes */
+		q = newq;
+		metr = newm;
+
+		if (metr >= omtr) {
+			goto yield_ord;
 		}
 	}
 
 	/* finalise with the last known quote */
-	with (exe_t x = try_exec((ord_t){RGM_CANCEL, .q = acc.base}, q)) {
-		send_exe(metr, x);
+	if (acc.base) {
+		ord_t o = {RGM_CANCEL, .t = metr, .q = acc.base};
+		exe_t x = try_exec(o, q);
+		send_exe(x);
 		acc = alloc(acc, x, comm);
 		send_acc(metr, acc);
 	}
