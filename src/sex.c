@@ -56,6 +56,7 @@ typedef struct {
 typedef struct {
 	px_t p;
 	qx_t q;
+	qx_t totq;
 } exe_t;
 
 typedef struct {
@@ -84,6 +85,7 @@ typedef enum {
 typedef struct {
 	rgm_t r;
 	tv_t t;
+	tv_t gtd;
 	qx_t q;
 	px_t lp;
 	px_t tp;
@@ -117,21 +119,10 @@ serror(const char *fmt, ...)
 }
 
 
-static hx_t hxs;
 static tv_t metr;
+static tv_t omtr;
 static const char *cont;
 static size_t conz;
-
-static const char *rgms[] = {
-	[RGM_UNK] = "UNK",
-	[RGM_LONG] = "LONG",
-	[RGM_SHORT] = "SHORT",
-	[RGM_CANCEL] = "CANCEL",
-	[RGM_TIMEOUT] = "TIMEOUT",
-	[RGM_LONGRVRS] = "LONGRVRS",
-	[RGM_SHORTRVRS] = "SHORTRVRS",
-	[RGM_EMERGCLOSE] = "EMERGCLOSE",
-};
 
 static hx_t
 strtohx(const char *x, char **on)
@@ -194,33 +185,28 @@ strtotv(const char *ln, char **endptr)
 	return r;
 }
 
-static inline __attribute__((const, pure)) qx_t
-min_qx(qx_t q1, qx_t q2)
+static inline __attribute__((const, pure)) tv_t
+min_tv(tv_t t1, tv_t t2)
 {
-	return q1 < q2 ? q1 : q2;
-}
-
-static inline __attribute__((const, pure)) qx_t
-max_qx(qx_t q1, qx_t q2)
-{
-	return q1 > q2 ? q1 : q2;
+	return t1 < t2 ? t1 : t2;
 }
 
 
 static ssize_t
-send_exe(exe_t x)
+send_exe(tv_t t, exe_t x)
 {
 /* exe encodes delta to metronome and delay */
-	static const char verb[] = "EXE\t";
+	static const char vexe[] = "EXE\t";
+	static const char vrej[] = "REJ\t";
 	char buf[256U];
 	size_t len;
 
-	with (tv_t t = metr) {
-		len = snprintf(buf, sizeof(buf), "%lu.%03lu000000",
-			       t / MSECS, t % MSECS);
-	}
+	len = snprintf(
+		buf, sizeof(buf), "%lu.%03lu000000",
+		t / MSECS, t % MSECS);
 	buf[len++] = '\t';
-	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
+	len += (memcpy(buf + len, (x.q ? vexe : vrej), strlenof(vexe)),
+		strlenof(vexe));
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
 	len += qxtostr(buf + len, sizeof(buf) - len, x.q);
@@ -231,16 +217,15 @@ send_exe(exe_t x)
 }
 
 static ssize_t
-send_acc(acc_t a)
+send_acc(tv_t t, acc_t a)
 {
 	static const char verb[] = "ACC\t";
 	char buf[256U];
 	size_t len;
 
-	with (tv_t t = metr) {
-		len = snprintf(buf, sizeof(buf), "%lu.%03lu000000",
-			       t / MSECS, t % MSECS);
-	}
+	len = snprintf(
+		buf, sizeof(buf), "%lu.%03lu000000",
+		t / MSECS, t % MSECS);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
 	len += (memcpy(buf + len, cont, conz), conz);
@@ -255,16 +240,26 @@ send_acc(acc_t a)
 }
 
 static exe_t
-exec_mkt(ord_t o, quo_t q)
+try_exec(ord_t o, quo_t q)
 {
 /* this takes an order + quotes and executes it at market price */
 	switch (o.r) {
 	case RGM_LONG:
+		if (q.a > o.lp) {
+			/* no exec */
+			break;
+		}
 	buy:
-		return (exe_t){q.a, o.q};
+		return (exe_t){q.a, o.q, o.q};
+
 	case RGM_SHORT:
+		if (q.b < o.lp) {
+			/* no can do exec */
+			break;
+		}
 	sell:
-		return (exe_t){q.b, -o.q};
+		return (exe_t){q.b, -o.q, -o.q};
+
 	case RGM_CANCEL:
 	case RGM_EMERGCLOSE:
 		if (o.q > 0.dd) {
@@ -276,9 +271,10 @@ exec_mkt(ord_t o, quo_t q)
 			goto buy;
 		}
 		/* otherwise do nothing */
+	default:
 		break;
 	}
-	return (exe_t){0.df, 0.dd};
+	return (exe_t){0.df};
 }
 
 static acc_t
@@ -303,13 +299,15 @@ offline(FILE *qfp)
 	acc_t acc = {
 		.base = 0.dd, .term = 0.dd, .comm = 0.dd,
 	};
+	ord_t oq[256U];
+	size_t noq = 0U;
 	char *line = NULL;
 	size_t llen = 0UL;
 	ssize_t nrd;
 	quo_t q;
 
+yield_ord:
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
-		tv_t omtr;
 		ord_t o;
 		char *on;
 
@@ -319,59 +317,129 @@ offline(FILE *qfp)
 		/* read the order */
 		switch (*on) {
 			qx_t adq;
+			hx_t hx;
 
 		case 'L'/*ONG*/:
 			adq = !maxq ? qty : acc.base <= 0.dd ? qty : 0.dd;
 			adq += absq && acc.base < 0.dd ? qty : 0.dd;
-			o = (ord_t){RGM_LONG, .q = adq};
+			o = (ord_t){RGM_LONG, .q = adq, .lp = __DEC32_MAX__};
 			break;
 		case 'S'/*HORT*/:
 			adq = !maxq ? qty : acc.base >= 0.dd ? qty : 0.dd;
 			adq += absq && acc.base > 0.dd ? qty : 0.dd;
-			o = (ord_t){RGM_SHORT, .q = adq};
-			break;
+			o = (ord_t){RGM_SHORT, .q = adq, .lp = __DEC32_MIN__};
+			goto ord;
 		case 'C'/*ANCEL*/:
 		case 'E'/*MERG*/:
 			o = (ord_t){RGM_CANCEL, .q = acc.base};
 			break;
 		default:
 			continue;
-		}
-		/* now we're busy executing */
-		omtr += exe_age;
 
-		while ((nrd = getline(&line, &llen, qfp)) > 0) {
-			metr = strtotv(line, &on);
-			if (UNLIKELY(metr > omtr)) {
-				metr = omtr;
+		ord:
+			if (UNLIKELY(!(hx = strtohx(on, &on)))) {
+				/* no currency indicator */
 				break;
 			}
-			/* instrument next */
-			on = strchr(on, '\t');
-			q.b = strtopx(++on, &on);
-			q.a = strtopx(++on, &on);
+			/* otherwise snarf the limit price */
+			if ((unsigned char)(*++on ^ '0') >= 10U) {
+				;
+			} else if (o.lp = strtopx(on, &on), *on != '\t') {
+				break;
+			}
+			/* no room for gtd, imply eternity */
+			o.gtd = NOT_A_TIME;
+			/* oh and a target price */
+			if ((unsigned char)(*++on ^ '0') >= 10U) {
+				;
+			} else if (o.tp = strtopx(on, &on), *on != '\t') {
+				break;
+			}
+			/* and finally a stop/loss */
+			if ((unsigned char)(*++on ^ '0') >= 10U) {
+				;
+			} else if (o.sl = strtopx(on, &on), *on != '\t') {
+				break;
+			}
 		}
-
-		with (exe_t x = exec_mkt(o, q)) {
-			send_exe(x);
-			acc = alloc(acc, x, comm);
-			send_acc(acc);
+		/* throw away non-sense orders */
+		if (LIKELY(o.q)) {
+			omtr += exe_age;
+			o.t = omtr;
+			o.gtd = o.gtd ?: omtr;
+			/* enqueue the order */
+			oq[noq++] = o;
 		}
+		goto yield_quo;
 	}
-	/* finalise with the last known quote */
+	/* no more orders coming, set omtr to NOT_A_TIME so we loop
+	 * through quote reception eternally */
+	omtr = NOT_A_TIME;
+
+yield_quo:
 	while ((nrd = getline(&line, &llen, qfp)) > 0) {
 		char *on;
 
 		metr = strtotv(line, &on);
+
 		/* instrument next */
 		on = strchr(on, '\t');
 		q.b = strtopx(++on, &on);
 		q.a = strtopx(++on, &on);
+
+		if (UNLIKELY(metr > omtr)) {
+			/* we need more orders! */
+			goto yield_ord;
+		}
+		/* process limit order queue */
+		for (size_t i = 0U; i < noq && oq[i].t <= metr; i++) {
+			exe_t x;
+
+			if (!oq[i].r) {
+				/* don't go for dead orders */
+				continue;
+			}
+			/* try executing him */
+			x = try_exec(oq[i], q);
+			if (!x.q && oq[i].gtd > metr) {
+				continue;
+			}
+			/* otherwise send post-trade details */
+			send_exe(min_tv(oq[i].gtd, metr), x);
+			acc = alloc(acc, x, comm);
+			send_acc(min_tv(oq[i].gtd, metr), acc);
+
+			/* check for brackets */
+			if (oq[i].tp) {
+				oq[noq++] = (ord_t){
+					(rgm_t)(oq[i].r ^ RGM_CANCEL),
+					.t = metr,
+					.q = -x.q,
+					.lp = oq[i].tp,
+					.sl = oq[i].sl,
+				};
+			}
+			/* instead of dequeuing we're just setting
+			 * an order's regime */
+			oq[i].r = RGM_UNK;
+		}
+		/* gc'ing again */
+		if (UNLIKELY(noq >= countof(oq) / 2U)) {
+			size_t j = 0U;
+			for (size_t i = 0U; i < noq; i++) {
+				if (oq[i].r) {
+					oq[j++] = oq[i];
+				}
+			}
+			noq = j;
+		}
 	}
-	with (exe_t x = exec_mkt((ord_t){RGM_CANCEL, .q = acc.base}, q)) {
-		send_exe(x);
+
+	/* finalise with the last known quote */
+	with (exe_t x = try_exec((ord_t){RGM_CANCEL, .q = acc.base}, q)) {
+		send_exe(metr, x);
 		acc = alloc(acc, x, comm);
-		send_acc(acc);
+		send_acc(metr, acc);
 	}
 
 	free(line);
