@@ -324,11 +324,13 @@ yield_ord:
 			adq = !maxq ? qty : acc.base <= 0.dd ? qty : 0.dd;
 			adq += absq && acc.base < 0.dd ? qty : 0.dd;
 			o = (ord_t){RGM_LONG, .q = adq, .lp = __DEC32_MAX__};
+			on += 4U;
 			goto ord;
 		case 'S'/*HORT*/:
 			adq = !maxq ? qty : acc.base >= 0.dd ? qty : 0.dd;
 			adq += absq && acc.base > 0.dd ? qty : 0.dd;
 			o = (ord_t){RGM_SHORT, .q = adq, .lp = __DEC32_MIN__};
+			on += 5U;
 			goto ord;
 		case 'C'/*ANCEL*/:
 		case 'E'/*MERG*/:
@@ -338,6 +340,9 @@ yield_ord:
 			continue;
 
 		ord:
+			if (UNLIKELY(*on++ != '\t')) {
+				break;
+			}
 			if (UNLIKELY(!(hx = strtohx(on, &on)))) {
 				/* no currency indicator */
 				break;

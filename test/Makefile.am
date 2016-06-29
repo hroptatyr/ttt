@@ -26,6 +26,7 @@ TESTS += sex_01.clit
 TESTS += sex_02.clit
 TESTS += sex_03.clit
 TESTS += sex_04.clit
+TESTS += sex_05.clit
 EXTRA_DIST += EURUSD
 
 ## Makefile.am ends here
