@@ -397,9 +397,23 @@ yield_quo:
 		for (size_t i = ioq, n = noq; i < n && oq[i].t < newm; i++) {
 			exe_t x;
 
-			if (!oq[i].r) {
+			switch (oq[i].r) {
+			case RGM_UNK:
 				/* don't go for dead orders */
 				continue;
+			case RGM_CANCEL:
+			case RGM_EMERGCLOSE:
+				for (size_t j = ioq; j < noq; j++) {
+					if (i == j) {
+						continue;
+					} else if (oq[j].t > oq[i].t) {
+						continue;
+					}
+					/* otherwise shred him */
+					oq[j].r = RGM_UNK;
+				}
+			default:
+				break;
 			}
 			/* try executing him */
 			x = try_exec(oq[i], q, acc.base);
