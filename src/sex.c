@@ -416,7 +416,7 @@ yield_quo:
 					(rgm_t)(oq[i].r ^ RGM_CANCEL),
 					.t = omtr = x.t,
 					.gtd = NOT_A_TIME,
-					.q = x.q,
+					.q = fabsd64(x.q),
 					.lp = oq[i].tp,
 					.sl = oq[i].sl,
 				};
