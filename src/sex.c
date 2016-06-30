@@ -401,6 +401,9 @@ yield_quo:
 				continue;
 			case RGM_CANCEL:
 			case RGM_EMERGCLOSE:
+				/* adjust for current account base */
+				oq[i].q = acc.base;
+				/* cancel all pending limit orders */
 				for (size_t j = ioq; j < noq; j++) {
 					if (i == j) {
 						continue;
