@@ -244,36 +244,34 @@ static exe_t
 try_exec(ord_t o, quo_t q, qx_t base)
 {
 /* this takes an order + quotes and executes it at market price */
+	const tv_t t = max_tv(o.t, metr);
+	px_t p;
+
 	switch (o.r) {
 	case RGM_LONG:
-		if (q.a > o.lp) {
-			/* no exec */
-			break;
-		}
-	buy:
-		return (exe_t){max_tv(o.t, metr), q.a, o.q, o.q};
-
 	case RGM_SHORT:
-		if (q.b < o.lp) {
+		if (o.q > 0.dd && (p = q.a) > o.lp) {
+			/* no can do exec */
+			break;
+		} else if (o.q < 0.dd && (p = q.b) < o.lp) {
 			/* no can do exec */
 			break;
 		}
-	sell:
-		return (exe_t){max_tv(o.t, metr), q.b, -o.q, -o.q};
+		return (exe_t){t, p, o.q, o.q};
 
 	case RGM_CANCEL:
 	case RGM_EMERGCLOSE:
 		if (base > 0.dd) {
-			/* have to sell */
-			o.q = base;
-			goto sell;
+			p = q.b;
 		} else if (base < 0.dd) {
-			/* have to buy */
-			o.q = -base;
-			goto buy;
+			p = q.a;
+		} else {
+			p = 0.df;
 		}
-		/* otherwise do nothing */
+		return (exe_t){t, p, -base, -base};
+
 	default:
+		/* otherwise do nothing */
 		break;
 	}
 	return (exe_t){0.df};
@@ -330,12 +328,12 @@ yield_ord:
 		case 'S'/*HORT*/:
 			adq = !maxq ? qty : acc.base >= 0.dd ? qty : 0.dd;
 			adq += absq && acc.base > 0.dd ? qty : 0.dd;
-			o = (ord_t){RGM_SHORT, .q = adq, .lp = __DEC32_MIN__};
+			o = (ord_t){RGM_SHORT, .q = -adq, .lp = __DEC32_MIN__};
 			on += 5U;
 			goto ord;
 		case 'C'/*ANCEL*/:
 		case 'E'/*MERG*/:
-			o = (ord_t){RGM_CANCEL, .q = acc.base};
+			o = (ord_t){RGM_CANCEL};
 			break;
 		default:
 			continue;
@@ -368,13 +366,11 @@ yield_ord:
 			}
 		}
 		/* throw away non-sense orders */
-		if (LIKELY(o.q)) {
-			omtr += exe_age;
-			o.t = omtr;
-			o.gtd = o.gtd ?: omtr;
-			/* enqueue the order */
-			oq[noq++] = o;
-		}
+		omtr += exe_age;
+		o.t = omtr;
+		o.gtd = o.gtd ?: omtr;
+		/* enqueue the order */
+		oq[noq++] = o;
 		goto yield_quo;
 	}
 	/* no more orders coming, set omtr to NOT_A_TIME so we loop
@@ -431,7 +427,7 @@ yield_quo:
 					(rgm_t)(oq[i].r ^ RGM_CANCEL),
 					.t = omtr = x.t,
 					.gtd = NOT_A_TIME,
-					.q = fabsd64(x.q),
+					.q = -x.q,
 					.lp = oq[i].tp,
 					.sl = oq[i].sl,
 				};
