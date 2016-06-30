@@ -241,7 +241,7 @@ send_acc(tv_t t, acc_t a)
 }
 
 static exe_t
-try_exec(ord_t o, quo_t q, qx_t base)
+try_exec(ord_t o, quo_t q)
 {
 /* this takes an order + quotes and executes it at market price */
 	const tv_t t = max_tv(o.t, metr);
@@ -261,14 +261,14 @@ try_exec(ord_t o, quo_t q, qx_t base)
 
 	case RGM_CANCEL:
 	case RGM_EMERGCLOSE:
-		if (base > 0.dd) {
+		if (o.q > 0.dd) {
 			p = q.b;
-		} else if (base < 0.dd) {
+		} else if (o.q < 0.dd) {
 			p = q.a;
 		} else {
 			p = 0.df;
 		}
-		return (exe_t){t, p, -base, -base};
+		return (exe_t){t, p, -o.q, -o.q};
 
 	default:
 		/* otherwise do nothing */
@@ -333,7 +333,7 @@ yield_ord:
 			goto ord;
 		case 'C'/*ANCEL*/:
 		case 'E'/*MERG*/:
-			o = (ord_t){RGM_CANCEL};
+			o = (ord_t){RGM_CANCEL, .q = acc.base};
 			break;
 		default:
 			continue;
@@ -412,7 +412,7 @@ yield_quo:
 				break;
 			}
 			/* try executing him */
-			x = try_exec(oq[i], q, acc.base);
+			x = try_exec(oq[i], q);
 			if (!x.q && oq[i].gtd > metr) {
 				continue;
 			}
@@ -456,8 +456,8 @@ yield_quo:
 
 	/* finalise with the last known quote */
 	if (acc.base) {
-		ord_t o = {RGM_CANCEL, .t = metr};
-		exe_t x = try_exec(o, q, acc.base);
+		ord_t o = {RGM_CANCEL, .t = metr, .q = acc.base};
+		exe_t x = try_exec(o, q);
 		send_exe(x);
 		acc = alloc(acc, x, comm);
 		send_acc(metr, acc);
