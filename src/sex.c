@@ -149,8 +149,9 @@ strtotv(const char *ln, char **endptr)
 
 	/* time value up first */
 	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)))) {
-			return NOT_A_TIME;
+		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
+			r = NOT_A_TIME;
+			goto out;
 		} else if (*on == '.') {
 			char *moron;
 
@@ -180,6 +181,7 @@ strtotv(const char *ln, char **endptr)
 	}
 	/* overread up to 3 tabs */
 	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
+out:
 	if (LIKELY(endptr != NULL)) {
 		*endptr = on;
 	}
@@ -310,7 +312,7 @@ yield_ord:
 		ord_t o;
 		char *on;
 
-		if (UNLIKELY((omtr = strtotv(line, &on)) < metr)) {
+		if (UNLIKELY((omtr = strtotv(line, &on)) < metr || !on)) {
 			continue;
 		}
 		/* read the order */
