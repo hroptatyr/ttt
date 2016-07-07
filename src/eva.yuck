@@ -1,0 +1,3 @@
+Usage: eva QUOTES < ACCOUNTS
+
+Continuously evaluate ACCOUNTS using QUOTES.

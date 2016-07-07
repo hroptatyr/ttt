@@ -56,6 +56,20 @@ sex_LDADD = libdfp.a
 sex_LDADD += -ldecimal
 BUILT_SOURCES += sex.yucc
 
+bin_PROGRAMS += eva
+eva_SOURCES = eva.c eva.yuck
+eva_SOURCES += hash.c hash.h
+eva_SOURCES += version.c version.h
+eva_CPPFLAGS = $(AM_CPPFLAGS)
+eva_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+eva_CPPFLAGS += $(dfp754_CFLAGS)
+eva_CPPFLAGS += -DHAVE_VERSION_H
+eva_LDFLAGS = $(AM_LDFLAGS)
+eva_LDFLAGS += $(dfp754_LIBS)
+eva_LDADD = libdfp.a
+eva_LDADD += -ldecimal
+BUILT_SOURCES += eva.yucc
+
 bin_PROGRAMS += imp
 imp_SOURCES = imp.c imp.yuck
 imp_SOURCES += hash.c hash.h
