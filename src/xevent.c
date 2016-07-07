@@ -101,18 +101,35 @@ xevent(FILE *fp)
 	tv_t next, from, till, metr;
 	ssize_t nrd;
 	char ofn[32U];
+	char shk[256U];
+	size_t zshk;
 	FILE *ofp;
 	int rc = 0;
 
 next:
 	do {
+		char *on;
+
 		if ((nrd = getline(&line, &llen, stdin)) <= 0) {
 			goto out;
 		}
 		/* otherwise get next from/till pair */
-		till = from = next = strtotv(line, NULL);
+		till = from = next = strtotv(line, &on);
 		from -= nbef;
 		till += naft;
+
+		zshk = 0U;
+		if (verbp) {
+			/* copy shock string */
+			zshk = nrd - (on - line);
+
+			while (zshk > 0 && (unsigned char)on[zshk - 1] < ' ') {
+				zshk--;
+			}
+			if (zshk) {
+				memcpy(shk, on, zshk);
+			}
+		}
 	} while (next < metr);
 	/* and open output file in anticipation */
 	snprintf(ofn, sizeof(ofn), "xx%08lu", nnfn++);
@@ -129,12 +146,24 @@ next:
 		} else if (LIKELY(metr < from)) {
 			continue;
 		} else if (UNLIKELY(metr > next && verbp)) {
-			char buf[64U];
+			char buf[256U];
 			size_t len;
 
 			len = tvtostr(buf, sizeof(buf), next);
-			memcpy(buf + len, "\tSHOCK\t\t\t\t\t\t\n", 13U);
-			len += 13U;
+			if (zshk) {
+				buf[len++] = '\t';
+				len += (memcpy(buf + len, shk, zshk), zshk);
+				buf[len++] = '\t';
+				buf[len++] = '\t';
+				buf[len++] = '\t';
+				buf[len++] = '\t';
+				buf[len++] = '\t';
+				buf[len++] = '\t';
+				buf[len++] = '\n';
+			} else {
+				memcpy(buf + len, "\tSHOCK\t\t\t\t\t\t\n", 13U);
+				len += 13U;
+			}
 			fwrite(buf, 1, len, ofp);
 			next = NOT_A_TIME;
 		} else if (UNLIKELY(metr > till)) {
