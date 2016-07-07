@@ -330,8 +330,19 @@ Error: QUOTES file is mandatory.");
 		goto out;
 	}
 
+	if (argi->interval_arg) {
+		if (!(intv = strtoul(argi->interval_arg, NULL, 10))) {
+			errno = 0, serror("\
+Error: interval argument cannot be naught");
+			rc = 1;
+			goto out;
+		}
+		/* turn into milliseconds */
+		intv *= MSECS;
+	}
+
 	if (UNLIKELY((afp = stdin) == NULL)) {
-		errno, serror("\
+		errno = 0, serror("\
 Error: cannot open ACCOUNTS file");
 		rc = 1;
 		goto out;
