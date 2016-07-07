@@ -69,7 +69,11 @@ typedef struct {
 } eva_t;
 
 static tv_t intv = 10 * MSECS;
-static tv_t nexv;
+static const char *cont;
+static size_t conz;
+
+static FILE *qfp;
+static FILE *afp;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -88,12 +92,13 @@ serror(const char *fmt, ...)
 	return;
 }
 
-
-static tv_t metr;
-static tv_t amtr;
-static const char *cont;
-static size_t conz;
+static inline __attribute__((pure, const)) tv_t
+min_tv(tv_t t1, tv_t t2)
+{
+	return t1 < t2 ? t1 : t2;
+}
 
+
 static hx_t
 strtohx(const char *x, char **on)
 {
@@ -204,70 +209,105 @@ eva(tv_t t, acc_t a, quo_t q)
 }
 
 
-static int
-offline(FILE *qfp)
+static tv_t nexv = NOT_A_TIME;
+static quo_t q;
+static acc_t a;
+
+static tv_t
+next_quo(void)
 {
-	acc_t acc = {
-		.base = 0.dd, .term = 0.dd, .comm = 0.dd,
-	};
-	char *line = NULL;
-	size_t llen = 0UL;
-	quo_t q = {};
+	static quo_t newq;
+	static char *line;
+	static size_t llen;
+	tv_t newm;
+	char *on;
 
-yield_acc:
-	for (; getline(&line, &llen, stdin) > 0;) {
-		char *on;
-		hx_t UNUSED(hx);
+	/* assign previous next_quo as current quo */
+	q = newq;
 
-		if (UNLIKELY((amtr = strtotv(line, &on)) < metr || !on)) {
-			continue;
-		}
-		/* make sure we're talking accounts */
-		if (UNLIKELY(memcmp(on, "ACC\t", 4U))) {
-			continue;
-		}
-		on += 4U;
-
-		/* get currency indicator */
-		hx = strtohx(on, &on);
-
-		/* snarf the base amount */
-		acc.base = strtoqx(++on, &on);
-		acc.term = strtoqx(++on, &on);
-		acc.comm = strtoqx(++on, &on);
-		goto yield_quo;
+	if (UNLIKELY(getline(&line, &llen, qfp) <= 0)) {
+		free(line);
+		return NOT_A_TIME;
 	}
 
-yield_quo:
-	while (getline(&line, &llen, qfp) > 0) {
-		char *on;
-		tv_t newm;
-		quo_t newq;
+	newm = strtotv(line, &on);
+	/* instrument next */
+	on = strchr(on, '\t');
+	newq.b = strtopx(++on, &on);
+	newq.a = strtopx(++on, &on);
+	return newm;
+}
 
-		newm = strtotv(line, &on);
-		/* instrument next */
-		on = strchr(on, '\t');
-		newq.b = strtopx(++on, &on);
-		newq.a = strtopx(++on, &on);
+static tv_t
+next_acc(void)
+{
+	static acc_t newa = {
+		.base = 0.dd, .term = 0.dd, .comm = 0.dd,
+	};
+	static char *line;
+	static size_t llen;
+	static tv_t newm;
+	char *on;
+	hx_t UNUSED(hx);
 
-		if (UNLIKELY(acc.base)) {
-			/* squeeze valuation in between */
-			for (; nexv < metr; nexv += intv) {
-				eva_t v = eva(nexv, acc, q);
+	/* assign previous next_quo as current quo */
+	a = newa;
+
+	/* set next valuation timer */
+	if (a.base) {
+		nexv = (((newm - 1UL) / intv) + 1UL) * intv;
+	} else {
+		nexv = NOT_A_TIME;
+	}
+
+again:
+	if (UNLIKELY(getline(&line, &llen, afp) <= 0)) {
+		free(line);
+		return NOT_A_TIME;
+	}
+
+	/* snarf metronome */
+	newm = strtotv(line, &on);
+	/* make sure we're talking accounts */
+	if (UNLIKELY(memcmp(on, "ACC\t", 4U))) {
+		goto again;
+	}
+	on += 4U;
+
+	/* get currency indicator */
+	hx = strtohx(on, &on);
+	/* snarf the base amount */
+	newa.base = strtoqx(++on, &on);
+	newa.term = strtoqx(++on, &on);
+	newa.comm = strtoqx(++on, &on);
+	return newm;
+}
+
+static int
+offline(void)
+{
+	tv_t qmtr;
+	tv_t amtr;
+
+	qmtr = next_quo();
+	amtr = next_acc();
+
+	do {
+		while (qmtr < amtr && qmtr <= nexv) {
+			qmtr = next_quo();
+		}
+		if (nexv < amtr && nexv < qmtr && a.base) {
+			const tv_t metr = min_tv(qmtr, amtr);
+			eva_t v = eva(nexv, a, q);
+
+			for (; nexv < metr; v.t = nexv += intv) {
 				send_eva(v);
 			}
 		}
-
-		/* shift quotes */
-		q = newq;
-		metr = newm;
-
-		if (metr >= amtr) {
-			goto yield_acc;
+		if (amtr <= qmtr) {
+			amtr = next_acc();
 		}
-	}
-
-	free(line);
+	} while (amtr < NOT_A_TIME || qmtr < NOT_A_TIME);
 	return 0;
 }
 
@@ -279,7 +319,6 @@ main(int argc, char *argv[])
 {
 	static yuck_t argi[1U];
 	int rc = 0;
-	FILE *qfp;
 
 	if (yuck_parse(argi, argc, argv) < 0) {
 		rc = 1;
@@ -291,6 +330,13 @@ Error: QUOTES file is mandatory.");
 		goto out;
 	}
 
+	if (UNLIKELY((afp = stdin) == NULL)) {
+		errno, serror("\
+Error: cannot open ACCOUNTS file");
+		rc = 1;
+		goto out;
+	}		
+
 	if (UNLIKELY((qfp = fopen(*argi->args, "r")) == NULL)) {
 		serror("\
 Error: cannot open QUOTES file `%s'", *argi->args);
@@ -299,9 +345,10 @@ Error: cannot open QUOTES file `%s'", *argi->args);
 	}
 
 	/* offline mode */
-	rc = offline(qfp);
+	rc = offline();
 
 	fclose(qfp);
+	fclose(afp);
 out:
 	yuck_free(argi);
 	return rc;
