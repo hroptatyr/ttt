@@ -295,9 +295,12 @@ offline(void)
 	tv_t alst;
 	tv_t amtr;
 	/* 3 time based moments */
-	tv_t cagg[3U] = {0U, 0U, 0U};
+	size_t cagg[3U] = {0U, 0U, 0U};
 	tv_t tagg[3U] = {0U, 0U, 0U};
 	qx_t xagg[3U] = {0.dd, 0.dd, 0.dd};
+	/* higher valence metrics */
+	size_t ctns[countof(cagg) * countof(cagg)] = {};
+	size_t olsd = 0U;
 
 	qmtr = next_quo();
 	amtr = next_acc();
@@ -310,6 +313,9 @@ offline(void)
 		cagg[side]++;
 		tagg[side] += tdif;
 		xagg[side] += xdif;
+
+		ctns[side * countof(cagg) + olsd]++;
+		olsd = side;
 	}
 
 	char buf[256U];
@@ -317,13 +323,26 @@ offline(void)
 	for (size_t i = 0U; i < 3U; i++) {
 		len = (memcpy(buf, sstr[i], i + 3U), i + 3U);
 		buf[len++] = '\t';
-		len += snprintf(buf + len, sizeof(buf) - len, "%lu", cagg[i]);
+		len += snprintf(buf + len, sizeof(buf) - len, "%zu", cagg[i]);
 		buf[len++] = '\t';
 		len += tvtostr(buf + len, sizeof(buf) - len, tagg[i]);
 		buf[len++] = '\t';
 		len += qxtostr(buf + len, sizeof(buf) - len, xagg[i]);
 		buf[len++] = '\n';
 
+		fwrite(buf, 1, len, stdout);
+	}
+
+	fputs("\nnew v/old >\n", stdout);
+	for (size_t i = 0U; i < countof(cagg); i++) {
+		len = 0U;
+		len = (memcpy(buf, sstr[i], i + 3U), i + 3U);
+		for (size_t j = 0U; j < countof(cagg); j++) {
+			const size_t v = ctns[i * countof(cagg) + j];
+			buf[len++] = '\t';
+			len += snprintf(buf + len, sizeof(buf) - len, "%zu", v);
+		}
+		buf[len++] = '\n';
 		fwrite(buf, 1, len, stdout);
 	}
 	return 0;
