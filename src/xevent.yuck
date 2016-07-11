@@ -1,0 +1,8 @@
+Usage: xchunk FILE < EVENT_STAMPS
+
+Split FILE into chunks around EVENT_STAMPS.
+
+  -B, --before=T        Print quotes T seconds before the event.
+  -A, --after=T         Print quotes T seconds after the event.
+  -n, --number=NUM      Enumerate files from NUM.
+  -v, --verbose         Repeat event in output.
