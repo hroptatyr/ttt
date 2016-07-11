@@ -27,6 +27,21 @@ libdfp_a_SOURCES += dfp754_d64.c dfp754_d64.h
 libdfp_a_CPPFLAGS = $(AM_CPPFLAGS)
 libdfp_a_CPPFLAGS += $(dfp754_CFLAGS)
 
+bin_PROGRAMS += candle
+candle_SOURCES = candle.c candle.yuck
+candle_SOURCES += version.c version.h
+candle_CPPFLAGS = $(AM_CPPFLAGS)
+candle_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+candle_CPPFLAGS += $(ev_CFLAGS)
+candle_CPPFLAGS += $(dfp754_CFLAGS)
+candle_CPPFLAGS += -DHAVE_VERSION_H
+candle_LDFLAGS = $(AM_LDFLAGS)
+candle_LDFLAGS += $(ev_LIBS)
+candle_LDFLAGS += $(dfp754_LIBS)
+candle_LDADD = libdfp.a
+candle_LDADD += -ldecimal
+BUILT_SOURCES += candle.yucc
+
 
 ## version rules
 version.c: version.c.in $(top_builddir)/.version

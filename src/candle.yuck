@@ -1,0 +1,7 @@
+Usage: candle [< FILE]
+
+Produce minute by minute candles.
+The candle provides information about open, high, low, close, 
+max drawdown, max drawup, max increment, max decrement
+
+  --interval=S          Draw candles every S seconds, default 60.
