@@ -56,6 +56,20 @@ sex_LDADD = libdfp.a
 sex_LDADD += -ldecimal
 BUILT_SOURCES += sex.yucc
 
+bin_PROGRAMS += imp
+imp_SOURCES = imp.c imp.yuck
+imp_SOURCES += hash.c hash.h
+imp_SOURCES += version.c version.h
+imp_CPPFLAGS = $(AM_CPPFLAGS)
+imp_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+imp_CPPFLAGS += $(dfp754_CFLAGS)
+imp_CPPFLAGS += -DHAVE_VERSION_H
+imp_LDFLAGS = $(AM_LDFLAGS)
+imp_LDFLAGS += $(dfp754_LIBS)
+imp_LDADD = libdfp.a
+imp_LDADD += -ldecimal
+BUILT_SOURCES += imp.yucc
+
 
 ## version rules
 version.c: version.c.in $(top_builddir)/.version
