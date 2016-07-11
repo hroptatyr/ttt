@@ -1,0 +1,11 @@
+Usage: sex QUOTES < ORDERS
+
+Simulate executions of ORDERS using QUOTES.
+
+  --exe-delay=N         In offline mode assume we can execute
+                        in under N milliseconds (default: 60)
+  --commission=PX       Commissions per roundtrip.  These will be
+                        accrued in a separate account.
+  --quantity=QX         Trade QX contracts per order.
+  --maxqty              Allow at most two signals in the same direction.
+  --absqty              Position absolute quantities.

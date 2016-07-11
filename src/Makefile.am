@@ -42,6 +42,20 @@ candle_LDADD = libdfp.a
 candle_LDADD += -ldecimal
 BUILT_SOURCES += candle.yucc
 
+bin_PROGRAMS += sex
+sex_SOURCES = sex.c sex.yuck
+sex_SOURCES += hash.c hash.h
+sex_SOURCES += version.c version.h
+sex_CPPFLAGS = $(AM_CPPFLAGS)
+sex_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+sex_CPPFLAGS += $(dfp754_CFLAGS)
+sex_CPPFLAGS += -DHAVE_VERSION_H
+sex_LDFLAGS = $(AM_LDFLAGS)
+sex_LDFLAGS += $(dfp754_LIBS)
+sex_LDADD = libdfp.a
+sex_LDADD += -ldecimal
+BUILT_SOURCES += sex.yucc
+
 
 ## version rules
 version.c: version.c.in $(top_builddir)/.version
