@@ -1,0 +1,5 @@
+Usage: eva QUOTES < ACCOUNTS
+
+Continuously evaluate ACCOUNTS using QUOTES.
+
+  --interval=T          Evaluate portfolio every T seconds, default: 10
