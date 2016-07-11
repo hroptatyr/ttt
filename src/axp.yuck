@@ -1,0 +1,3 @@
+Usage: axp [QUOTES] < ACCOUNTS
+
+Analyse the market during periods of exposure.

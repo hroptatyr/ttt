@@ -84,6 +84,20 @@ imp_LDADD = libdfp.a
 imp_LDADD += -ldecimal
 BUILT_SOURCES += imp.yucc
 
+bin_PROGRAMS += axp
+axp_SOURCES = axp.c axp.yuck
+axp_SOURCES += hash.c hash.h
+axp_SOURCES += version.c version.h
+axp_CPPFLAGS = $(AM_CPPFLAGS)
+axp_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+axp_CPPFLAGS += $(dfp754_CFLAGS)
+axp_CPPFLAGS += -DHAVE_VERSION_H
+axp_LDFLAGS = $(AM_LDFLAGS)
+axp_LDFLAGS += $(dfp754_LIBS)
+axp_LDADD = libdfp.a
+axp_LDADD += -ldecimal
+BUILT_SOURCES += axp.yucc
+
 bin_PROGRAMS += xevent
 xevent_SOURCES = xevent.c xevent.yuck
 xevent_SOURCES += version.c version.h
