@@ -1,0 +1,3 @@
+Usage: thours < FILE
+
+Return summary of when trades occur in week hour resolution.
