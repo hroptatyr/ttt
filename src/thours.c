@@ -123,7 +123,7 @@ offline(void)
 
 	for (size_t d = 1U; d <= 7U; d++) {
 		for (size_t h = 0U; h < 24U; h++) {
-			printf("%zu\t%zu\t%zu\n", d, h, m[d * 32U + h]);
+			printf("%zu\t%02zu\t%zu\n", d, h, m[d * 32U + h]);
 		}
 	}
 
