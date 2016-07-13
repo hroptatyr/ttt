@@ -1,0 +1,6 @@
+Usage: opt < QUOTES
+
+Find optimal entry and exit points in QUOTES.
+
+  --pair=FX             Pretend to trade FX.
+  --thresh=PX           Cost for each trade.
