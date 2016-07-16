@@ -34,6 +34,15 @@ typedef long unsigned int tv_t;
 #define qxtostr		d64tostr
 #define NOT_A_TIME	((tv_t)-1ULL)
 
+typedef enum {
+	RGM_FLAT,
+	RGM_LONG,
+	RGM_SHORT,
+	RGM_CANCEL,
+	NRGM = RGM_CANCEL,
+	RGM2POW,
+} rgm_t;
+
 typedef struct {
 	px_t b;
 	px_t a;
@@ -131,6 +140,9 @@ static tv_t metr;
 static quo_t quo;
 static const char *cont;
 static size_t conz;
+static unsigned char *prev;
+static tv_t *pmtr;
+static size_t pren, prez;
 
 static int
 push_beef(const char *ln, size_t UNUSED(lz))
@@ -155,17 +167,12 @@ push_beef(const char *ln, size_t UNUSED(lz))
 }
 
 static void
-skim(bool lastp)
+skim(void)
 {
-	typedef enum {
-		RGM_FLAT,
-		RGM_LONG,
-		RGM_SHORT,
-		NRGM,
-	} rgm_t;
 	static quo_t old;
-	static rgm_t rgm[NRGM];
+	static tv_t omtr;
 	static px_t pnl[NRGM];
+	rgm_t rgm[NRGM];
 	px_t new[NRGM];
 
 	/* calculate returns */
@@ -174,7 +181,6 @@ skim(bool lastp)
 	new[RGM_SHORT] = old.b - quo.a;
 
 	/* calculate PREV(m, l) */
-	printf("%lu.%03lu000000", metr / MSECS, metr % MSECS);
 	for (rgm_t i = RGM_FLAT; i < NRGM; i++) {
 		rgm_t maxr = RGM_FLAT;
 		px_t maxp = pnl[RGM_FLAT] + new[i];
@@ -187,12 +193,103 @@ skim(bool lastp)
 		}
 		pnl[i] = maxp;
 		rgm[i] = maxr;
-		printf("\tPREV(m, %u) = %u (%f)", i, rgm[i], (double)new[i]);
 	}
-	putchar('\n');
+
+	/* append to prev list */
+	if (UNLIKELY(pren >= prez)) {
+		prez = (prez * 2U) ?: 4096U;
+		prev = realloc(prev, prez * sizeof(*prev));
+		pmtr = realloc(pmtr, prez * sizeof(*pmtr));
+	}
+	with (unsigned char x = 0U) {
+		for (rgm_t i = RGM_FLAT; i < NRGM; i++) {
+			x ^= (unsigned char)(rgm[i] << (i * RGM2POW / 2U));
+		}
+		prev[pren] = x;
+		pmtr[pren] = omtr;
+		pren++;
+	}
 
 	/* memorise quo */
 	old = quo;
+	omtr = metr;
+	return;
+}
+
+static inline void
+rvrt(unsigned char *a, size_t n)
+{
+	for (size_t i = 0U, m = n-- / 2U; i < m; i++) {
+		unsigned char tmp = a[n - i];
+		a[n - i] = a[i];
+		a[i] = tmp;
+	}
+	return;
+}
+
+static void
+prnt(tv_t t, rgm_t r)
+{
+	static const char *rgms[] = {
+		[RGM_FLAT] = "UNK",
+		[RGM_LONG] = "LONG",
+		[RGM_SHORT] = "SHORT",
+		[RGM_CANCEL] = "CANCEL",
+	};
+	char buf[256U];
+	size_t len;
+
+	len = tvtostr(buf, sizeof(buf), t);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, rgms[r], r + 3U), r + 3U);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\n';
+
+	fwrite(buf, 1, len, stdout);
+	return;
+}
+
+static void
+dgst(void)
+{
+/* this destroys PREV */
+	rgm_t r = RGM_FLAT;
+
+	/* revert PREV string */
+	rvrt(prev, pren);
+
+	/* now obtain the optimal trades */
+	for (size_t i = 0U; i < pren; i++) {
+		r = (rgm_t)((prev[i] >> (r * RGM2POW / 2U)) & (RGM2POW - 1U));
+		/* by side-effect store the optimal regime */
+		prev[i] = (unsigned char)r;
+	}
+
+	/* revert once more */
+	rvrt(prev, pren);
+
+	/* now go for printing */
+	r = RGM_FLAT;
+	for (size_t i = 0U; i < pren; r = (rgm_t)prev[i++]) {
+		/* only go for edges */
+		if (r ^ prev[i]) {
+			prnt(pmtr[i], (rgm_t)(prev[i] ?: RGM_CANCEL));
+		}
+	}
+	/* and finish on a flat */
+	if (r) {
+		prnt(metr, RGM_CANCEL);
+	}
+
+	/* finalise PREV */
+	if (LIKELY(prev != NULL)) {
+		free(prev);
+	}
+	if (LIKELY(pmtr != NULL)) {
+		free(pmtr);
+	}
+	pren = prez = 0UL;
 	return;
 }
 
@@ -218,11 +315,11 @@ offline(void)
 			/* make sure we're talking current time */
 			metr = t;
 			/* see what we can trade */
-			skim(false);
+			skim();
 		}
 	}
 	/* finalise our findings */
-	skim(true);
+	dgst();
 	free(line);
 	return 0;
 }
