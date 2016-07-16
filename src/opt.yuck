@@ -1,6 +1,7 @@
 Usage: opt < QUOTES
 
 Find optimal entry and exit points in QUOTES.
+This uses Magdon-Ismail's single-pass forward O(n) space DP algorithm.
 
   --pair=FX             Pretend to trade FX.
   --thresh=PX           Cost for each trade.

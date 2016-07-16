@@ -34,12 +34,6 @@ typedef long unsigned int tv_t;
 #define qxtostr		d64tostr
 #define NOT_A_TIME	((tv_t)-1ULL)
 
-/* relevant tick dimensions */
-typedef struct {
-	tv_t t;
-	px_t p;
-} tik_t;
-
 typedef struct {
 	px_t b;
 	px_t a;
@@ -133,9 +127,8 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 
 
 static hx_t hxs;
-static tik_t bid;
-static tik_t ask;
 static tv_t metr;
+static quo_t quo;
 static const char *cont;
 static size_t conz;
 
@@ -156,8 +149,7 @@ push_beef(const char *ln, size_t UNUSED(lz))
 	if (*++on != '\t' && *on != '\n' &&
 	    (b = strtopx(on, &on)) && *on++ == '\t' &&
 	    (a = strtopx(on, &on)) && (*on == '\n' || *on == '\t')) {
-		bid = (tik_t){metr, b};
-		ask = (tik_t){metr, a};
+		quo = (quo_t){b, a};
 	}
 	return 0;
 }
@@ -165,140 +157,42 @@ push_beef(const char *ln, size_t UNUSED(lz))
 static void
 skim(bool lastp)
 {
-	static tik_t hi_bid = {.p = -__DEC32_MAX__};
-	static tik_t lo_ask = {.p = __DEC32_MAX__};
-	static tik_t h2_bid;
-	static tik_t l2_ask;
-	static enum {
+	typedef enum {
 		RGM_FLAT,
 		RGM_LONG,
 		RGM_SHORT,
-	} rgm;
+		NRGM,
+	} rgm_t;
+	static quo_t old;
+	static rgm_t rgm[NRGM];
+	static px_t pnl[NRGM];
+	px_t new[NRGM];
 
-	static void buy(tik_t x)
-	{
-		static tik_t bot;
-		char buf[256U];
-		size_t len;
+	/* calculate returns */
+	new[RGM_FLAT] = 0.df;
+	new[RGM_LONG] = quo.b - old.a;
+	new[RGM_SHORT] = old.b - quo.a;
 
-		len = tvtostr(buf, sizeof(buf), x.t);
-		buf[len++] = '\t';
-		len += (memcpy(buf + len, "LONG\t", 5U), 5U);
-		len += (memcpy(buf + len, cont, conz), conz);
-		buf[len++] = '\n';
-
-		/* no limit price */
-		//len += pxtostr(buf + len, sizeof(buf) - len, x.p);
-		fwrite(buf, 1, len, stdout);
-
-		lo_ask = l2_ask;
-
-		switch (rgm) {
-		case RGM_FLAT:
-			rgm = RGM_LONG;
-			break;
-		case RGM_LONG:
-			abort();
-			break;
-		case RGM_SHORT:
-			rgm = RGM_FLAT;
-			break;
-		}
-
-		bot = x;
-	}
-
-	static void sell(tik_t x)
-	{
-		static tik_t sld;
-		char buf[256U];
-		size_t len;
-
-		len = tvtostr(buf, sizeof(buf), x.t);
-		buf[len++] = '\t';
-		len += (memcpy(buf + len, "SHORT\t", 6U), 6U);
-		len += (memcpy(buf + len, cont, conz), conz);
-		buf[len++] = '\n';
-
-		/* no limit price */
-		//len += pxtostr(buf + len, sizeof(buf) - len, x.p);
-		fwrite(buf, 1, len, stdout);
-
-		hi_bid = h2_bid;
-
-		switch (rgm) {
-		case RGM_FLAT:
-			rgm = RGM_SHORT;
-			break;
-		case RGM_LONG:
-			rgm = RGM_FLAT;
-			break;
-		case RGM_SHORT:
-			abort();
-			break;
-		}
-
-		sld = x;
-	}
-
-	if (UNLIKELY(lastp)) {
-		assert(rgm == RGM_FLAT);
-		if (hi_bid.p - lo_ask.p > thresh &&
-		    h2_bid.p - lo_ask.p > thresh) {
-			if (hi_bid.t < lo_ask.t) {
-				sell(hi_bid);
-				buy(lo_ask);
-			} else if (hi_bid.t > lo_ask.t) {
-				buy(lo_ask);
-				sell(hi_bid);
-			}
-		} else if (hi_bid.p - lo_ask.p > thresh &&
-			   hi_bid.p - l2_ask.p > thresh) {
-			if (lo_ask.t < hi_bid.t) {
-				buy(lo_ask);
-				sell(hi_bid);
-			} else if (lo_ask.t > hi_bid.t) {
-				sell(hi_bid);
-				buy(lo_ask);
+	/* calculate PREV(m, l) */
+	printf("%lu.%03lu000000", metr / MSECS, metr % MSECS);
+	for (rgm_t i = RGM_FLAT; i < NRGM; i++) {
+		rgm_t maxr = RGM_FLAT;
+		px_t maxp = pnl[RGM_FLAT] + new[i];
+		for (rgm_t j = RGM_FLAT; ++j < NRGM;) {
+			px_t cand = pnl[j] + new[i] - (i != j ? thresh : 0.df);
+			if (cand > maxp) {
+				maxr = j;
+				maxp = cand;
 			}
 		}
-		return;
+		pnl[i] = maxp;
+		rgm[i] = maxr;
+		printf("\tPREV(m, %u) = %u (%f)", i, rgm[i], (double)new[i]);
 	}
+	putchar('\n');
 
-	if (bid.p > hi_bid.p) {
-		if (hi_bid.p - lo_ask.p > thresh &&
-		    hi_bid.p - l2_ask.p > thresh) {
-			if (lo_ask.t < hi_bid.t) {
-				buy(lo_ask);
-				sell(hi_bid);
-			} else if (lo_ask.t > hi_bid.t) {
-				sell(hi_bid);
-				buy(lo_ask);
-			}
-		}
-		/* track-keeping */
-		hi_bid = bid;
-		l2_ask = ask;
-	} else if (bid.p > h2_bid.p) {
-		h2_bid = bid;
-	}
-	if (ask.p < lo_ask.p) {
-		if (hi_bid.p - lo_ask.p > thresh &&
-		    h2_bid.p - lo_ask.p > thresh) {
-			if (hi_bid.t < lo_ask.t) {
-				sell(hi_bid);
-				buy(lo_ask);
-			} else if (hi_bid.t > lo_ask.t) {
-				buy(lo_ask);
-				sell(hi_bid);
-			}
-		}
-		/* track-keeping */
-		lo_ask = ask;
-		h2_bid = bid;
-	} else if (ask.p < l2_ask.p) {
-		l2_ask = ask;
-	}
+	/* memorise quo */
+	old = quo;
 	return;
 }
 
