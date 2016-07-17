@@ -47,6 +47,10 @@
 #define INFD32_U		(0x78000000U)
 #define MINFD32_U		(0xf8000000U)
 
+#if !defined __DEC32_MIN__
+# define __DEC32_MIN__	(-__DEC32_MAX__)
+#endif	/* !__DEC32_MIN__ */
+
 typedef struct {
 	uint_least32_t mant;
 	int expo;

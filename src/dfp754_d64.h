@@ -44,6 +44,12 @@
 #include <stdint.h>
 
 #define NAND64_U		(0x7c00000000000000U)
+#define INFD64_U		(0x7800000000000000U)
+#define MINFD64_U		(0xf800000000000000U)
+
+#if !defined __DEC64_MIN__
+# define __DEC64_MIN__	(-__DEC64_MAX__)
+#endif	/* !__DEC64_MIN__ */
 
 typedef struct {
 	uint_least64_t mant;
@@ -146,11 +152,19 @@ quantexpd64(_Decimal64 x)
 #endif	/* !HAVE_DFP754_*_LITERALS */
 
 #if !defined HAVE_NAND64
+# define NAND64		((union {uint64_t u, _Decimal64 x;}){NAND64_U}.x)
 inline __attribute__((pure, const)) _Decimal64
 nand64(char *__tagp __attribute__((unused)))
 {
-	return bobs64(NAND64_U);
+	return NAND64
 }
 #endif	/* !HAVE_NAND64 */
+
+#if !defined INFD64
+# define INFD64		((union {uint64_t u, _Decimal64 x;}){INFD64_U}.x)
+#endif	/* !INFD32 */
+#if !defined MINFD64
+# define MINFD64	((union {uint64_t u, _Decimal64 x;}){MINFD64_U}.x)
+#endif	/* !MINFD64 */
 
 #endif	/* INCLUDED_dfp754_d64_h_ */
