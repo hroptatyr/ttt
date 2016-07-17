@@ -42,6 +42,21 @@ candle_LDADD = libdfp.a
 candle_LDADD += -ldecimal
 BUILT_SOURCES += candle.yucc
 
+bin_PROGRAMS += snap
+snap_SOURCES = snap.c snap.yuck
+snap_SOURCES += version.c version.h
+snap_CPPFLAGS = $(AM_CPPFLAGS)
+snap_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+snap_CPPFLAGS += $(ev_CFLAGS)
+snap_CPPFLAGS += $(dfp754_CFLAGS)
+snap_CPPFLAGS += -DHAVE_VERSION_H
+snap_LDFLAGS = $(AM_LDFLAGS)
+snap_LDFLAGS += $(ev_LIBS)
+snap_LDFLAGS += $(dfp754_LIBS)
+snap_LDADD = libdfp.a
+snap_LDADD += -ldecimal
+BUILT_SOURCES += snap.yucc
+
 bin_PROGRAMS += sex
 sex_SOURCES = sex.c sex.yuck
 sex_SOURCES += hash.c hash.h
