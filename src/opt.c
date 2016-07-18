@@ -158,11 +158,12 @@ push_beef(const char *ln, size_t UNUSED(lz))
 		}
 	}
 	/* snarf quotes */
-	if (*++on != '\t' && *on != '\n' &&
-	    (b = strtopx(on, &on)) && *on++ == '\t' &&
-	    (a = strtopx(on, &on)) && (*on == '\n' || *on == '\t')) {
-		quo = (quo_t){b, a};
+	if (*++on == '\t' || *on == '\n' ||
+	    (b = strtopx(on, &on), *on++ != '\t') ||
+	    (a = strtopx(on, &on), !(*on == '\t' || *on == '\n'))) {
+		return -1;
 	}
+	quo = (quo_t){b, a};
 	return 0;
 }
 
