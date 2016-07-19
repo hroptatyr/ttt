@@ -1,0 +1,6 @@
+#!/usr/bin/clitoris
+
+$ opt --pair "EURUSD" < "${srcdir}/EURUSD"
+1461065878.416000000	LONG	EURUSD
+1461065896.847000000	CANCEL	EURUSD
+$

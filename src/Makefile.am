@@ -27,6 +27,7 @@ libdfp_a_SOURCES += dfp754_d64.c dfp754_d64.h
 libdfp_a_CPPFLAGS = $(AM_CPPFLAGS)
 libdfp_a_CPPFLAGS += $(dfp754_CFLAGS)
 
+
 bin_PROGRAMS += candle
 candle_SOURCES = candle.c candle.yuck
 candle_SOURCES += version.c version.h
@@ -126,6 +127,24 @@ thours_SOURCES += version.c version.h
 thours_CPPFLAGS = $(AM_CPPFLAGS)
 thours_CPPFLAGS += -D_GNU_SOURCE
 BUILT_SOURCES += thours.yucc
+
+bin_PROGRAMS += opt
+opt_SOURCES = opt.c opt.yuck
+opt_SOURCES += hash.c hash.h
+opt_SOURCES += version.c version.h
+EXTRA_opt_SOURCES =
+EXTRA_opt_SOURCES += sock.c
+opt_CPPFLAGS = $(AM_CPPFLAGS)
+opt_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+opt_CPPFLAGS += $(ev_CFLAGS)
+opt_CPPFLAGS += $(dfp754_CFLAGS)
+opt_CPPFLAGS += -DHAVE_VERSION_H
+opt_LDFLAGS = $(AM_LDFLAGS)
+opt_LDFLAGS += $(ev_LIBS)
+opt_LDFLAGS += $(dfp754_LIBS)
+opt_LDADD = libdfp.a
+opt_LDADD += -ldecimal
+BUILT_SOURCES += opt.yucc
 
 
 ## version rules

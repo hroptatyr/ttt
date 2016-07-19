@@ -47,9 +47,12 @@
 #define INFD64_U		(0x7800000000000000U)
 #define MINFD64_U		(0xf800000000000000U)
 
-#if !defined __DEC64_MIN__
-# define __DEC64_MIN__	(-__DEC64_MAX__)
-#endif	/* !__DEC64_MIN__ */
+#if !defined __DEC64_MOST_POSITIVE__
+# define __DEC64_MOST_POSITIVE__	(__DEC64_MAX__)
+#endif	/* !__DEC64_MOST_POSITIVE__ */
+#if !defined __DEC64_MOST_NEGATIVE__
+# define __DEC64_MOST_NEGATIVE__	(-__DEC64_MOST_POSITIVE__)
+#endif	/* !__DEC64_MOST_NEGATIVE__ */
 
 typedef struct {
 	uint_least64_t mant;

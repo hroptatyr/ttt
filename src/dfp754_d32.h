@@ -47,9 +47,12 @@
 #define INFD32_U		(0x78000000U)
 #define MINFD32_U		(0xf8000000U)
 
-#if !defined __DEC32_MIN__
-# define __DEC32_MIN__	(-__DEC32_MAX__)
-#endif	/* !__DEC32_MIN__ */
+#if !defined __DEC32_MOST_POSITIVE__
+# define __DEC32_MOST_POSITIVE__	(__DEC32_MAX__)
+#endif	/* !__DEC32_MOST_POSITIVE__ */
+#if !defined __DEC32_MOST_NEGATIVE__
+# define __DEC32_MOST_NEGATIVE__	(-__DEC32_MOST_POSITIVE__)
+#endif	/* !__DEC32_MOST_NEGATIVE__ */
 
 typedef struct {
 	uint_least32_t mant;
