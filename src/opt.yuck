@@ -5,3 +5,4 @@ This uses Magdon-Ismail's single-pass forward O(n) space DP algorithm.
 
   --pair=FX             Pretend to trade FX.
   --thresh=PX           Cost for each trade.
+  --limit-orders        Print limit prices in order stream.

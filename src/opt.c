@@ -55,6 +55,7 @@ typedef struct {
 } quo_t;
 
 static px_t thresh;
+static bool limitp;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -194,6 +195,10 @@ dgst(rgm_t r, tik_t q)
 	len += (memcpy(buf + len, rgms[r], r + 3U), r + 3U);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
+	if (limitp) {
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, q.p);
+	}
 	buf[len++] = '\n';
 	fwrite(buf, 1, len, stdout);
 	return;
@@ -294,6 +299,7 @@ main(int argc, char *argv[])
 	}
 	/* hash contract designator */
 	hxs = hash(cont, conz);
+	limitp = !!argi->limit_orders_flag;
 
 	if (argi->thresh_arg) {
 		thresh = strtopx(argi->thresh_arg, NULL);
