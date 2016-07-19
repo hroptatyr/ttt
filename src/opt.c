@@ -43,6 +43,12 @@ typedef enum {
 	RGM2POW,
 } rgm_t;
 
+/* relevant tick dimensions */
+typedef struct {
+	tv_t t;
+	px_t p;
+} tik_t;
+
 typedef struct {
 	px_t b;
 	px_t a;
@@ -137,7 +143,7 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 
 static hx_t hxs;
 static tv_t metr;
-static quo_t quo;
+static tik_t bid, ask;
 static const char *cont;
 static size_t conz;
 static unsigned char *prev;
@@ -148,23 +154,27 @@ static int
 push_beef(const char *ln, size_t UNUSED(lz))
 {
 	char *on;
-	px_t b, a;
+	int rc = -1;
 
 	with (hx_t hx) {
-		if (UNLIKELY(!(hx = strtohx(ln, &on)) || *on != '\t')) {
+		if (UNLIKELY(!(hx = strtohx(ln, &on)) || *on++ != '\t')) {
 			return -1;
 		} else if (hxs != hx) {
 			return -1;
 		}
 	}
 	/* snarf quotes */
-	if (*++on == '\t' || *on == '\n' ||
-	    (b = strtopx(on, &on), *on++ != '\t') ||
-	    (a = strtopx(on, &on), !(*on == '\t' || *on == '\n'))) {
-		return -1;
+	if (*on >= ' ') {
+		bid = (tik_t){metr, strtopx(on, &on)};
+		rc = 0;
 	}
-	quo = (quo_t){b, a};
-	return 0;
+	if (*on++ != '\t') {
+		;
+	} else if (*on >= ' ') {
+		ask = (tik_t){metr, strtopx(on, &on)};
+		rc = 0;
+	}
+	return rc;
 }
 
 static void
