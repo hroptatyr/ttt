@@ -146,9 +146,9 @@ static tv_t metr;
 static tik_t bid, ask;
 static const char *cont = "";
 static size_t conz;
-static unsigned char *prev;
-static tv_t *pmtr;
-static size_t pren, prez;
+/* state */
+static tik_t bstb = {.p = __DEC32_MOST_NEGATIVE__};
+static tik_t bsta = {.p = __DEC32_MOST_POSITIVE__};
 
 static int
 push_beef(const char *ln, size_t UNUSED(lz))
@@ -178,68 +178,7 @@ push_beef(const char *ln, size_t UNUSED(lz))
 }
 
 static void
-skim(void)
-{
-	static quo_t old;
-	static tv_t omtr;
-	static px_t pnl[NRGM];
-	rgm_t rgm[NRGM];
-	px_t new[NRGM];
-
-	/* calculate returns */
-	new[RGM_FLAT] = 0.df;
-	new[RGM_LONG] = quo.b - old.a;
-	new[RGM_SHORT] = old.b - quo.a;
-
-	/* calculate PREV(m, l) */
-	for (rgm_t i = RGM_FLAT; i < NRGM; i++) {
-		rgm_t maxr = RGM_FLAT;
-		px_t maxp = pnl[RGM_FLAT] + new[i];
-		for (rgm_t j = RGM_FLAT; ++j < NRGM;) {
-			px_t cand = pnl[j] + new[i] - (i != j ? thresh : 0.df);
-			if (cand > maxp) {
-				maxr = j;
-				maxp = cand;
-			}
-		}
-		pnl[i] = maxp;
-		rgm[i] = maxr;
-	}
-
-	/* append to prev list */
-	if (UNLIKELY(pren >= prez)) {
-		prez = (prez * 2U) ?: 4096U;
-		prev = realloc(prev, prez * sizeof(*prev));
-		pmtr = realloc(pmtr, prez * sizeof(*pmtr));
-	}
-	with (unsigned char x = 0U) {
-		for (rgm_t i = RGM_FLAT; i < NRGM; i++) {
-			x ^= (unsigned char)(rgm[i] << (i * RGM2POW / 2U));
-		}
-		prev[pren] = x;
-		pmtr[pren] = omtr;
-		pren++;
-	}
-
-	/* memorise quo */
-	old = quo;
-	omtr = metr;
-	return;
-}
-
-static inline void
-rvrt(unsigned char *a, size_t n)
-{
-	for (size_t i = 0U, m = n-- / 2U; i < m; i++) {
-		unsigned char tmp = a[n - i];
-		a[n - i] = a[i];
-		a[i] = tmp;
-	}
-	return;
-}
-
-static void
-prnt(tv_t t, rgm_t r)
+dgst(rgm_t r, tik_t q)
 {
 	static const char *rgms[] = {
 		[RGM_FLAT] = "UNK",
@@ -250,57 +189,59 @@ prnt(tv_t t, rgm_t r)
 	char buf[256U];
 	size_t len;
 
-	len = tvtostr(buf, sizeof(buf), t);
+	len = tvtostr(buf, sizeof(buf), q.t);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, rgms[r], r + 3U), r + 3U);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\n';
-
 	fwrite(buf, 1, len, stdout);
 	return;
 }
 
 static void
-dgst(void)
+skim(bool lastp)
 {
-/* this destroys PREV */
-	rgm_t r = RGM_FLAT;
+	static rgm_t r;
 
-	/* revert PREV string */
-	rvrt(prev, pren);
-
-	/* now obtain the optimal trades */
-	for (size_t i = 0U; i < pren; i++) {
-		r = (rgm_t)((prev[i] >> (r * RGM2POW / 2U)) & (RGM2POW - 1U));
-		/* by side-effect store the optimal regime */
-		prev[i] = (unsigned char)r;
+	if (bid.p >= bstb.p) {
+		/* track keeping */
+		bstb = bid;
+	} else if (r != RGM_SHORT && bstb.p - ask.p > thresh) {
+		/* remember current regime */
+		r = RGM_SHORT;
+		/* look for a good long */
+		bsta = ask;
+		/* trade */
+		dgst(r, bstb);
 	}
 
-	/* revert once more */
-	rvrt(prev, pren);
+	if (ask.p <= bsta.p) {
+		/* track keeping */
+		bsta = ask;
+	} else if (r != RGM_LONG && bid.p - bsta.p > thresh) {
+		/* remember current regime */
+		r = RGM_LONG;
+		/* look for a good short */
+		bstb = bid;
+		/* trade */
+		dgst(r, bsta);
+	}
 
-	/* now go for printing */
-	r = RGM_FLAT;
-	for (size_t i = 0U; i < pren; r = (rgm_t)prev[i++]) {
-		/* only go for edges */
-		if (r ^ prev[i]) {
-			prnt(pmtr[i], (rgm_t)(prev[i] ?: RGM_CANCEL));
+	if (UNLIKELY(lastp)) {
+		switch (r) {
+		default:
+		case RGM_FLAT:
+			break;
+		case RGM_LONG:
+			dgst(RGM_CANCEL, bstb);
+			break;
+		case RGM_SHORT:
+			dgst(RGM_CANCEL, bsta);
+			break;
 		}
+		r = RGM_FLAT;
 	}
-	/* and finish on a flat */
-	if (r) {
-		prnt(metr, RGM_CANCEL);
-	}
-
-	/* finalise PREV */
-	if (LIKELY(prev != NULL)) {
-		free(prev);
-	}
-	if (LIKELY(pmtr != NULL)) {
-		free(pmtr);
-	}
-	pren = prez = 0UL;
 	return;
 }
 
@@ -314,23 +255,20 @@ offline(void)
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
 		char *on;
-		tv_t t;
 
-		if (UNLIKELY((t = strtotv(line, &on)) == NOT_A_TIME)) {
+		if (UNLIKELY((metr = strtotv(line, &on)) == NOT_A_TIME)) {
 			/* got metronome cock-up */
 			;
 		} else if (UNLIKELY(push_beef(on, nrd) < 0)) {
 			/* data is fucked or not for us */
 			;
 		} else {
-			/* make sure we're talking current time */
-			metr = t;
 			/* see what we can trade */
-			skim();
+			skim(false);
 		}
 	}
 	/* finalise our findings */
-	dgst();
+	skim(true);
 	free(line);
 	return 0;
 }
