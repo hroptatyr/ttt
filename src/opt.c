@@ -144,7 +144,7 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 static hx_t hxs;
 static tv_t metr;
 static tik_t bid, ask;
-static const char *cont;
+static const char *cont = "";
 static size_t conz;
 static unsigned char *prev;
 static tv_t *pmtr;
@@ -347,16 +347,14 @@ main(int argc, char *argv[])
 	if (yuck_parse(argi, argc, argv) < 0) {
 		rc = 1;
 		goto out;
-	} else if (!argi->pair_arg) {
-		errno = 0, serror("\
-Error: --pair argument is mandatory, see --help.");
-		rc = 1;
-		goto out;
 	}
 
-	/* assign front and hind */
-	cont = argi->pair_arg;
-	conz = strlen(argi->pair_arg);
+	if (argi->pair_arg) {
+		/* assign front and hind */
+		cont = argi->pair_arg;
+		conz = strlen(argi->pair_arg);
+	}
+	/* hash contract designator */
 	hxs = hash(cont, conz);
 
 	if (argi->thresh_arg) {
