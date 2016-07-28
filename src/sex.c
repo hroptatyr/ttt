@@ -305,7 +305,7 @@ offline(FILE *qfp)
 	size_t ioq = 0U, noq = 0U;
 	char *line = NULL;
 	size_t llen = 0UL;
-	quo_t q;
+	quo_t q = {0.df, 0.df};
 
 yield_ord:
 	for (; getline(&line, &llen, stdin) > 0;) {
