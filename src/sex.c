@@ -276,7 +276,7 @@ try_exec(ord_t o, quo_t q)
 		/* otherwise do nothing */
 		break;
 	}
-	return (exe_t){0.df};
+	return (exe_t){t, 0.df, 0.dd, 0.dd};
 }
 
 static acc_t
@@ -305,7 +305,7 @@ offline(FILE *qfp)
 	size_t ioq = 0U, noq = 0U;
 	char *line = NULL;
 	size_t llen = 0UL;
-	quo_t q;
+	quo_t q = {0.df, 0.df};
 
 yield_ord:
 	for (; getline(&line, &llen, stdin) > 0;) {
