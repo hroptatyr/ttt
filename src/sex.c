@@ -276,7 +276,7 @@ try_exec(ord_t o, quo_t q)
 		/* otherwise do nothing */
 		break;
 	}
-	return (exe_t){0.df};
+	return (exe_t){t, 0.df, 0.dd, 0.dd};
 }
 
 static acc_t
