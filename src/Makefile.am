@@ -128,6 +128,20 @@ thours_CPPFLAGS = $(AM_CPPFLAGS)
 thours_CPPFLAGS += -D_GNU_SOURCE
 BUILT_SOURCES += thours.yucc
 
+bin_PROGRAMS += sma
+sma_SOURCES = sma.c sma.yuck
+sma_SOURCES += version.c version.h
+sma_CPPFLAGS = $(AM_CPPFLAGS)
+sma_CPPFLAGS += -D_GNU_SOURCE
+sma_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+sma_CPPFLAGS += $(dfp754_CFLAGS)
+sma_CPPFLAGS += -DHAVE_VERSION_H
+sma_LDFLAGS = $(AM_LDFLAGS)
+sma_LDFLAGS += $(dfp754_LIBS)
+sma_LDADD = libdfp.a
+sma_LDADD += -ldecimal
+BUILT_SOURCES += sma.yucc
+
 bin_PROGRAMS += opt
 opt_SOURCES = opt.c opt.yuck
 opt_SOURCES += hash.c hash.h

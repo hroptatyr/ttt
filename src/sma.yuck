@@ -1,0 +1,5 @@
+Usage: seasons < FILE
+
+Return season profile of FILE.
+
+  --window=T            Use windows of size T (seconds), default: 60
