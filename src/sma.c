@@ -257,7 +257,7 @@ calc_sma(void)
 		/* m1/p0 */
 		sma = quantize_quo(iscal_quo(m1, p0), quo.b);
 		/* m2/p0 - m1*m1 */
-		smv = quantize_quo(sqrt_quo(iscal_quo(diff_quo(m2, sq_quo(sma)), -0 -1.df)), quo.b);
+		smv = iscal_quo(diff_quo(m2, sq_quo(sma)), p0);
 	}
 #if defined __INTEL_COMPILER
 # pragma warning (pop)
