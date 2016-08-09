@@ -26,12 +26,6 @@
 
 #define NSECS	(1000000000)
 #define MSECS	(1000)
-#define UDP_MULTICAST_TTL	64
-#define MCAST_ADDR	"ff05::134"
-#define MCAST_PORT	7878
-
-#undef EV_P
-#define EV_P  struct ev_loop *loop __attribute__((unused))
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;

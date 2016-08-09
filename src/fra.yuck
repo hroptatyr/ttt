@@ -1,0 +1,4 @@
+Usage: fra QUOTES < FORWARDS
+
+Forward rate absolutifier.  Take spot QUOTES and FORWARDS points
+and output absolute forward prices.

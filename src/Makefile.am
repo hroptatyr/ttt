@@ -152,6 +152,20 @@ opt_LDADD = libdfp.a
 opt_LDADD += -ldecimal
 BUILT_SOURCES += opt.yucc
 
+bin_PROGRAMS += fra
+fra_SOURCES = fra.c fra.yuck
+fra_SOURCES += hash.c hash.h
+fra_SOURCES += version.c version.h
+fra_CPPFLAGS = $(AM_CPPFLAGS)
+fra_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+fra_CPPFLAGS += $(dfp754_CFLAGS)
+fra_CPPFLAGS += -DHAVE_VERSION_H
+fra_LDFLAGS = $(AM_LDFLAGS)
+fra_LDFLAGS += $(dfp754_LIBS)
+fra_LDADD = libdfp.a
+fra_LDADD += -ldecimal
+BUILT_SOURCES += fra.yucc
+
 
 ## version rules
 version.c: version.c.in $(top_builddir)/.version
