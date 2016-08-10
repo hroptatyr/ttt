@@ -1,5 +1,5 @@
-Usage: seasons < FILE
+Usage: sma < FILE
 
-Return season profile of FILE.
+Return simple moving tick delta average and variance.
 
   --window=T            Use windows of size T (seconds), default: 60

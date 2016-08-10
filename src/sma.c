@@ -323,7 +323,7 @@ offline(void)
 }
 
 
-#include "seasons.yucc"
+#include "sma.yucc"
 
 int
 main(int argc, char *argv[])
@@ -354,4 +354,4 @@ out:
 	return rc;
 }
 
-/* seasons.c ends here */
+/* sma.c ends here */
