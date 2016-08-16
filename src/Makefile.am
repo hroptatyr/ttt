@@ -109,6 +109,19 @@ mid_LDADD = libdfp.a
 mid_LDADD += -ldecimal
 BUILT_SOURCES += mid.yucc
 
+bin_PROGRAMS += qq
+qq_SOURCES = qq.c qq.yuck
+qq_SOURCES += version.c version.h
+qq_CPPFLAGS = $(AM_CPPFLAGS)
+qq_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+qq_CPPFLAGS += $(dfp754_CFLAGS)
+qq_CPPFLAGS += -DHAVE_VERSION_H
+qq_LDFLAGS = $(AM_LDFLAGS)
+qq_LDFLAGS += $(dfp754_LIBS)
+qq_LDADD = libdfp.a
+qq_LDADD += -ldecimal
+BUILT_SOURCES += qq.yucc
+
 bin_PROGRAMS += axp
 axp_SOURCES = axp.c axp.yuck
 axp_SOURCES += hash.c hash.h
