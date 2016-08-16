@@ -1,0 +1,7 @@
+Usage: qq [--quantum Q] < QUOTES
+
+Quantise quotes such that the difference between two consecutive
+quotes *exceeds* Q.
+
+  --quantum=Q           Disregard quote changes less than or equal to Q
+                        in either bid or ask, default: 0
