@@ -1,0 +1,5 @@
+Usage: mid < FILE
+
+Produce a bid/ask time series with a constant spread.
+
+  --spread=X            Clamp bid ask spread at X, default: 0.
