@@ -307,7 +307,7 @@ offline(void)
 
 	while ((alst = amtr, amtr = next_acc()) < NOT_A_TIME) {
 		const tv_t tdif = amtr - alst;
-		const qx_t xdif = (qx_t)tdif * a.base;
+		const qx_t xdif = a.base;
 		const size_t side = (a.base != 0.dd) + (a.base < 0.dd);
 
 		cagg[side]++;

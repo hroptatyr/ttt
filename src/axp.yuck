@@ -1,3 +1,6 @@
 Usage: axp [QUOTES] < ACCOUNTS
 
 Analyse the market during periods of exposure.
+
+Output is number of regime switches, total time spent within a regime,
+and the total amount invested within a regime.
