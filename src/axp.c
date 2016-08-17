@@ -69,8 +69,6 @@ typedef struct {
 } eva_t;
 
 static tv_t intv = 10 * MSECS;
-static const char *cont;
-static size_t conz;
 
 static FILE *qfp;
 static FILE *afp;
@@ -90,12 +88,6 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
-}
-
-static inline __attribute__((pure, const)) tv_t
-min_tv(tv_t t1, tv_t t2)
-{
-	return t1 < t2 ? t1 : t2;
 }
 
 
@@ -166,46 +158,6 @@ static ssize_t
 tvtostr(char *restrict buf, size_t bsz, tv_t t)
 {
 	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
-}
-
-
-static ssize_t
-send_eva(eva_t x)
-{
-/* exe encodes delta to metronome and delay */
-	static const char verb[] = "EVA";
-	char buf[256U];
-	size_t len;
-
-	len = tvtostr(buf, sizeof(buf), x.t);
-	buf[len++] = '\t';
-	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
-	buf[len++] = '\t';
-	len += (memcpy(buf + len, cont, conz), conz);
-	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, x.nlv);
-	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, x.comm);
-	buf[len++] = '\n';
-	return fwrite(buf, 1, len, stdout);
-}
-
-static eva_t
-eva(tv_t t, acc_t a, quo_t q)
-{
-	eva_t r = {t, a.term, a.comm};
-
-	if (UNLIKELY(!a.base)) {
-		/* um, right */
-		;
-	} else if (a.base > 0.dd) {
-		/* use bids */
-		r.nlv += a.base * q.b;
-	} else if (a.base < 0.dd) {
-		/* use asks */
-		r.nlv += a.base * q.a;
-	}
-	return r;
 }
 
 
@@ -291,7 +243,6 @@ offline(void)
 	static const char *sstr[3U] = {
 		"UNX", "LONG", "SHORT"
 	};
-	tv_t qmtr;
 	tv_t alst;
 	tv_t amtr;
 	/* 3 time based moments */
@@ -302,7 +253,7 @@ offline(void)
 	size_t ctns[countof(cagg) * countof(cagg)] = {};
 	size_t olsd = 0U;
 
-	qmtr = next_quo();
+	(void)next_quo();
 	amtr = next_acc();
 
 	while ((alst = amtr, amtr = next_acc()) < NOT_A_TIME) {
