@@ -310,7 +310,7 @@ offline(void)
 
 		b.m2 = sqrt(b.m2);
 		a.m2 = sqrt(a.m2);
-		printf("%f\t%f\t%f\t%f\t%f\t%f\n",
+		printf("%f\t%g\t%g\t%f\t%g\t%g\n",
 		       b.m0, b.m1, b.m2,
 		       a.m0, a.m1, a.m2);
 	}
