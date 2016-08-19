@@ -188,7 +188,7 @@ out:
 }
 
 static int
-offl_time(void)
+offline(void)
 {
 	char *line = NULL;
 	size_t llen = 0UL;
@@ -208,9 +208,19 @@ offl_time(void)
 		
 		len = tvtostr(buf, sizeof(buf), metr);
 		buf[len++] = '\t';
-		len += (memcpy(buf + len, "TDLT", 4U), 4U);
+		len += (memcpy(buf + len, "DELT", 4U), 4U);
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, cont, conz), conz);
+		buf[len++] = '\t';
+		if (c & WHAT_BID) {
+			px_t bdlt = nxquo[BID].p - prquo[BID].p;
+			len += pxtostr(buf + len, sizeof(buf) - len, bdlt);
+		}
+		buf[len++] = '\t';
+		if (c & WHAT_ASK) {
+			px_t adlt = nxquo[ASK].p - prquo[ASK].p;
+			len += pxtostr(buf + len, sizeof(buf) - len, adlt);
+		}
 		buf[len++] = '\t';
 		if (c & WHAT_BID) {
 			tv_t bdlt = nxquo[BID].t - prquo[BID].t;
@@ -231,12 +241,6 @@ offl_time(void)
 	return 0;
 }
 
-static int
-offl_velo(void)
-{
-	return 0;
-}
-
 
 #include "sea.yucc"
 
@@ -253,7 +257,7 @@ main(int argc, char *argv[])
 	}
 
 	if (!argi->nargs) {
-		rc = offl_time() < 0;
+		rc = offline() < 0;
 	}
 
 out:
