@@ -305,12 +305,18 @@ offline(void)
 	free(line);
 
 	for (size_t i = 0U; i < nbins; i++) {
+		stat_t tb = stat_eval(tbins[BID][i]);
+		stat_t ta = stat_eval(tbins[ASK][i]);
 		stat_t b = stat_eval(pbins[BID][i]);
 		stat_t a = stat_eval(pbins[ASK][i]);
 
 		b.m2 = sqrt(b.m2);
 		a.m2 = sqrt(a.m2);
-		printf("%f\t%g\t%g\t%f\t%g\t%g\n",
+		tb.m2 = sqrt(tb.m2);
+		ta.m2 = sqrt(ta.m2);
+		printf("%f\t%g\t%g\t%f\t%g\t%g\t%f\t%g\t%g\t%f\t%g\t%g\n",
+		       tb.m0, tb.m1, tb.m2,
+		       ta.m0, ta.m1, ta.m2,
 		       b.m0, b.m1, b.m2,
 		       a.m0, a.m1, a.m2);
 	}
