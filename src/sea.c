@@ -63,10 +63,27 @@ typedef struct {
 } sbin_t;
 
 
-static tv_t modulus = 8640U;
-static tv_t binwdth = 10U * MSECS;
+static tv_t modulus = 86400U * MSECS;
+static tv_t binwdth = 60U * MSECS;
+static size_t nbins;
 
 
+static __attribute__((format(printf, 1, 2))) void
+serror(const char *fmt, ...)
+{
+	va_list vap;
+	va_start(vap, fmt);
+	vfprintf(stderr, fmt, vap);
+	va_end(vap);
+	if (errno) {
+		fputc(':', stderr);
+		fputc(' ', stderr);
+		fputs(strerror(errno), stderr);
+	}
+	fputc('\n', stderr);
+	return;
+}
+
 static tv_t
 strtotv(const char *ln, char **endptr)
 {
@@ -146,8 +163,8 @@ static sbin_t
 stuf_triag(tv_t t)
 {
 	tv_t bin = t / binwdth, sub = t % binwdth;
-	size_t bin1 = (bin + 0U) % modulus;
-	size_t bin2 = (bin + 1U) % modulus;
+	size_t bin1 = (bin + 0U) % nbins;
+	size_t bin2 = (bin + 1U) % nbins;
 	double fac1 = (1 - (double)sub / binwdth);
 	double fac2 = (0 + (double)sub / binwdth);
 	return (sbin_t){2U, (size_t[]){bin1, bin2}, (double[]){fac1, fac2}};
@@ -161,8 +178,8 @@ static tik_t prquo[2U];
 static char cont[64];
 static size_t conz;
 /* bins */
-static stat_t tbins[2U][8640U/*==modulus*/];
-static stat_t pbins[2U][8640U/*==modulus*/];
+static stat_t *tbins[2U];
+static stat_t *pbins[2U];
 
 static what_t
 push_init(char *ln, size_t UNUSED(lz))
@@ -287,12 +304,15 @@ offline(void)
 	/* finalise our findings */
 	free(line);
 
-	for (size_t i = 0U; i < modulus; i++) {
+	for (size_t i = 0U; i < nbins; i++) {
 		stat_t b = stat_eval(pbins[BID][i]);
 		stat_t a = stat_eval(pbins[ASK][i]);
+
+		b.m2 = sqrt(b.m2);
+		a.m2 = sqrt(a.m2);
 		printf("%f\t%f\t%f\t%f\t%f\t%f\n",
-		       b.m0, b.m1, sqrt(b.m2),
-		       a.m0, a.m1, sqrt(a.m2));
+		       b.m0, b.m1, b.m2,
+		       a.m0, a.m1, a.m2);
 	}
 	return 0;
 }
@@ -312,9 +332,48 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
+	if (argi->modulus_arg) {
+		if (!(modulus = strtoul(argi->modulus_arg, NULL, 10))) {
+			errno = 0, serror("\
+Error: modulus parameter must be positive.");
+			rc = 1;
+			goto out;
+		}
+		/* turn into msec resolutiona */
+		modulus *= MSECS;
+	}
+	if (argi->width_arg) {
+		if (!(binwdth = strtoul(argi->width_arg, NULL, 10))) {
+			errno = 0, serror("\
+Error: window width parameter must be positive.");
+			rc = 1;
+			goto out;
+		}
+		/* turn into msec resolutiona */
+		binwdth *= MSECS;
+	}
+
+	/* calc nbins */
+	if (!(nbins = modulus / binwdth)) {
+		errno = 0, serror("\
+Error: modulus and window parameters result in 0 bins.");
+		rc = 1;
+		goto out;
+	}
+	/* get the tbins and pbins on the way */
+	tbins[BID] = calloc(nbins, sizeof(**tbins));
+	tbins[ASK] = calloc(nbins, sizeof(**tbins));
+	pbins[BID] = calloc(nbins, sizeof(**pbins));
+	pbins[ASK] = calloc(nbins, sizeof(**pbins));
+	
 	if (!argi->nargs) {
 		rc = offline() < 0;
 	}
+
+	free(tbins[BID]);
+	free(tbins[ASK]);
+	free(pbins[BID]);
+	free(pbins[ASK]);
 
 out:
 	yuck_free(argi);

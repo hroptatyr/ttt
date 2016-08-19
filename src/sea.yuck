@@ -4,3 +4,5 @@ Deseasonalise QUOTES using a seasonality PROFILE.
 
   -R, --reverse         Consider QUOTES deseasonalised, produce original
                         time series again.
+  -m, --modulus=T       Assume a season T (in seconds).
+  -w, --width=W         Window width in seconds.
