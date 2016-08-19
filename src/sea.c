@@ -187,36 +187,6 @@ out:
 	return (what_t)rc;
 }
 
-#if 0
-	/* write difference */
-	with (char buf[256]) {
-		size_t len;
-
-		len = tvtostr(buf, sizeof(buf), metr % (86400U * MSECS));
-		buf[len++] = '\t';
-		len += tvtostr(buf + len, sizeof(buf) - len, (metr - lmtr));
-		buf[len++] = '\t';
-		buf[len++] = '\t';
-		len += pxtostr(buf + len, sizeof(buf) - len, q.b - last.b);
-		buf[len++] = '\t';
-		len += pxtostr(buf + len, sizeof(buf) - len, q.a - last.a);
-		buf[len++] = '\t';
-		len += snprintf(
-			buf + len, sizeof(buf) - len, "%f",
-			1000. * (double)(q.b - last.b) / (double)(metr - lmtr));
-		buf[len++] = '\t';
-		len += snprintf(
-			buf + len, sizeof(buf) - len, "%f",
-			1000. * (double)(q.a - last.a) / (double)(metr - lmtr));
-		buf[len++] = '\n';
-
-		fwrite(buf, 1, len, stdout);
-	}
-	/* and store state */
-	last = q;
-	lmtr = metr;
-#endif
-
 static int
 offl_time(void)
 {
