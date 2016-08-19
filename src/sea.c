@@ -106,11 +106,51 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 
 
 static tv_t metr;
-static tik_t nxquo[2U];
+static tik_t nxquo[2U] = {{NOT_A_TIME}, {NOT_A_TIME}};
 static tik_t prquo[2U];
+/* contract we're on about */
+static char cont[64];
+static size_t conz;
 
 static what_t
-push_beef(char *ln, size_t lz)
+push_init(char *ln, size_t UNUSED(lz))
+{
+	px_t bid, ask;
+	unsigned int rc = WHAT_UNK;
+	const char *ip;
+	size_t iz;
+	char *on;
+
+	/* metronome is up first */
+	if (UNLIKELY((metr = strtotv(ln, &on)) == NOT_A_TIME)) {
+		goto out;
+	}
+
+	/* instrument name, don't hash him */
+	if (UNLIKELY((on = strchr(ip = on, '\t')) == NULL)) {
+		goto out;
+	}
+	iz = on++ - ip;
+
+	/* snarf quotes */
+	if (!(bid = strtopx(on, &on)) || *on++ != '\t' ||
+	    !(ask = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
+		goto out;
+	}
+	/* we're init'ing, so everything changed */
+	prquo[BID] = nxquo[BID] = (tik_t){metr, bid};
+	rc ^= WHAT_BID;
+
+	prquo[ASK] = nxquo[ASK] = (tik_t){metr, ask};
+	rc ^= WHAT_ASK;
+
+	memcpy(cont, ip, conz = iz);
+out:
+	return (what_t)rc;
+}
+
+static what_t
+push_beef(char *ln, size_t UNUSED(lz))
 {
 	px_t bid, ask;
 	unsigned int rc = WHAT_UNK;
@@ -184,6 +224,9 @@ offl_time(void)
 	size_t llen = 0UL;
 	ssize_t nrd;
 
+	while ((nrd = getline(&line, &llen, stdin)) > 0 &&
+	       push_init(line, nrd) == WHAT_UNK);
+
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
 		what_t c = push_beef(line, nrd);
 		char buf[256U];
@@ -197,7 +240,7 @@ offl_time(void)
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, "TDLT", 4U), 4U);
 		buf[len++] = '\t';
-		/* security here? */
+		len += (memcpy(buf + len, cont, conz), conz);
 		buf[len++] = '\t';
 		if (c & WHAT_BID) {
 			tv_t bdlt = nxquo[BID].t - prquo[BID].t;
