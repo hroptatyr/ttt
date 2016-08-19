@@ -9,8 +9,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <errno.h>
-#include <sys/socket.h>
-#include <fcntl.h>
+#include <math.h>
 #include <sys/time.h>
 #include <time.h>
 #include <assert.h>
@@ -49,6 +48,23 @@ typedef enum {
 
 #define BID	(0U)
 #define ASK	(1U)
+
+typedef struct {
+	double m0;
+	double m1;
+	double m2;
+} stat_t;
+
+/* helper for binning scheme */
+typedef struct {
+	size_t n;
+	size_t *bins;
+	double *fcts;
+} sbin_t;
+
+
+static tv_t modulus = 8640U;
+static tv_t binwdth = 10U * MSECS;
 
 
 static tv_t
@@ -105,12 +121,48 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 }
 
 
+/* statisticians here */
+static stat_t
+stat_push(stat_t s, double x)
+{
+#define STAT_PUSH(s, x)	(s = stat_push(s, x))
+	double dlt = x - s.m1;
+	s.m1 += dlt / ++s.m0;
+	s.m2 += dlt * (x - s.m1);
+	return s;
+}
+
+static stat_t
+stat_eval(stat_t s)
+{
+	/* only the variance needs fiddling with */
+	s.m2 /= s.m0 - 1;
+	return s;
+}
+
+
+/* 1-decompos */
+static sbin_t
+stuf_triag(tv_t t)
+{
+	tv_t bin = t / binwdth, sub = t % binwdth;
+	size_t bin1 = (bin + 0U) % modulus;
+	size_t bin2 = (bin + 1U) % modulus;
+	double fac1 = (1 - (double)sub / binwdth);
+	double fac2 = (0 + (double)sub / binwdth);
+	return (sbin_t){2U, (size_t[]){bin1, bin2}, (double[]){fac1, fac2}};
+}
+
+
 static tv_t metr;
 static tik_t nxquo[2U] = {{NOT_A_TIME}, {NOT_A_TIME}};
 static tik_t prquo[2U];
 /* contract we're on about */
 static char cont[64];
 static size_t conz;
+/* bins */
+static stat_t tbins[2U][8640U/*==modulus*/];
+static stat_t pbins[2U][8640U/*==modulus*/];
 
 static what_t
 push_init(char *ln, size_t UNUSED(lz))
@@ -187,6 +239,23 @@ out:
 	return (what_t)rc;
 }
 
+static void
+bin(size_t side, sbin_t sch)
+{
+	tv_t tdlt = nxquo[side].t - prquo[side].t;
+	px_t pdlt = nxquo[side].p - prquo[side].p;
+	const double xt = (double)tdlt / MSECS;
+	const double xp = (double)pdlt;
+
+	for (size_t i = 0U; i < sch.n; i++) {
+		STAT_PUSH(tbins[side][sch.bins[i]], sch.fcts[i] * xt);
+	}
+	for (size_t i = 0U; i < sch.n; i++) {
+		STAT_PUSH(pbins[side][sch.bins[i]], sch.fcts[i] * xp);
+	}
+	return;
+}
+
 static int
 offline(void)
 {
@@ -199,45 +268,32 @@ offline(void)
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
 		what_t c = push_beef(line, nrd);
-		char buf[256U];
-		size_t len = 0U;
+		sbin_t s;
 
 		if (!c) {
 			continue;
 		}
-		
-		len = tvtostr(buf, sizeof(buf), metr);
-		buf[len++] = '\t';
-		len += (memcpy(buf + len, "DELT", 4U), 4U);
-		buf[len++] = '\t';
-		len += (memcpy(buf + len, cont, conz), conz);
-		buf[len++] = '\t';
-		if (c & WHAT_BID) {
-			px_t bdlt = nxquo[BID].p - prquo[BID].p;
-			len += pxtostr(buf + len, sizeof(buf) - len, bdlt);
-		}
-		buf[len++] = '\t';
-		if (c & WHAT_ASK) {
-			px_t adlt = nxquo[ASK].p - prquo[ASK].p;
-			len += pxtostr(buf + len, sizeof(buf) - len, adlt);
-		}
-		buf[len++] = '\t';
-		if (c & WHAT_BID) {
-			tv_t bdlt = nxquo[BID].t - prquo[BID].t;
-			len += tvtostr(buf + len, sizeof(buf) - len, bdlt);
-		}
-		buf[len++] = '\t';
-		if (c & WHAT_ASK) {
-			tv_t adlt = nxquo[ASK].t - prquo[ASK].t;
-			len += tvtostr(buf + len, sizeof(buf) - len, adlt);
-		}
-		buf[len++] = '\n';
 
-		fwrite(buf, 1, len, stdout);
+		s = stuf_triag(metr);
+		assert(s.n == 2U);
+
+		if (c & WHAT_BID) {
+			bin(BID, s);
+		}
+		if (c & WHAT_ASK) {
+			bin(ASK, s);
+		}
 	}
-
 	/* finalise our findings */
 	free(line);
+
+	for (size_t i = 0U; i < modulus; i++) {
+		stat_t b = stat_eval(pbins[BID][i]);
+		stat_t a = stat_eval(pbins[ASK][i]);
+		printf("%f\t%f\t%f\t%f\t%f\t%f\n",
+		       b.m0, b.m1, sqrt(b.m2),
+		       a.m0, a.m1, sqrt(a.m2));
+	}
 	return 0;
 }
 
