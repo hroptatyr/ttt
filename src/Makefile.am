@@ -122,6 +122,19 @@ qq_LDADD = libdfp.a
 qq_LDADD += -ldecimal
 BUILT_SOURCES += qq.yucc
 
+bin_PROGRAMS += sea
+sea_SOURCES = sea.c sea.yuck
+sea_SOURCES += version.c version.h
+sea_CPPFLAGS = $(AM_CPPFLAGS)
+sea_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+sea_CPPFLAGS += $(dfp754_CFLAGS)
+sea_CPPFLAGS += -DHAVE_VERSION_H
+sea_LDFLAGS = $(AM_LDFLAGS)
+sea_LDFLAGS += $(dfp754_LIBS)
+sea_LDADD = libdfp.a
+sea_LDADD += -ldecimal
+BUILT_SOURCES += sea.yucc
+
 bin_PROGRAMS += axp
 axp_SOURCES = axp.c axp.yuck
 axp_SOURCES += hash.c hash.h

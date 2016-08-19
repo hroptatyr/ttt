@@ -1,0 +1,6 @@
+Usage: sea PROFILE < QUOTES
+
+Deseasonalise QUOTES using a seasonality PROFILE.
+
+  -R, --reverse         Consider QUOTES deseasonalised, produce original
+                        time series again.
