@@ -31,13 +31,9 @@ typedef long unsigned int tv_t;
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
+#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
-typedef struct {
-	tv_t t;
-	px_t p;
-} tik_t;
-
 typedef struct {
 	px_t b;
 	px_t a;
@@ -60,11 +56,67 @@ serror(const char *fmt, ...)
 	return;
 }
 
+static tv_t
+strtotv(const char *ln, char **endptr)
+{
+	char *on;
+	tv_t r;
+
+	/* time value up first */
+	with (long unsigned int s, x) {
+		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
+			r = NOT_A_TIME;
+			goto out;
+		} else if (*on == '.') {
+			char *moron;
+
+			x = strtoul(++on, &moron, 10);
+			if (UNLIKELY(moron - on > 9U)) {
+				return NOT_A_TIME;
+			} else if ((moron - on) % 3U) {
+				/* huh? */
+				return NOT_A_TIME;
+			}
+			switch (moron - on) {
+			case 9U:
+				x /= MSECS;
+			case 6U:
+				x /= MSECS;
+			case 3U:
+				break;
+			case 0U:
+			default:
+				break;
+			}
+			on = moron;
+		} else {
+			x = 0U;
+		}
+		r = s * MSECS + x;
+	}
+	/* overread up to 3 tabs */
+	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
+out:
+	if (LIKELY(endptr != NULL)) {
+		*endptr = on;
+	}
+	return r;
+}
+
+static ssize_t
+tvtostr(char *restrict buf, size_t bsz, tv_t t)
+{
+	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
+}
+
 
-static tv_t intv = 60U;
+static tv_t intv = 60U * MSECS;
 
 static tv_t metr;
 static quo_t last = {__DEC32_MAX__, __DEC32_MIN__};
+
+static char cont[64];
+static size_t conz;
 
 static void
 crst(void)
@@ -79,13 +131,11 @@ snap(void)
 	char buf[256U];
 	size_t bi;
 
-	bi = snprintf(buf, sizeof(buf), "%lu.000000000", metr * intv);
-	/* open */
+	bi = tvtostr(buf, sizeof(buf), metr * intv);
 	buf[bi++] = '\t';
 	buf[bi++] = '\t';
-	/* series name */
 	buf[bi++] = '\t';
-	/* close */
+	bi += (memcpy(buf + bi, cont, conz), conz);
 	buf[bi++] = '\t';
 	if (LIKELY(last.b < __DEC32_MAX__)) {
 		bi += pxtostr(buf + bi, sizeof(buf) - bi, last.b);
@@ -101,27 +151,51 @@ snap(void)
 }
 
 static int
+push_init(char *ln, size_t UNUSED(lz))
+{
+	quo_t this;
+	const char *ip;
+	size_t iz;
+	char *on;
+
+	/* metronome is up first */
+	if (UNLIKELY((metr = strtotv(ln, &on)) == NOT_A_TIME)) {
+		return -1;
+	}
+	/* align metronome to interval */
+	metr /= intv;
+
+	/* instrument name, don't hash him */
+	if (UNLIKELY((on = strchr(ip = on, '\t')) == NULL)) {
+		return -1;
+	}
+	iz = on++ - ip;
+
+	/* snarf quotes */
+	if (!(this.b = strtopx(on, &on)) || *on++ != '\t' ||
+	    !(this.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
+		return -1;
+	}
+	/* we're init'ing, so everything is the last value */
+	last = this;
+
+	memcpy(cont, ip, conz = iz);
+	return 0;
+}
+
+static int
 push_beef(char *ln, size_t UNUSED(lz))
 {
 	tv_t oldm = metr;
 	quo_t this;
 	char *on;
 
-	/* time value up first */
-	with (long unsigned int s, x) {
-
-		if (ln[20U] != '\t') {
-			return -1;
-		} else if (!(s = strtoul(ln, &on, 10))) {
-			return -1;
-		} else if (*on++ != '.') {
-			return -1;
-		} else if ((x = strtoul(on, &on, 10), *on++ != '\t')) {
-			return -1;
-		}
-		/* assign with minute resolution */
-		metr = s / intv;
+	/* metronome is up first */
+	if (UNLIKELY((metr = strtotv(ln, &on)) == NOT_A_TIME)) {
+		return -1;
 	}
+	/* align metronome to interval */
+	metr /= intv;
 
 	/* do we need to draw another candle? */
 	if (UNLIKELY(metr > oldm)) {
@@ -130,17 +204,6 @@ push_beef(char *ln, size_t UNUSED(lz))
 		/* and reset */
 		crst();
 	}
-
-	/* now comes a descriptor */
-	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
-		return -1;
-	}
-	on++;
-	/* and an IP/port pair */
-	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
-		return -1;
-	}
-	on++;
 
 	/* instrument name, don't hash him */
 	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
@@ -182,6 +245,7 @@ Error: cannot read interval argument, must be positive.");
 			rc = 1;
 			goto out;
 		}
+		intv *= MSECS;
 	}
 
 	{
@@ -189,7 +253,8 @@ Error: cannot read interval argument, must be positive.");
 		size_t llen = 0UL;
 		ssize_t nrd;
 
-		crst();
+		while ((nrd = getline(&line, &llen, stdin)) > 0 &&
+		       push_init(line, nrd) < 0);
 		while ((nrd = getline(&line, &llen, stdin)) > 0) {
 			push_beef(line, nrd);
 		}
