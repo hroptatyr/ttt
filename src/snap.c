@@ -39,6 +39,11 @@ typedef struct {
 	px_t a;
 } quo_t;
 
+typedef struct {
+	qx_t b;
+	qx_t a;
+} qua_t;
+
 
 static __attribute__((format(printf, 1, 2))) void
 serror(const char *fmt, ...)
@@ -114,6 +119,7 @@ static tv_t intv = 60U * MSECS;
 
 static tv_t metr;
 static quo_t last = {__DEC32_MAX__, __DEC32_MIN__};
+static qua_t that;
 
 static char cont[64];
 static size_t conz;
@@ -143,6 +149,12 @@ snap(void)
 	buf[bi++] = '\t';
 	if (LIKELY(last.a > __DEC32_MIN__)) {
 		bi += pxtostr(buf + bi, sizeof(buf) - bi, last.a);
+	}
+	if (that.b > 0.dd && that.a > 0.dd) {
+		buf[bi++] = '\t';
+		bi += qxtostr(buf + bi, sizeof(buf) - bi, that.b);
+		buf[bi++] = '\t';
+		bi += qxtostr(buf + bi, sizeof(buf) - bi, that.a);
 	}
 
 	buf[bi++] = '\n';
@@ -176,6 +188,12 @@ push_init(char *ln, size_t UNUSED(lz))
 	    !(this.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
+	/* snarf quantities */
+	if (*on == '\t') {
+		that.b = strtoqx(++on, &on);
+		that.a = strtoqx(++on, &on);
+	}
+
 	/* we're init'ing, so everything is the last value */
 	last = this;
 
