@@ -67,6 +67,9 @@ static tv_t modulus = 86400U * MSECS;
 static tv_t binwdth = 60U * MSECS;
 static size_t nbins;
 
+static unsigned int adevp;
+static unsigned int velop;
+
 
 static __attribute__((format(printf, 1, 2))) void
 serror(const char *fmt, ...)
@@ -257,7 +260,7 @@ out:
 }
 
 static void
-bin(size_t side, sbin_t sch)
+bin_tvpx(size_t side, sbin_t sch)
 {
 	tv_t tdlt = nxquo[side].t - prquo[side].t;
 	px_t pdlt = nxquo[side].p - prquo[side].p;
@@ -273,12 +276,46 @@ bin(size_t side, sbin_t sch)
 	return;
 }
 
+static void
+bin_adev(size_t side, sbin_t sch)
+{
+	px_t pdlt = fabsd32(nxquo[side].p - prquo[side].p);
+	const double xp = (double)pdlt;
+
+	for (size_t i = 0U; i < sch.n; i++) {
+		STAT_PUSH(pbins[side][sch.bins[i]], sch.fcts[i] * xp);
+	}
+	return;
+}
+
+static void
+bin_velo(size_t side, sbin_t sch)
+{
+	tv_t tdlt = nxquo[side].t - prquo[side].t;
+	px_t pdlt = fabsd32(nxquo[side].p - prquo[side].p);
+	const double xp = (double)pdlt * MSECS / tdlt;
+
+	for (size_t i = 0U; i < sch.n; i++) {
+		STAT_PUSH(pbins[side][sch.bins[i]], sch.fcts[i] * xp);
+	}
+	return;
+}
+
 static int
 offline(void)
 {
 	char *line = NULL;
 	size_t llen = 0UL;
 	ssize_t nrd;
+	void(*bin)(size_t, sbin_t) = bin_tvpx;
+
+	if (0) {
+		;
+	} else if (adevp) {
+		bin = bin_adev;
+	} else if (velop) {
+		bin = bin_velo;
+	}
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0 &&
 	       push_init(line, nrd) == WHAT_UNK);
@@ -304,6 +341,36 @@ offline(void)
 	/* finalise our findings */
 	free(line);
 
+	if (0) {
+		;
+	} else if (adevp) {
+		goto adev;
+	} else if (velop) {
+		goto velo;
+	} else {
+		goto tvpx;
+	}
+
+adev:
+	printf("adev\t%lu\t%lu\t\n", modulus, binwdth);
+	for (size_t i = 0U; i < nbins; i++) {
+		stat_t b = stat_eval(pbins[BID][i]);
+		stat_t a = stat_eval(pbins[ASK][i]);
+		printf("%f\t%g\t%f\t%g\n", b.m0, b.m1, a.m0, a.m1);
+	}
+	return 0;
+
+velo:
+	printf("velo\t%lu\t%lu\t\n", modulus, binwdth);
+	for (size_t i = 0U; i < nbins; i++) {
+		stat_t b = stat_eval(pbins[BID][i]);
+		stat_t a = stat_eval(pbins[ASK][i]);
+		printf("%f\t%g\t%f\t%g\n", b.m0, b.m1, a.m0, a.m1);
+	}
+	return 0;
+
+tvpx:
+	printf("tvpx\t%lu\t%lu\t\t\t\t\t\t\t\t\t\n", modulus, binwdth);
 	for (size_t i = 0U; i < nbins; i++) {
 		stat_t tb = stat_eval(tbins[BID][i]);
 		stat_t ta = stat_eval(tbins[ASK][i]);
@@ -366,12 +433,23 @@ Error: modulus and window parameters result in 0 bins.");
 		rc = 1;
 		goto out;
 	}
+
+	adevp = argi->absdev_flag;
+	velop = argi->velocity_flag;
+
+	if (UNLIKELY(adevp && velop)) {
+		errno = 0, serror("\
+Error: only one of --absdev and --velocity can be specified.");
+		rc = 1;
+		goto out;
+	}
+
 	/* get the tbins and pbins on the way */
 	tbins[BID] = calloc(nbins, sizeof(**tbins));
 	tbins[ASK] = calloc(nbins, sizeof(**tbins));
 	pbins[BID] = calloc(nbins, sizeof(**pbins));
 	pbins[ASK] = calloc(nbins, sizeof(**pbins));
-	
+
 	if (!argi->nargs) {
 		rc = offline() < 0;
 	}

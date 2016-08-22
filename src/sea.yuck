@@ -6,3 +6,5 @@ Deseasonalise QUOTES using a seasonality PROFILE.
                         time series again.
   -m, --modulus=T       Assume a season T (in seconds).
   -w, --width=W         Window width in seconds.
+  --absdev              Use absolute deviations.
+  --velocity            Use absolute velocity.
