@@ -371,6 +371,46 @@ desea_tvpx(side_t side, sbin_t sch)
 	return quantized32((px_t)s, pdlt);
 }
 
+static px_t
+ensea_adev(side_t side, sbin_t sch)
+{
+	px_t pdlt = nxquo[side].p - prquo[side].p;
+	const double xp = (double)pdlt;
+	double s = 0.;
+
+	for (size_t i = 0U; i < sch.n; i++) {
+		s += sch.fcts[i] * xp * pbins[side][sch.bins[i]].m1;
+	}
+	return quantized32((px_t)s, pdlt);
+}
+
+static px_t
+ensea_velo(side_t side, sbin_t sch)
+{
+	tv_t tdlt = nxquo[side].t - prquo[side].t;
+	px_t pdlt = nxquo[side].p - prquo[side].p;
+	const double xp = (double)pdlt * MSECS / tdlt;
+	double s = 0.;
+
+	for (size_t i = 0U; i < sch.n; i++) {
+		s += sch.fcts[i] * xp * pbins[side][sch.bins[i]].m1;
+	}
+	return quantized32((px_t)s, pdlt);
+}
+
+static px_t
+ensea_tvpx(side_t side, sbin_t sch)
+{
+	px_t pdlt = nxquo[side].p - prquo[side].p;
+	double xp = (double)pdlt;
+	double s = 0.;
+
+	for (size_t i = 0U; i < sch.n; i++) {
+		s += sch.fcts[i] * xp * pbins[side][sch.bins[i]].m1;
+	}
+	return quantized32((px_t)s, pdlt);
+}
+
 
 static int
 offline(void)
@@ -446,7 +486,6 @@ tvpx:
 	return 0;
 }
 
-#define dosea	desea
 static int
 desea(void)
 {
@@ -485,6 +524,53 @@ desea(void)
 		}
 		if (c & WHAT_ASK) {
 			base.a += desea(ASK, s);
+		}
+
+		send_quo(metr, base);
+	}
+	/* finalise our findings */
+	free(line);
+	return 0;
+}
+
+static int
+ensea(void)
+{
+	char *line = NULL;
+	size_t llen = 0UL;
+	ssize_t nrd;
+	quo_t base;
+	px_t(*ensea)(side_t, sbin_t) = ensea_tvpx;
+
+	if (0) {
+		;
+	} else if (adevp) {
+		ensea = ensea_adev;
+	} else if (velop) {
+		ensea = ensea_velo;
+	}
+
+	while ((nrd = getline(&line, &llen, stdin)) > 0 &&
+	       push_init(line, nrd) == WHAT_UNK);
+	base = (quo_t){prquo[BID].p, prquo[ASK].p};
+	send_quo(metr, base);
+
+	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		what_t c = push_beef(line, nrd);
+		sbin_t s;
+
+		if (!c) {
+			continue;
+		}
+
+		s = stuf_triag(metr);
+		assert(s.n == 2U);
+
+		if (c & WHAT_BID) {
+			base.b += ensea(BID, s);
+		}
+		if (c & WHAT_ASK) {
+			base.a += ensea(ASK, s);
 		}
 
 		send_quo(metr, base);
@@ -630,9 +716,9 @@ Error: cannot process seasonality file `%s'", *argi->args);
 		rc = 1;
 	} else {
 		if (!argi->reverse_flag) {
-			rc = dosea() < 0;
-		} else {
 			rc = desea() < 0;
+		} else {
+			rc = ensea() < 0;
 		}
 	}
 
