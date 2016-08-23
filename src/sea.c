@@ -292,15 +292,22 @@ send_quo(tv_t t, quo_t q)
 }
 
 
+static inline void
+bin_gen(side_t side, sbin_t sch, double x)
+{
+	for (size_t i = 0U; i < sch.n; i++) {
+		STAT_PUSH(bins[side][sch.bins[i]], sch.fcts[i] * x);
+	}
+	return;
+}
+
 static void
 bin_tdlt(side_t side, sbin_t sch)
 {
 	tv_t tdlt = nxquo[side].t - prquo[side].t;
 	const double xt = (double)tdlt / MSECS;
 
-	for (size_t i = 0U; i < sch.n; i++) {
-		STAT_PUSH(bins[side][sch.bins[i]], sch.fcts[i] * xt);
-	}
+	bin_gen(side, sch, xt);
 	return;
 }
 
@@ -310,9 +317,7 @@ bin_adev(side_t side, sbin_t sch)
 	px_t pdlt = fabsd32(nxquo[side].p - prquo[side].p);
 	const double xp = (double)pdlt;
 
-	for (size_t i = 0U; i < sch.n; i++) {
-		STAT_PUSH(bins[side][sch.bins[i]], sch.fcts[i] * xp);
-	}
+	bin_gen(side, sch, xp);
 	return;
 }
 
@@ -323,10 +328,19 @@ bin_velo(side_t side, sbin_t sch)
 	px_t pdlt = fabsd32(nxquo[side].p - prquo[side].p);
 	const double xp = (double)pdlt * MSECS / tdlt;
 
-	for (size_t i = 0U; i < sch.n; i++) {
-		STAT_PUSH(bins[side][sch.bins[i]], sch.fcts[i] * xp);
-	}
+	bin_gen(side, sch, xp);
 	return;
+}
+
+static inline double
+desea_gen(side_t side, sbin_t sch, double x)
+{
+	double s = 0.;
+
+	for (size_t i = 0U; i < sch.n; i++) {
+		s += sch.fcts[i] * x / bins[side][sch.bins[i]].m1;
+	}
+	return s;
 }
 
 static px_t
@@ -334,12 +348,8 @@ desea_adev(side_t side, sbin_t sch)
 {
 	px_t pdlt = nxquo[side].p - prquo[side].p;
 	const double xp = (double)pdlt;
-	double s = 0.;
 
-	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * xp / bins[side][sch.bins[i]].m1;
-	}
-	return quantized32((px_t)s, pdlt);
+	return quantized32((px_t)desea_gen(side, sch, xp), pdlt);
 }
 
 static px_t
@@ -348,12 +358,19 @@ desea_velo(side_t side, sbin_t sch)
 	tv_t tdlt = nxquo[side].t - prquo[side].t;
 	px_t pdlt = nxquo[side].p - prquo[side].p;
 	const double xp = (double)pdlt * MSECS / tdlt;
+
+	return quantized32((px_t)desea_gen(side, sch, xp), pdlt);
+}
+
+static inline double
+ensea_gen(side_t side, sbin_t sch, double x)
+{
 	double s = 0.;
 
 	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * xp / bins[side][sch.bins[i]].m1;
+		s += sch.fcts[i] * x * bins[side][sch.bins[i]].m1;
 	}
-	return quantized32((px_t)s, pdlt);
+	return s;
 }
 
 static px_t
@@ -361,12 +378,8 @@ ensea_adev(side_t side, sbin_t sch)
 {
 	px_t pdlt = nxquo[side].p - prquo[side].p;
 	const double xp = (double)pdlt;
-	double s = 0.;
 
-	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * xp * bins[side][sch.bins[i]].m1;
-	}
-	return quantized32((px_t)s, pdlt);
+	return quantized32((px_t)ensea_gen(side, sch, xp), pdlt);
 }
 
 static px_t
@@ -375,12 +388,8 @@ ensea_velo(side_t side, sbin_t sch)
 	tv_t tdlt = nxquo[side].t - prquo[side].t;
 	px_t pdlt = nxquo[side].p - prquo[side].p;
 	const double xp = (double)pdlt * MSECS / tdlt;
-	double s = 0.;
 
-	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * xp * bins[side][sch.bins[i]].m1;
-	}
-	return quantized32((px_t)s, pdlt);
+	return quantized32((px_t)ensea_gen(side, sch, xp), pdlt);
 }
 
 
