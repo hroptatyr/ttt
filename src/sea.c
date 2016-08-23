@@ -341,27 +341,12 @@ offline(void)
 	/* finalise our findings */
 	free(line);
 
-	if (0) {
-		;
-	} else if (adevp) {
-		goto adev;
-	} else if (velop) {
-		goto velo;
-	} else {
-		goto tvpx;
-	}
+	static const char *modes[] = {
+		"tvpx", "adev", "velo",
+	};
+	const char *mode = modes[(adevp << 0) ^ (velop << 1U)];
+	printf("%s\t%lu\t%lu\t\n", mode, modulus, binwdth);
 
-adev:
-	printf("adev\t%lu\t%lu\t\n", modulus, binwdth);
-	for (size_t i = 0U; i < nbins; i++) {
-		stat_t b = stat_eval(pbins[BID][i]);
-		stat_t a = stat_eval(pbins[ASK][i]);
-		printf("%f\t%g\t%f\t%g\n", b.m0, b.m1, a.m0, a.m1);
-	}
-	return 0;
-
-velo:
-	printf("velo\t%lu\t%lu\t\n", modulus, binwdth);
 	for (size_t i = 0U; i < nbins; i++) {
 		stat_t b = stat_eval(pbins[BID][i]);
 		stat_t a = stat_eval(pbins[ASK][i]);
