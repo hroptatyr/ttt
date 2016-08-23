@@ -46,8 +46,11 @@ typedef enum {
 	WHAT_BOTH = WHAT_BID | WHAT_ASK,
 } what_t;
 
-#define BID	(0U)
-#define ASK	(1U)
+typedef enum {
+	BID = 0U,
+	ASK = 1U,
+	NSIDES = 2U,
+} side_t;
 
 typedef struct {
 	double m0;
@@ -260,7 +263,7 @@ out:
 }
 
 static void
-bin_tvpx(size_t side, sbin_t sch)
+bin_tvpx(side_t side, sbin_t sch)
 {
 	tv_t tdlt = nxquo[side].t - prquo[side].t;
 	px_t pdlt = nxquo[side].p - prquo[side].p;
@@ -277,7 +280,7 @@ bin_tvpx(size_t side, sbin_t sch)
 }
 
 static void
-bin_adev(size_t side, sbin_t sch)
+bin_adev(side_t side, sbin_t sch)
 {
 	px_t pdlt = fabsd32(nxquo[side].p - prquo[side].p);
 	const double xp = (double)pdlt;
@@ -289,7 +292,7 @@ bin_adev(size_t side, sbin_t sch)
 }
 
 static void
-bin_velo(size_t side, sbin_t sch)
+bin_velo(side_t side, sbin_t sch)
 {
 	tv_t tdlt = nxquo[side].t - prquo[side].t;
 	px_t pdlt = fabsd32(nxquo[side].p - prquo[side].p);
@@ -307,7 +310,7 @@ offline(void)
 	char *line = NULL;
 	size_t llen = 0UL;
 	ssize_t nrd;
-	void(*bin)(size_t, sbin_t) = bin_tvpx;
+	void(*bin)(side_t, sbin_t) = bin_tvpx;
 
 	if (0) {
 		;
@@ -382,7 +385,6 @@ int
 main(int argc, char *argv[])
 {
 	static yuck_t argi[1U];
-
 	int rc = 0;
 
 	if (yuck_parse(argi, argc, argv) < 0) {
