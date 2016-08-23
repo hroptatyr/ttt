@@ -38,6 +38,11 @@ typedef struct {
 	px_t p;
 } tik_t;
 
+typedef struct {
+	px_t b;
+	px_t a;
+} quo_t;
+
 /* what-changed enum */
 typedef enum {
 	WHAT_UNK = 0U,
@@ -262,6 +267,28 @@ out:
 	return (what_t)rc;
 }
 
+static int
+send_quo(tv_t t, quo_t q)
+{
+	char buf[256U];
+	size_t len;
+
+	len = tvtostr(buf, sizeof(buf), t);
+	buf[len++] = '\t';
+	buf[len++] = '\t';
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, q.b);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, q.a);
+	buf[len++] = '\n';
+
+	fwrite(buf, 1, len, stdout);
+	return 0;
+}
+
+
 static void
 bin_tvpx(side_t side, sbin_t sch)
 {
@@ -304,6 +331,47 @@ bin_velo(side_t side, sbin_t sch)
 	return;
 }
 
+static px_t
+desea_adev(side_t side, sbin_t sch)
+{
+	px_t pdlt = nxquo[side].p - prquo[side].p;
+	const double xp = (double)pdlt;
+	double s = 0.;
+
+	for (size_t i = 0U; i < sch.n; i++) {
+		s += sch.fcts[i] * xp / pbins[side][sch.bins[i]].m1;
+	}
+	return quantized32((px_t)s, pdlt);
+}
+
+static px_t
+desea_velo(side_t side, sbin_t sch)
+{
+	tv_t tdlt = nxquo[side].t - prquo[side].t;
+	px_t pdlt = nxquo[side].p - prquo[side].p;
+	const double xp = (double)pdlt * MSECS / tdlt;
+	double s = 0.;
+
+	for (size_t i = 0U; i < sch.n; i++) {
+		s += sch.fcts[i] * xp / pbins[side][sch.bins[i]].m1;
+	}
+	return quantized32((px_t)s, pdlt);
+}
+
+static px_t
+desea_tvpx(side_t side, sbin_t sch)
+{
+	px_t pdlt = nxquo[side].p - prquo[side].p;
+	double xp = (double)pdlt;
+	double s = 0.;
+
+	for (size_t i = 0U; i < sch.n; i++) {
+		s += sch.fcts[i] * xp / pbins[side][sch.bins[i]].m1;
+	}
+	return quantized32((px_t)s, pdlt);
+}
+
+
 static int
 offline(void)
 {
@@ -378,6 +446,111 @@ tvpx:
 	return 0;
 }
 
+#define dosea	desea
+static int
+desea(void)
+{
+	char *line = NULL;
+	size_t llen = 0UL;
+	ssize_t nrd;
+	quo_t base;
+	px_t(*desea)(side_t, sbin_t) = desea_tvpx;
+
+	if (0) {
+		;
+	} else if (adevp) {
+		desea = desea_adev;
+	} else if (velop) {
+		desea = desea_velo;
+	}
+
+	while ((nrd = getline(&line, &llen, stdin)) > 0 &&
+	       push_init(line, nrd) == WHAT_UNK);
+	base = (quo_t){prquo[BID].p, prquo[ASK].p};
+	send_quo(metr, base);
+
+	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		what_t c = push_beef(line, nrd);
+		sbin_t s;
+
+		if (!c) {
+			continue;
+		}
+
+		s = stuf_triag(metr);
+		assert(s.n == 2U);
+
+		if (c & WHAT_BID) {
+			base.b += desea(BID, s);
+		}
+		if (c & WHAT_ASK) {
+			base.a += desea(ASK, s);
+		}
+
+		send_quo(metr, base);
+	}
+	/* finalise our findings */
+	free(line);
+	return 0;
+}
+
+static int
+rdsea(const char *fn)
+{
+	static FILE *sp;
+	static char *line;
+	static size_t llen;
+	int rc = 0;
+
+	if (fn == NULL) {
+		/* go straight to reading  */
+		goto rd;
+	} else if (UNLIKELY((sp = fopen(fn, "r")) == NULL)) {
+		return -1;
+	} else if (UNLIKELY(getline(&line, &llen, sp) <= 4U)) {
+		rc = -1;
+		goto out;
+	}
+	/* first line holds the mode and widths*/
+	adevp = !memcmp(line, "adev\t", 5U);
+	velop = !memcmp(line, "velo\t", 5U);
+	with (char *on = line + 4U) {
+		modulus = strtoul(++on, &on, 10U);
+		binwdth = strtoul(++on, &on, 10U);
+		if (UNLIKELY((unsigned char)*on >= ' ')) {
+			/* hm, thanks for that then */
+			rc = -1;
+			goto out;
+		}
+	}
+	/* return so the caller can set up arrays and stuff */
+	return 0;
+rd:
+	/* now read all them lines */
+	for (size_t i = 0U; i < nbins; i++) {
+		char *on;
+
+		if (UNLIKELY(getline(&line, &llen, sp) <= 0)) {
+			/* great */
+			rc = -1;
+			goto out;
+		}
+		/* should be at least 4 values */
+		on = line;
+		pbins[BID][i].m0 = strtod(on, &on);
+		on++;
+		pbins[BID][i].m1 = strtod(on, &on);
+		on++;
+		pbins[ASK][i].m0 = strtod(on, &on);
+		on++;
+		pbins[ASK][i].m1 = strtod(on, &on);
+	}
+out:
+	free(line);
+	fclose(sp);
+	return rc;
+}
+
 
 #include "sea.yucc"
 
@@ -413,20 +586,31 @@ Error: window width parameter must be positive.");
 		binwdth *= MSECS;
 	}
 
-	/* calc nbins */
-	if (!(nbins = modulus / binwdth)) {
-		errno = 0, serror("\
-Error: modulus and window parameters result in 0 bins.");
-		rc = 1;
-		goto out;
-	}
-
 	adevp = argi->absdev_flag;
 	velop = argi->velocity_flag;
 
 	if (UNLIKELY(adevp && velop)) {
 		errno = 0, serror("\
 Error: only one of --absdev and --velocity can be specified.");
+		rc = 1;
+		goto out;
+	}
+
+	if (argi->nargs) {
+		/* read modulus and binwidth from file */
+		if (rdsea(*argi->args) < 0) {
+			serror("\
+Error: cannot process seasonality file `%s'", *argi->args);
+			rc = 1;
+			goto out;
+		}
+
+	}
+
+	/* calc nbins */
+	if (!(nbins = modulus / binwdth)) {
+		errno = 0, serror("\
+Error: modulus and window parameters result in 0 bins.");
 		rc = 1;
 		goto out;
 	}
@@ -439,6 +623,17 @@ Error: only one of --absdev and --velocity can be specified.");
 
 	if (!argi->nargs) {
 		rc = offline() < 0;
+	} else if ((rc = rdsea(NULL)) < 0) {
+		/* pity */
+		serror("\
+Error: cannot process seasonality file `%s'", *argi->args);
+		rc = 1;
+	} else {
+		if (!argi->reverse_flag) {
+			rc = dosea() < 0;
+		} else {
+			rc = desea() < 0;
+		}
 	}
 
 	free(tbins[BID]);
