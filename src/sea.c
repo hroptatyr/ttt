@@ -47,13 +47,17 @@ typedef struct {
 typedef enum {
 	WHAT_UNK = 0U,
 	WHAT_BID = 1U,
+	WHAT_MID = 1U,
 	WHAT_ASK = 2U,
-	WHAT_BOTH = WHAT_BID | WHAT_ASK,
+	WHAT_SPR = 2U,
+	WHAT_BOTH = WHAT_BID ^ WHAT_ASK,
 } what_t;
 
 typedef enum {
 	BID = 0U,
+	MID = 0U,
 	ASK = 1U,
+	SPR = 1U,
 	NSIDES = 2U,
 } side_t;
 
@@ -189,8 +193,7 @@ static tik_t prquo[2U];
 static char cont[64];
 static size_t conz;
 /* bins */
-static stat_t *tbins[2U];
-static stat_t *pbins[2U];
+static stat_t *bins[2U];
 
 static what_t
 push_init(char *ln, size_t UNUSED(lz))
@@ -290,18 +293,13 @@ send_quo(tv_t t, quo_t q)
 
 
 static void
-bin_tvpx(side_t side, sbin_t sch)
+bin_tdlt(side_t side, sbin_t sch)
 {
 	tv_t tdlt = nxquo[side].t - prquo[side].t;
-	px_t pdlt = nxquo[side].p - prquo[side].p;
 	const double xt = (double)tdlt / MSECS;
-	const double xp = (double)pdlt;
 
 	for (size_t i = 0U; i < sch.n; i++) {
-		STAT_PUSH(tbins[side][sch.bins[i]], sch.fcts[i] * xt);
-	}
-	for (size_t i = 0U; i < sch.n; i++) {
-		STAT_PUSH(pbins[side][sch.bins[i]], sch.fcts[i] * xp);
+		STAT_PUSH(bins[side][sch.bins[i]], sch.fcts[i] * xt);
 	}
 	return;
 }
@@ -313,7 +311,7 @@ bin_adev(side_t side, sbin_t sch)
 	const double xp = (double)pdlt;
 
 	for (size_t i = 0U; i < sch.n; i++) {
-		STAT_PUSH(pbins[side][sch.bins[i]], sch.fcts[i] * xp);
+		STAT_PUSH(bins[side][sch.bins[i]], sch.fcts[i] * xp);
 	}
 	return;
 }
@@ -326,7 +324,7 @@ bin_velo(side_t side, sbin_t sch)
 	const double xp = (double)pdlt * MSECS / tdlt;
 
 	for (size_t i = 0U; i < sch.n; i++) {
-		STAT_PUSH(pbins[side][sch.bins[i]], sch.fcts[i] * xp);
+		STAT_PUSH(bins[side][sch.bins[i]], sch.fcts[i] * xp);
 	}
 	return;
 }
@@ -339,7 +337,7 @@ desea_adev(side_t side, sbin_t sch)
 	double s = 0.;
 
 	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * xp / pbins[side][sch.bins[i]].m1;
+		s += sch.fcts[i] * xp / bins[side][sch.bins[i]].m1;
 	}
 	return quantized32((px_t)s, pdlt);
 }
@@ -353,20 +351,7 @@ desea_velo(side_t side, sbin_t sch)
 	double s = 0.;
 
 	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * xp / pbins[side][sch.bins[i]].m1;
-	}
-	return quantized32((px_t)s, pdlt);
-}
-
-static px_t
-desea_tvpx(side_t side, sbin_t sch)
-{
-	px_t pdlt = nxquo[side].p - prquo[side].p;
-	double xp = (double)pdlt;
-	double s = 0.;
-
-	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * xp / pbins[side][sch.bins[i]].m1;
+		s += sch.fcts[i] * xp / bins[side][sch.bins[i]].m1;
 	}
 	return quantized32((px_t)s, pdlt);
 }
@@ -379,7 +364,7 @@ ensea_adev(side_t side, sbin_t sch)
 	double s = 0.;
 
 	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * xp * pbins[side][sch.bins[i]].m1;
+		s += sch.fcts[i] * xp * bins[side][sch.bins[i]].m1;
 	}
 	return quantized32((px_t)s, pdlt);
 }
@@ -393,20 +378,7 @@ ensea_velo(side_t side, sbin_t sch)
 	double s = 0.;
 
 	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * xp * pbins[side][sch.bins[i]].m1;
-	}
-	return quantized32((px_t)s, pdlt);
-}
-
-static px_t
-ensea_tvpx(side_t side, sbin_t sch)
-{
-	px_t pdlt = nxquo[side].p - prquo[side].p;
-	double xp = (double)pdlt;
-	double s = 0.;
-
-	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * xp * pbins[side][sch.bins[i]].m1;
+		s += sch.fcts[i] * xp * bins[side][sch.bins[i]].m1;
 	}
 	return quantized32((px_t)s, pdlt);
 }
@@ -418,7 +390,7 @@ offline(void)
 	char *line = NULL;
 	size_t llen = 0UL;
 	ssize_t nrd;
-	void(*bin)(side_t, sbin_t) = bin_tvpx;
+	void(*bin)(side_t, sbin_t) = bin_tdlt;
 
 	if (0) {
 		;
@@ -453,35 +425,15 @@ offline(void)
 	free(line);
 
 	static const char *modes[] = {
-		"tvpx", "adev", "velo",
+		"tdlt", "adev", "velo",
 	};
 	const char *mode = modes[(adevp << 0) ^ (velop << 1U)];
 	printf("%s\t%lu\t%lu\t\n", mode, modulus, binwdth);
 
 	for (size_t i = 0U; i < nbins; i++) {
-		stat_t b = stat_eval(pbins[BID][i]);
-		stat_t a = stat_eval(pbins[ASK][i]);
+		stat_t b = stat_eval(bins[BID][i]);
+		stat_t a = stat_eval(bins[ASK][i]);
 		printf("%f\t%g\t%f\t%g\n", b.m0, b.m1, a.m0, a.m1);
-	}
-	return 0;
-
-tvpx:
-	printf("tvpx\t%lu\t%lu\t\t\t\t\t\t\t\t\t\n", modulus, binwdth);
-	for (size_t i = 0U; i < nbins; i++) {
-		stat_t tb = stat_eval(tbins[BID][i]);
-		stat_t ta = stat_eval(tbins[ASK][i]);
-		stat_t b = stat_eval(pbins[BID][i]);
-		stat_t a = stat_eval(pbins[ASK][i]);
-
-		b.m2 = sqrt(b.m2);
-		a.m2 = sqrt(a.m2);
-		tb.m2 = sqrt(tb.m2);
-		ta.m2 = sqrt(ta.m2);
-		printf("%f\t%g\t%g\t%f\t%g\t%g\t%f\t%g\t%g\t%f\t%g\t%g\n",
-		       tb.m0, tb.m1, tb.m2,
-		       ta.m0, ta.m1, ta.m2,
-		       b.m0, b.m1, b.m2,
-		       a.m0, a.m1, a.m2);
 	}
 	return 0;
 }
@@ -493,7 +445,7 @@ desea(void)
 	size_t llen = 0UL;
 	ssize_t nrd;
 	quo_t base;
-	px_t(*desea)(side_t, sbin_t) = desea_tvpx;
+	px_t(*desea)(side_t, sbin_t);
 
 	if (0) {
 		;
@@ -501,6 +453,9 @@ desea(void)
 		desea = desea_adev;
 	} else if (velop) {
 		desea = desea_velo;
+	} else {
+		/* we can't do tdelta deseasoning */
+		return -1;
 	}
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0 &&
@@ -540,7 +495,7 @@ ensea(void)
 	size_t llen = 0UL;
 	ssize_t nrd;
 	quo_t base;
-	px_t(*ensea)(side_t, sbin_t) = ensea_tvpx;
+	px_t(*ensea)(side_t, sbin_t);
 
 	if (0) {
 		;
@@ -548,6 +503,9 @@ ensea(void)
 		ensea = ensea_adev;
 	} else if (velop) {
 		ensea = ensea_velo;
+	} else {
+		/* we can't season with tdeltas */
+		return -1;
 	}
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0 &&
@@ -623,13 +581,13 @@ rd:
 		}
 		/* should be at least 4 values */
 		on = line;
-		pbins[BID][i].m0 = strtod(on, &on);
+		bins[BID][i].m0 = strtod(on, &on);
 		on++;
-		pbins[BID][i].m1 = strtod(on, &on);
+		bins[BID][i].m1 = strtod(on, &on);
 		on++;
-		pbins[ASK][i].m0 = strtod(on, &on);
+		bins[ASK][i].m0 = strtod(on, &on);
 		on++;
-		pbins[ASK][i].m1 = strtod(on, &on);
+		bins[ASK][i].m1 = strtod(on, &on);
 	}
 out:
 	free(line);
@@ -701,11 +659,9 @@ Error: modulus and window parameters result in 0 bins.");
 		goto out;
 	}
 
-	/* get the tbins and pbins on the way */
-	tbins[BID] = calloc(nbins, sizeof(**tbins));
-	tbins[ASK] = calloc(nbins, sizeof(**tbins));
-	pbins[BID] = calloc(nbins, sizeof(**pbins));
-	pbins[ASK] = calloc(nbins, sizeof(**pbins));
+	/* get the tbins and bins on the way */
+	bins[BID] = calloc(nbins, sizeof(**bins));
+	bins[ASK] = calloc(nbins, sizeof(**bins));
 
 	if (!argi->nargs) {
 		rc = offline() < 0;
@@ -722,10 +678,8 @@ Error: cannot process seasonality file `%s'", *argi->args);
 		}
 	}
 
-	free(tbins[BID]);
-	free(tbins[ASK]);
-	free(pbins[BID]);
-	free(pbins[ASK]);
+	free(bins[BID]);
+	free(bins[ASK]);
 
 out:
 	yuck_free(argi);
