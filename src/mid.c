@@ -90,11 +90,13 @@ out:
 }
 
 
+static quo_t q;
+static size_t beg;
+static size_t end;
+
 static int
-push_beef(char *ln, size_t lz)
+push_beef(char *ln, size_t UNUSED(lz))
 {
-	quo_t q;
-	char *sq;
 	char *on;
 
 	/* metronome is up first */
@@ -106,29 +108,115 @@ push_beef(char *ln, size_t lz)
 	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
 		return -1;
 	}
-	sq = ++on;
+	beg = ++on - ln;
 
 	/* snarf quotes */
 	if (!(q.b = strtopx(on, &on)) || *on++ != '\t' ||
 	    !(q.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
-	/* otherwise calc new bid/ask pair */
-	with (px_t mid = (q.b + q.a) / 2.df) {
-		char buf[64U];
-		size_t len = 0U;
-		const quo_t newq = {
-			quantized32(mid - spr, q.b),
-			quantized32(mid + spr, q.a)
-		};
+	end = on - ln;
+	return 0;
+}
 
-		fwrite(ln, 1, sq - ln, stdout);
-		len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
-		buf[len++] = '\t';
-		len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
-		fwrite(buf, 1, len, stdout);
-		fwrite(on, 1, ln + lz - on, stdout);
+static int
+bidask(void)
+{
+	char *line = NULL;
+	size_t llen = 0UL;
+	ssize_t nrd;
+
+	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		if (UNLIKELY(push_beef(line, nrd) < 0)) {
+			continue;
+		}
+
+		/* otherwise calc new bid/ask pair */
+		with (px_t mid = (q.b + q.a) / 2.df) {
+			char buf[64U];
+			size_t len = 0U;
+			const quo_t newq = {
+				quantized32(mid - spr, q.b),
+				quantized32(mid + spr, q.a)
+			};
+
+			fwrite(line, 1, beg, stdout);
+			len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
+			buf[len++] = '\t';
+			len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
+			fwrite(buf, 1, len, stdout);
+			fwrite(line + end, 1, nrd - end, stdout);
+		}
 	}
+
+	/* finalise our findings */
+	free(line);
+	return 0;
+}
+
+static int
+midspr(void)
+{
+	char *line = NULL;
+	size_t llen = 0UL;
+	ssize_t nrd;
+
+	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		if (UNLIKELY(push_beef(line, nrd) < 0)) {
+			continue;
+		}
+
+		/* otherwise calc new bid/ask pair */
+		with (px_t mp = (q.b + q.a) / 2.df, sp = q.a - q.b) {
+			char buf[64U];
+			size_t len = 0U;
+
+			fwrite(line, 1, beg, stdout);
+			len += pxtostr(buf + len, sizeof(buf) - len, mp);
+			buf[len++] = '\t';
+			len += pxtostr(buf + len, sizeof(buf) - len, sp);
+			fwrite(buf, 1, len, stdout);
+			fwrite(line + end, 1, nrd - end, stdout);
+		}
+	}
+
+	/* finalise our findings */
+	free(line);
+	return 0;
+}
+
+static int
+desprd(void)
+{
+	char *line = NULL;
+	size_t llen = 0UL;
+	ssize_t nrd;
+
+	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		if (UNLIKELY(push_beef(line, nrd) < 0)) {
+			continue;
+		}
+
+		/* otherwise calc new bid/ask pair */
+		with (px_t sp = q.a / 2.df) {
+			char buf[64U];
+			size_t len = 0U;
+			const quo_t newq = {
+				quantized32(q.b - sp, q.a),
+				quantized32(q.b + sp, q.a)
+			};
+
+			fwrite(line, 1, beg, stdout);
+			len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
+			buf[len++] = '\t';
+			len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
+			fwrite(buf, 1, len, stdout);
+			fwrite(line + end, 1, nrd - end, stdout);
+		}
+	}
+
+	/* finalise our findings */
+	free(line);
 	return 0;
 }
 
@@ -148,22 +236,19 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (argi->spread_arg) {
+	if (argi->spread_arg && argi->spread_arg != YUCK_OPTARG_NONE) {
 		spr = strtopx(argi->spread_arg, NULL);
 		spr /= 2.df;
 	}
 
-	{
-		char *line = NULL;
-		size_t llen = 0UL;
-		ssize_t nrd;
-
-		while ((nrd = getline(&line, &llen, stdin)) > 0) {
-			(void)push_beef(line, nrd);
-		}
-
-		/* finalise our findings */
-		free(line);
+	if (0) {
+		;
+	} else if (argi->despread_flag) {
+		rc = desprd() < 0;
+	} else if (!argi->spread_arg || argi->spread_arg != YUCK_OPTARG_NONE) {
+		rc = bidask() < 0;
+	} else {
+		rc = midspr() < 0;
 	}
 
 out:
