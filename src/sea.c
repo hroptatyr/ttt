@@ -35,31 +35,14 @@ typedef long unsigned int tv_t;
 /* relevant tick dimensions */
 typedef struct {
 	tv_t t;
-	px_t p;
+	px_t m;
+	px_t s;
 } tik_t;
 
 typedef struct {
 	px_t b;
 	px_t a;
 } quo_t;
-
-/* what-changed enum */
-typedef enum {
-	WHAT_UNK = 0U,
-	WHAT_BID = 1U,
-	WHAT_MID = 1U,
-	WHAT_ASK = 2U,
-	WHAT_SPR = 2U,
-	WHAT_BOTH = WHAT_BID ^ WHAT_ASK,
-} what_t;
-
-typedef enum {
-	BID = 0U,
-	MID = 0U,
-	ASK = 1U,
-	SPR = 1U,
-	NSIDES = 2U,
-} side_t;
 
 typedef struct {
 	double m0;
@@ -74,13 +57,29 @@ typedef struct {
 	double *fcts;
 } sbin_t;
 
+/* modes, extend here */
+typedef enum {
+	MODE_DFLT,
+	MODE_SPRD = MODE_DFLT,
+	MODE_ADEV,
+	MODE_VELO,
+	MODE_TDLT,
+	NMODES
+} mode_t;
 
+static const char *const modes[] = {
+	[MODE_SPRD] = "sprd",
+	[MODE_ADEV] = "adev",
+	[MODE_VELO] = "velo",
+	[MODE_TDLT] = "tdlt",
+};
+
+/* parameters */
 static tv_t modulus = 86400U * MSECS;
 static tv_t binwdth = 60U * MSECS;
 static size_t nbins;
 
-static unsigned int adevp;
-static unsigned int velop;
+static mode_t mode;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -187,104 +186,101 @@ stuf_triag(tv_t t)
 
 
 static tv_t metr;
-static tik_t nxquo[2U] = {{NOT_A_TIME}, {NOT_A_TIME}};
-static tik_t prquo[2U];
+static tik_t nxquo = {NOT_A_TIME};
+static tik_t prquo;
 /* contract we're on about */
 static char cont[64];
 static size_t conz;
 /* bins */
-static stat_t *bins[2U];
+static stat_t *bins;
+/* just to have a prototype for quantization */
+static px_t proto;
 
-static what_t
+static int
 push_init(char *ln, size_t UNUSED(lz))
 {
 	px_t bid, ask;
-	unsigned int rc = WHAT_UNK;
 	const char *ip;
 	size_t iz;
 	char *on;
 
 	/* metronome is up first */
 	if (UNLIKELY((metr = strtotv(ln, &on)) == NOT_A_TIME)) {
-		goto out;
+		return -1;
 	}
 
 	/* instrument name, don't hash him */
 	if (UNLIKELY((on = strchr(ip = on, '\t')) == NULL)) {
-		goto out;
+		return -1;
 	}
 	iz = on++ - ip;
 
 	/* snarf quotes */
 	if (!(bid = strtopx(on, &on)) || *on++ != '\t' ||
 	    !(ask = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
-		goto out;
+		return -1;
 	}
 	/* we're init'ing, so everything changed */
-	prquo[BID] = nxquo[BID] = (tik_t){metr, bid};
-	rc ^= WHAT_BID;
-
-	prquo[ASK] = nxquo[ASK] = (tik_t){metr, ask};
-	rc ^= WHAT_ASK;
+	prquo = nxquo = (tik_t){metr, (ask + bid) / 2.df, (ask - bid) / 2.df};
+	proto = bid;
 
 	memcpy(cont, ip, conz = iz);
-out:
-	return (what_t)rc;
+	return 1;
 }
 
-static what_t
+static int
 push_beef(char *ln, size_t UNUSED(lz))
 {
 	px_t bid, ask;
-	unsigned int rc = WHAT_UNK;
+	tik_t this;
 	char *on;
 
 	/* metronome is up first */
 	if (UNLIKELY((metr = strtotv(ln, &on)) == NOT_A_TIME)) {
-		goto out;
+		return -1;
 	}
 
 	/* instrument name, don't hash him */
 	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
-		goto out;
+		return -1;
 	}
 	on++;
 
 	/* snarf quotes */
 	if (!(bid = strtopx(on, &on)) || *on++ != '\t' ||
 	    !(ask = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
-		goto out;
+		return -1;
 	}
+	/* obtain mid+spr representation */
+	this = (tik_t){metr, (ask + bid) / 2.df, (ask - bid) / 2.df};
+
 	/* see what changed */
-	if (bid != nxquo[BID].p) {
-		prquo[BID] = nxquo[BID];
-		nxquo[BID] = (tik_t){metr, bid};
-		rc ^= WHAT_BID;
+	if (this.m != nxquo.m) {
+		/* yep */
+		prquo = nxquo;
+		nxquo = this;
+		return 1;
 	}
-	if (ask != nxquo[ASK].p) {
-		prquo[ASK] = nxquo[ASK];
-		nxquo[ASK] = (tik_t){metr, ask};
-		rc ^= WHAT_ASK;
-	}
-out:
-	return (what_t)rc;
+	return 0;
 }
 
 static int
-send_quo(tv_t t, quo_t q)
+send_tik(tik_t q)
 {
 	char buf[256U];
 	size_t len;
+	px_t bid = quantized32(q.m - q.s, proto);
+	px_t ask = quantized32(q.m + q.s, proto);
 
-	len = tvtostr(buf, sizeof(buf), t);
+	len = tvtostr(buf, sizeof(buf), q.t);
 	buf[len++] = '\t';
 	buf[len++] = '\t';
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, q.b);
+	len += pxtostr(buf + len, sizeof(buf) - len, bid);
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, q.a);
+	len += pxtostr(buf + len, sizeof(buf) - len, ask);
 	buf[len++] = '\n';
 
 	fwrite(buf, 1, len, stdout);
@@ -293,103 +289,103 @@ send_quo(tv_t t, quo_t q)
 
 
 static inline void
-bin_gen(side_t side, sbin_t sch, double x)
+bin_gen(sbin_t sch, double x)
 {
 	for (size_t i = 0U; i < sch.n; i++) {
-		STAT_PUSH(bins[side][sch.bins[i]], sch.fcts[i] * x);
+		STAT_PUSH(bins[sch.bins[i]], sch.fcts[i] * x);
 	}
 	return;
 }
 
 static void
-bin_tdlt(side_t side, sbin_t sch)
+bin_sprd(sbin_t sch)
 {
-	tv_t tdlt = nxquo[side].t - prquo[side].t;
-	const double xt = (double)tdlt / MSECS;
-
-	bin_gen(side, sch, xt);
+	bin_gen(sch, (double)fabsd32(nxquo.m - prquo.m) / (double)nxquo.s);
 	return;
 }
 
 static void
-bin_adev(side_t side, sbin_t sch)
+bin_adev(sbin_t sch)
 {
-	px_t pdlt = fabsd32(nxquo[side].p - prquo[side].p);
-	const double xp = (double)pdlt;
-
-	bin_gen(side, sch, xp);
+	bin_gen(sch, (double)fabsd32(nxquo.m - prquo.m));
 	return;
 }
 
 static void
-bin_velo(side_t side, sbin_t sch)
+bin_velo(sbin_t sch)
 {
-	tv_t tdlt = nxquo[side].t - prquo[side].t;
-	px_t pdlt = fabsd32(nxquo[side].p - prquo[side].p);
+	tv_t tdlt = nxquo.t - prquo.t;
+	px_t pdlt = fabsd32(nxquo.m - prquo.m);
 	const double xp = (double)pdlt * MSECS / tdlt;
 
-	bin_gen(side, sch, xp);
+	bin_gen(sch, xp);
 	return;
 }
 
 static inline double
-desea_gen(side_t side, sbin_t sch, double x)
+des_gen(sbin_t sch, double x)
 {
 	double s = 0.;
 
 	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * x / bins[side][sch.bins[i]].m1;
+		s += sch.fcts[i] * x / bins[sch.bins[i]].m1;
 	}
 	return s;
 }
 
 static px_t
-desea_adev(side_t side, sbin_t sch)
+des_sprd(sbin_t sch)
 {
-	px_t pdlt = nxquo[side].p - prquo[side].p;
-	const double xp = (double)pdlt;
-
-	return quantized32((px_t)desea_gen(side, sch, xp), pdlt);
+	const double xp = (double)(nxquo.m - prquo.m) / (double)nxquo.s;
+	return (px_t)des_gen(sch, xp) * nxquo.s;
 }
 
 static px_t
-desea_velo(side_t side, sbin_t sch)
+des_adev(sbin_t sch)
 {
-	tv_t tdlt = nxquo[side].t - prquo[side].t;
-	px_t pdlt = nxquo[side].p - prquo[side].p;
-	const double xp = (double)pdlt * MSECS / tdlt;
+	return (px_t)des_gen(sch, nxquo.m - prquo.m);
+}
 
-	return quantized32((px_t)desea_gen(side, sch, xp), pdlt);
+static px_t
+des_velo(sbin_t sch)
+{
+	tv_t tdlt = nxquo.t - prquo.t;
+	px_t pdlt = nxquo.m - prquo.m;
+
+	return (px_t)des_gen(sch, (double)pdlt * MSECS / tdlt);
 }
 
 static inline double
-ensea_gen(side_t side, sbin_t sch, double x)
+ens_gen(sbin_t sch, double x)
 {
 	double s = 0.;
 
 	for (size_t i = 0U; i < sch.n; i++) {
-		s += sch.fcts[i] * x * bins[side][sch.bins[i]].m1;
+		s += sch.fcts[i] * x * bins[sch.bins[i]].m1;
 	}
 	return s;
 }
 
 static px_t
-ensea_adev(side_t side, sbin_t sch)
+ens_sprd(sbin_t sch)
 {
-	px_t pdlt = nxquo[side].p - prquo[side].p;
-	const double xp = (double)pdlt;
-
-	return quantized32((px_t)ensea_gen(side, sch, xp), pdlt);
+	const double xp = (double)(nxquo.m - prquo.m) / (double)nxquo.s;
+	return (px_t)ens_gen(sch, xp) * nxquo.s;
 }
 
 static px_t
-ensea_velo(side_t side, sbin_t sch)
+ens_adev(sbin_t sch)
 {
-	tv_t tdlt = nxquo[side].t - prquo[side].t;
-	px_t pdlt = nxquo[side].p - prquo[side].p;
-	const double xp = (double)pdlt * MSECS / tdlt;
+	return (px_t)ens_gen(sch, nxquo.m - prquo.m);
+}
 
-	return quantized32((px_t)ensea_gen(side, sch, xp), pdlt);
+static px_t
+ens_velo(sbin_t sch)
+{
+	tv_t tdlt = nxquo.t - prquo.t;
+	px_t pdlt = nxquo.m - prquo.m;
+
+	return (px_t)ens_gen(sch, (double)pdlt * MSECS / tdlt);
 }
 
 
@@ -399,50 +395,46 @@ offline(void)
 	char *line = NULL;
 	size_t llen = 0UL;
 	ssize_t nrd;
-	void(*bin)(side_t, sbin_t) = bin_tdlt;
+	void(*bin)(sbin_t);
 
-	if (0) {
-		;
-	} else if (adevp) {
+	switch (mode) {
+	case MODE_SPRD:
+		bin = bin_sprd;
+		break;
+	case MODE_ADEV:
 		bin = bin_adev;
-	} else if (velop) {
+		break;
+	case MODE_VELO:
 		bin = bin_velo;
+		break;
+	default:
+		return -1;
 	}
-
+		
 	while ((nrd = getline(&line, &llen, stdin)) > 0 &&
-	       push_init(line, nrd) == WHAT_UNK);
+	       push_init(line, nrd) < 0);
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
-		what_t c = push_beef(line, nrd);
+		int c = push_beef(line, nrd);
 		sbin_t s;
 
-		if (!c) {
+		if (c <= 0) {
 			continue;
 		}
 
 		s = stuf_triag(metr);
 		assert(s.n == 2U);
 
-		if (c & WHAT_BID) {
-			bin(BID, s);
-		}
-		if (c & WHAT_ASK) {
-			bin(ASK, s);
-		}
+		bin(s);
 	}
 	/* finalise our findings */
 	free(line);
 
-	static const char *modes[] = {
-		"tdlt", "adev", "velo",
-	};
-	const char *mode = modes[(adevp << 0) ^ (velop << 1U)];
-	printf("%s\t%lu\t%lu\t\n", mode, modulus, binwdth);
-
+	/* print seasonality curve */
+	printf("%s\t%lu\t%lu\n", modes[mode], modulus, binwdth);
 	for (size_t i = 0U; i < nbins; i++) {
-		stat_t b = stat_eval(bins[BID][i]);
-		stat_t a = stat_eval(bins[ASK][i]);
-		printf("%f\t%g\t%f\t%g\n", b.m0, b.m1, a.m0, a.m1);
+		stat_t b = stat_eval(bins[i]);
+		printf("%f\t%g\t%g\n", b.m0, b.m1, b.m2);
 	}
 	return 0;
 }
@@ -453,44 +445,41 @@ desea(void)
 	char *line = NULL;
 	size_t llen = 0UL;
 	ssize_t nrd;
-	quo_t base;
-	px_t(*desea)(side_t, sbin_t);
+	px_t(*des)(sbin_t);
+	px_t base;
 
-	if (0) {
-		;
-	} else if (adevp) {
-		desea = desea_adev;
-	} else if (velop) {
-		desea = desea_velo;
-	} else {
-		/* we can't do tdelta deseasoning */
+	switch (mode) {
+	case MODE_SPRD:
+		des = des_sprd;
+		break;
+	case MODE_ADEV:
+		des = des_adev;
+		break;
+	case MODE_VELO:
+		des = des_velo;
+		break;
+	default:
 		return -1;
 	}
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0 &&
-	       push_init(line, nrd) == WHAT_UNK);
-	base = (quo_t){prquo[BID].p, prquo[ASK].p};
-	send_quo(metr, base);
+	       push_init(line, nrd) < 0);
+	send_tik(nxquo);
+	base = nxquo.m;
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
-		what_t c = push_beef(line, nrd);
-		sbin_t s;
+		int c = push_beef(line, nrd);
 
-		if (!c) {
+		if (c < 0) {
 			continue;
+		} else if (c > 0) {
+			sbin_t s = stuf_triag(metr);
+			assert(s.n == 2U);
+
+			base += des(s);
 		}
 
-		s = stuf_triag(metr);
-		assert(s.n == 2U);
-
-		if (c & WHAT_BID) {
-			base.b += desea(BID, s);
-		}
-		if (c & WHAT_ASK) {
-			base.a += desea(ASK, s);
-		}
-
-		send_quo(metr, base);
+		send_tik((tik_t){metr, base, nxquo.s});
 	}
 	/* finalise our findings */
 	free(line);
@@ -503,44 +492,41 @@ ensea(void)
 	char *line = NULL;
 	size_t llen = 0UL;
 	ssize_t nrd;
-	quo_t base;
-	px_t(*ensea)(side_t, sbin_t);
+	px_t(*ens)(sbin_t);
+	px_t base;
 
-	if (0) {
-		;
-	} else if (adevp) {
-		ensea = ensea_adev;
-	} else if (velop) {
-		ensea = ensea_velo;
-	} else {
-		/* we can't season with tdeltas */
+	switch (mode) {
+	case MODE_SPRD:
+		ens = ens_sprd;
+		break;
+	case MODE_ADEV:
+		ens = ens_adev;
+		break;
+	case MODE_VELO:
+		ens = ens_velo;
+		break;
+	default:
 		return -1;
 	}
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0 &&
-	       push_init(line, nrd) == WHAT_UNK);
-	base = (quo_t){prquo[BID].p, prquo[ASK].p};
-	send_quo(metr, base);
+	       push_init(line, nrd) < 0);
+	send_tik(nxquo);
+	base = nxquo.m;
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
-		what_t c = push_beef(line, nrd);
-		sbin_t s;
+		int c = push_beef(line, nrd);
 
-		if (!c) {
+		if (c < 0) {
 			continue;
+		} else if (c > 0) {
+			sbin_t s = stuf_triag(metr);
+			assert(s.n == 2U);
+
+			base += ens(s);
 		}
 
-		s = stuf_triag(metr);
-		assert(s.n == 2U);
-
-		if (c & WHAT_BID) {
-			base.b += ensea(BID, s);
-		}
-		if (c & WHAT_ASK) {
-			base.a += ensea(ASK, s);
-		}
-
-		send_quo(metr, base);
+		send_tik((tik_t){metr, base, nxquo.s});
 	}
 	/* finalise our findings */
 	free(line);
@@ -565,8 +551,12 @@ rdsea(const char *fn)
 		goto out;
 	}
 	/* first line holds the mode and widths*/
-	adevp = !memcmp(line, "adev\t", 5U);
-	velop = !memcmp(line, "velo\t", 5U);
+	for (mode_t m = MODE_DFLT; ++m < NMODES;) {
+		if (!memcmp(line, modes[m], 4U)) {
+			mode = m;
+			break;
+		}
+	}
 	with (char *on = line + 4U) {
 		modulus = strtoul(++on, &on, 10U);
 		binwdth = strtoul(++on, &on, 10U);
@@ -590,13 +580,11 @@ rd:
 		}
 		/* should be at least 4 values */
 		on = line;
-		bins[BID][i].m0 = strtod(on, &on);
+		bins[i].m0 = strtod(on, &on);
 		on++;
-		bins[BID][i].m1 = strtod(on, &on);
+		bins[i].m1 = strtod(on, &on);
 		on++;
-		bins[ASK][i].m0 = strtod(on, &on);
-		on++;
-		bins[ASK][i].m1 = strtod(on, &on);
+		bins[i].m2 = strtod(on, &on);
 	}
 out:
 	free(line);
@@ -639,14 +627,15 @@ Error: window width parameter must be positive.");
 		binwdth *= MSECS;
 	}
 
-	adevp = argi->absdev_flag;
-	velop = argi->velocity_flag;
-
-	if (UNLIKELY(adevp && velop)) {
+	if (UNLIKELY(argi->absdev_flag && argi->velocity_flag)) {
 		errno = 0, serror("\
 Error: only one of --absdev and --velocity can be specified.");
 		rc = 1;
 		goto out;
+	} else if (argi->absdev_flag) {
+		mode = MODE_ADEV;
+	} else if (argi->velocity_flag) {
+		mode = MODE_VELO;
 	}
 
 	if (argi->nargs) {
@@ -669,8 +658,7 @@ Error: modulus and window parameters result in 0 bins.");
 	}
 
 	/* get the tbins and bins on the way */
-	bins[BID] = calloc(nbins, sizeof(**bins));
-	bins[ASK] = calloc(nbins, sizeof(**bins));
+	bins = calloc(nbins, sizeof(*bins));
 
 	if (!argi->nargs) {
 		rc = offline() < 0;
@@ -687,8 +675,7 @@ Error: cannot process seasonality file `%s'", *argi->args);
 		}
 	}
 
-	free(bins[BID]);
-	free(bins[ASK]);
+	free(bins);
 
 out:
 	yuck_free(argi);
