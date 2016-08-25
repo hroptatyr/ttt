@@ -436,6 +436,10 @@ offline(void)
 		stat_t b = stat_eval(bins[i]);
 		printf("%f\t%g\t%g\n", b.m0, b.m1, b.m2);
 	}
+	/* print medians */
+	with (stat_t b = stat_eval(bins[nbins - 1U])) {
+		printf("%f\t%g\t%g\n", b.m0, b.m1, b.m2);
+	}
 	return 0;
 }
 
@@ -586,6 +590,20 @@ rd:
 		on++;
 		bins[i].m2 = strtod(on, &on);
 	}
+	if (UNLIKELY(getline(&line, &llen, sp) <= 0)) {
+		/* great */
+		rc = -1;
+		goto out;
+	}
+	/* also read medians */
+	with (char *on = line) {
+		bins[nbins].m0 = strtod(on, &on);
+		on++;
+		bins[nbins].m1 = strtod(on, &on);
+		on++;
+		bins[nbins].m2 = strtod(on, &on);
+	}
+
 out:
 	free(line);
 	fclose(sp);
@@ -658,7 +676,7 @@ Error: modulus and window parameters result in 0 bins.");
 	}
 
 	/* get the tbins and bins on the way */
-	bins = calloc(nbins, sizeof(*bins));
+	bins = calloc(nbins + 1U/*for medians*/, sizeof(*bins));
 
 	if (!argi->nargs) {
 		rc = offline() < 0;
