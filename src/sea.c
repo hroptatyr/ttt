@@ -352,7 +352,7 @@ des_velo(sbin_t sch)
 	tv_t tdlt = nxquo.t - prquo.t;
 	px_t pdlt = nxquo.m - prquo.m;
 
-	return (px_t)des_gen(sch, (double)pdlt * MSECS / tdlt);
+	return (px_t)(des_gen(sch, (double)pdlt * MSECS / tdlt) * tdlt / MSECS);
 }
 
 static inline double
@@ -385,7 +385,7 @@ ens_velo(sbin_t sch)
 	tv_t tdlt = nxquo.t - prquo.t;
 	px_t pdlt = nxquo.m - prquo.m;
 
-	return (px_t)ens_gen(sch, (double)pdlt * MSECS / tdlt);
+	return (px_t)(ens_gen(sch, (double)pdlt * MSECS / tdlt) * tdlt / MSECS);
 }
 
 
