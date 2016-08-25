@@ -603,6 +603,12 @@ rd:
 		on++;
 		bins[nbins].m2 = strtod(on, &on);
 	}
+	/* scale by medians */
+	for (size_t i = 0U; i < nbins; i++) {
+		bins[i].m0 /= bins[nbins].m0;
+		bins[i].m1 /= bins[nbins].m1;
+		bins[i].m2 /= bins[nbins].m2;
+	}
 
 out:
 	free(line);
