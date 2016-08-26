@@ -337,6 +337,7 @@ des_gen(sbin_t sch, double x)
 	for (size_t i = 0U; i < sch.n; i++) {
 		s += sch.fcts[i] * x / bins[sch.bins[i]].m1;
 	}
+	s *= bins[nbins].m1;
 	return s;
 }
 
@@ -370,6 +371,7 @@ ens_gen(sbin_t sch, double x)
 	for (size_t i = 0U; i < sch.n; i++) {
 		s += sch.fcts[i] * x * bins[sch.bins[i]].m1;
 	}
+	s /= bins[nbins].m1;
 	return s;
 }
 
