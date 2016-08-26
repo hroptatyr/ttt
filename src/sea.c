@@ -174,7 +174,7 @@ stat_eval(stat_t s)
 
 /* 1-decompos */
 static sbin_t
-stuf_triag(tv_t t)
+stuf_trig(tv_t t)
 {
 	tv_t bin = t / binwdth, sub = t % binwdth;
 	size_t bin1 = (bin + 0U) % nbins;
@@ -182,6 +182,13 @@ stuf_triag(tv_t t)
 	double fac1 = (1 - (double)sub / binwdth);
 	double fac2 = (0 + (double)sub / binwdth);
 	return (sbin_t){2U, (size_t[]){bin1, bin2}, (double[]){fac1, fac2}};
+}
+
+static sbin_t
+stuf_triv(tv_t t)
+{
+	tv_t bin = (t / binwdth) % nbins;
+	return (sbin_t){1U, (size_t[]){bin}, (double[]){1.}};
 }
 
 
@@ -422,7 +429,7 @@ offline(void)
 			continue;
 		}
 
-		s = stuf_triag(metr);
+		s = stuf_trig(metr);
 		assert(s.n == 2U);
 
 		bin(s);
@@ -477,7 +484,7 @@ desea(void)
 		if (c < 0) {
 			continue;
 		} else if (c > 0) {
-			sbin_t s = stuf_triag(metr);
+			sbin_t s = stuf_trig(metr);
 			assert(s.n == 2U);
 
 			base += des(s);
@@ -524,7 +531,7 @@ ensea(void)
 		if (c < 0) {
 			continue;
 		} else if (c > 0) {
-			sbin_t s = stuf_triag(metr);
+			sbin_t s = stuf_trig(metr);
 			assert(s.n == 2U);
 
 			base += ens(s);
