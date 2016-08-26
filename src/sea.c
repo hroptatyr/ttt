@@ -484,8 +484,8 @@ desea(void)
 		if (c < 0) {
 			continue;
 		} else if (c > 0) {
-			sbin_t s = stuf_trig(metr);
-			assert(s.n == 2U);
+			sbin_t s = stuf_triv(metr);
+			assert(s.n == 1U);
 
 			base += des(s);
 		}
@@ -531,8 +531,8 @@ ensea(void)
 		if (c < 0) {
 			continue;
 		} else if (c > 0) {
-			sbin_t s = stuf_trig(metr);
-			assert(s.n == 2U);
+			sbin_t s = stuf_triv(metr);
+			assert(s.n == 1U);
 
 			base += ens(s);
 		}
