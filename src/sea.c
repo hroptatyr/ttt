@@ -595,7 +595,7 @@ rd:
 		on++;
 		bins[i].m1 = strtod(on, &on);
 		on++;
-		bins[i].m2 = strtod(on, &on);
+		bins[i].m2 = sqrt(strtod(on, &on));
 	}
 	if (UNLIKELY(getline(&line, &llen, sp) <= 0)) {
 		/* great */
@@ -608,7 +608,7 @@ rd:
 		on++;
 		bins[nbins].m1 = strtod(on, &on);
 		on++;
-		bins[nbins].m2 = strtod(on, &on);
+		bins[nbins].m2 = sqrt(strtod(on, &on));
 	}
 	/* scale by medians */
 	for (size_t i = 0U; i < nbins; i++) {
