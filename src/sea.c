@@ -658,15 +658,16 @@ Error: window width parameter must be positive.");
 		binwdth *= MSECS;
 	}
 
-	if (UNLIKELY(argi->absdev_flag && argi->velocity_flag)) {
-		errno = 0, serror("\
-Error: only one of --absdev and --velocity can be specified.");
-		rc = 1;
-		goto out;
-	} else if (argi->absdev_flag) {
-		mode = MODE_ADEV;
-	} else if (argi->velocity_flag) {
-		mode = MODE_VELO;
+	if (argi->mode_arg) {
+		if (0) {
+			;
+		} else if (!strcmp(argi->mode_arg, "sprd")) {
+			mode = MODE_SPRD;
+		} else if (!strcmp(argi->mode_arg, "adev")) {
+			mode = MODE_ADEV;
+		} else if (!strcmp(argi->mode_arg, "velo")) {
+			mode = MODE_VELO;
+		}
 	}
 
 	if (argi->nargs) {
