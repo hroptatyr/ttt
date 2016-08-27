@@ -344,8 +344,12 @@ des_gen(sbin_t sch, double x)
 static px_t
 des_sprd(sbin_t sch)
 {
-	const double xp = (double)(nxquo.m - prquo.m) / (double)nxquo.s;
-	return (px_t)des_gen(sch, xp) * nxquo.s;
+	if (LIKELY(nxquo.s > 0.df)) {
+		const double xp = (double)(nxquo.m - prquo.m) / (double)nxquo.s;
+		return (px_t)des_gen(sch, xp) * nxquo.s;
+	}
+	/* don't do him */
+	return nxquo.m - prquo.m;
 }
 
 static px_t
@@ -378,8 +382,12 @@ ens_gen(sbin_t sch, double x)
 static px_t
 ens_sprd(sbin_t sch)
 {
-	const double xp = (double)(nxquo.m - prquo.m) / (double)nxquo.s;
-	return (px_t)ens_gen(sch, xp) * nxquo.s;
+	if (LIKELY(nxquo.s > 0.df)) {
+		const double xp = (double)(nxquo.m - prquo.m) / (double)nxquo.s;
+		return (px_t)ens_gen(sch, xp) * nxquo.s;
+	}
+	/* return him unfiltered */
+	return nxquo.m - prquo.m;
 }
 
 static px_t
