@@ -344,8 +344,12 @@ des_gen(sbin_t sch, double x)
 static px_t
 des_sprd(sbin_t sch)
 {
-	const double xp = (double)(nxquo.m - prquo.m) / (double)nxquo.s;
-	return (px_t)des_gen(sch, xp) * nxquo.s;
+	if (LIKELY(nxquo.s > 0.df)) {
+		const double xp = (double)(nxquo.m - prquo.m) / (double)nxquo.s;
+		return (px_t)des_gen(sch, xp) * nxquo.s;
+	}
+	/* don't do him */
+	return nxquo.m - prquo.m;
 }
 
 static px_t
@@ -378,8 +382,12 @@ ens_gen(sbin_t sch, double x)
 static px_t
 ens_sprd(sbin_t sch)
 {
-	const double xp = (double)(nxquo.m - prquo.m) / (double)nxquo.s;
-	return (px_t)ens_gen(sch, xp) * nxquo.s;
+	if (LIKELY(nxquo.s > 0.df)) {
+		const double xp = (double)(nxquo.m - prquo.m) / (double)nxquo.s;
+		return (px_t)ens_gen(sch, xp) * nxquo.s;
+	}
+	/* return him unfiltered */
+	return nxquo.m - prquo.m;
 }
 
 static px_t
@@ -439,14 +447,20 @@ offline(void)
 	/* finalise our findings */
 	free(line);
 
+	/* calc medians */
+	for (size_t i = 0U; i < nbins; i++) {
+		STAT_PUSH(bins[nbins], bins[i].m1);
+	}
+
 	/* print seasonality curve */
 	printf("%s\t%lu\t%lu\n", modes[mode], modulus, binwdth);
 	for (size_t i = 0U; i < nbins; i++) {
 		stat_t b = stat_eval(bins[i]);
-		printf("%f\t%g\t%g\n", b.m0, b.m1, b.m2);
+		printf("%f\t%g\t%g\n",
+			b.m0, b.m0 > 0 ? b.m1 : 1, b.m0 > 0 ? b.m2 : 1);
 	}
 	/* print medians */
-	with (stat_t b = stat_eval(bins[nbins - 1U])) {
+	with (stat_t b = stat_eval(bins[nbins])) {
 		printf("%f\t%g\t%g\n", b.m0, b.m1, b.m2);
 	}
 	return 0;
