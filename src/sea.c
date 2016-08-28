@@ -329,6 +329,13 @@ bin_velo(sbin_t sch)
 	return;
 }
 
+static void
+bin_tdlt(sbin_t sch)
+{
+	bin_gen(sch, (double)(nxquo.t - prquo.t) / MSECS);
+	return;
+}
+
 static inline double
 des_gen(sbin_t sch, double x)
 {
@@ -365,6 +372,12 @@ des_velo(sbin_t sch)
 	px_t pdlt = nxquo.m - prquo.m;
 
 	return (px_t)(des_gen(sch, (double)pdlt * MSECS / tdlt) * tdlt / MSECS);
+}
+
+static tv_t
+des_tdlt(sbin_t sch)
+{
+	return (tv_t)(des_gen(sch, (double)(nxquo.t - prquo.t) / MSECS) * MSECS);
 }
 
 static inline double
@@ -405,6 +418,12 @@ ens_velo(sbin_t sch)
 	return (px_t)(ens_gen(sch, (double)pdlt * MSECS / tdlt) * tdlt / MSECS);
 }
 
+static tv_t
+ens_tdlt(sbin_t sch)
+{
+	return (tv_t)(ens_gen(sch, (double)(nxquo.t - prquo.t) / MSECS) * MSECS);
+}
+
 
 static int
 offline(void)
@@ -423,6 +442,9 @@ offline(void)
 		break;
 	case MODE_VELO:
 		bin = bin_velo;
+		break;
+	case MODE_TDLT:
+		bin = bin_tdlt;
 		break;
 	default:
 		return -1;
@@ -467,7 +489,7 @@ offline(void)
 }
 
 static int
-desea(void)
+desea(bool deseap)
 {
 	char *line = NULL;
 	size_t llen = 0UL;
@@ -477,14 +499,15 @@ desea(void)
 
 	switch (mode) {
 	case MODE_SPRD:
-		des = des_sprd;
+		des = deseap ? des_sprd : ens_sprd;
 		break;
 	case MODE_ADEV:
-		des = des_adev;
+		des = deseap ? des_adev : ens_adev;
 		break;
 	case MODE_VELO:
-		des = des_velo;
+		des = deseap ? des_velo : ens_velo;
 		break;
+	case MODE_TDLT:
 	default:
 		return -1;
 	}
@@ -514,24 +537,21 @@ desea(void)
 }
 
 static int
-ensea(void)
+deseaT(bool deseap)
 {
 	char *line = NULL;
 	size_t llen = 0UL;
 	ssize_t nrd;
-	px_t(*ens)(sbin_t);
-	px_t base;
+	tv_t(*des)(sbin_t);
+	tv_t amtr;
 
 	switch (mode) {
+	case MODE_TDLT:
+		des = deseap ? des_tdlt : ens_tdlt;
+		break;
 	case MODE_SPRD:
-		ens = ens_sprd;
-		break;
 	case MODE_ADEV:
-		ens = ens_adev;
-		break;
 	case MODE_VELO:
-		ens = ens_velo;
-		break;
 	default:
 		return -1;
 	}
@@ -539,21 +559,21 @@ ensea(void)
 	while ((nrd = getline(&line, &llen, stdin)) > 0 &&
 	       push_init(line, nrd) < 0);
 	send_tik(nxquo);
-	base = nxquo.m;
+	amtr = metr;
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
 		int c = push_beef(line, nrd);
 
-		if (c < 0) {
+		if (c <= 0) {
 			continue;
-		} else if (c > 0) {
-			sbin_t s = stuf_triv(metr);
-			assert(s.n == 1U);
-
-			base += ens(s);
 		}
 
-		send_tik((tik_t){metr, base, nxquo.s});
+		sbin_t s = stuf_triv(metr);
+		assert(s.n == 1U);
+
+		amtr += des(s);
+
+		send_tik((tik_t){amtr, nxquo.m, nxquo.s});
 	}
 	/* finalise our findings */
 	free(line);
@@ -683,6 +703,8 @@ Error: window width parameter must be positive.");
 			mode = MODE_ADEV;
 		} else if (!strcmp(argi->mode_arg, "velo")) {
 			mode = MODE_VELO;
+		} else if (!strcmp(argi->mode_arg, "tdlt")) {
+			mode = MODE_TDLT;
 		}
 	}
 
@@ -716,10 +738,17 @@ Error: modulus and window parameters result in 0 bins.");
 Error: cannot process seasonality file `%s'", *argi->args);
 		rc = 1;
 	} else {
-		if (!argi->reverse_flag) {
-			rc = desea() < 0;
-		} else {
-			rc = ensea() < 0;
+		switch (mode) {
+		case MODE_SPRD:
+		case MODE_ADEV:
+		case MODE_VELO:
+			rc = desea(!argi->reverse_flag) < 0;
+			break;
+		case MODE_TDLT:
+			rc = deseaT(!argi->reverse_flag) < 0;
+			break;
+		default:
+			rc = 1;
 		}
 	}
 
