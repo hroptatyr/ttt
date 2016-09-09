@@ -205,6 +205,20 @@ fra_LDADD = libdfp.a
 fra_LDADD += -ldecimal
 BUILT_SOURCES += fra.yucc
 
+bin_PROGRAMS += spread
+spread_SOURCES = spread.c spread.yuck
+spread_SOURCES += hash.c hash.h
+spread_SOURCES += version.c version.h
+spread_CPPFLAGS = $(AM_CPPFLAGS)
+spread_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+spread_CPPFLAGS += $(dfp754_CFLAGS)
+spread_CPPFLAGS += -DHAVE_VERSION_H
+spread_LDFLAGS = $(AM_LDFLAGS)
+spread_LDFLAGS += $(dfp754_LIBS)
+spread_LDADD = libdfp.a
+spread_LDADD += -ldecimal
+BUILT_SOURCES += spread.yucc
+
 
 ## version rules
 version.c: version.c.in $(top_builddir)/.version

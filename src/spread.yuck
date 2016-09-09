@@ -1,0 +1,5 @@
+Usage: spread +PAIR1 -PAIR2 < FILE
+
+Calculate the spread contract and output in the same format as FILE.
+
+  --name=NAME           Name of the spread instrument.
