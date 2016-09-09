@@ -202,10 +202,6 @@ push_beef(char *ln, size_t UNUSED(lz))
 	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
 		/* got metronome cock-up */
 		return -1;
-	} else if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
-		return -1;
-	} else if (UNLIKELY(*on++ != '\t')) {
-		return -1;
 	}
 
 	with (hx_t hx) {
