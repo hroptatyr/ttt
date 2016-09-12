@@ -217,6 +217,8 @@ next_acc(void)
 again:
 	if (UNLIKELY(getline(&line, &llen, afp) <= 0)) {
 		free(line);
+		line = NULL;
+		llen = 0UL;
 		return NOT_A_TIME;
 	}
 
