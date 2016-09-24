@@ -242,56 +242,72 @@ again:
 static int
 offline(void)
 {
-	static const char *sstr[3U] = {
-		"UNX", "LONG", "SHORT"
-	};
+	static const char sstr[3U] = "FLS";
 	tv_t alst;
 	tv_t amtr;
 	/* 3 time based moments */
-	size_t cagg[3U] = {0U, 0U, 0U};
-	tv_t tagg[3U] = {0U, 0U, 0U};
-	qx_t xagg[3U] = {0.dd, 0.dd, 0.dd};
+	tv_t tagg[countof(sstr)] = {};
 	/* higher valence metrics */
-	size_t ctns[countof(cagg) * countof(cagg)] = {};
+	size_t wins[countof(sstr) * countof(sstr)] = {};
+	size_t cnts[countof(sstr) * countof(sstr)] = {};
 	size_t olsd = 0U;
+	acc_t l;
+#define CNTS(i, j)	(cnts[i + countof(sstr) * j])
 
 	(void)next_quo();
 	amtr = next_acc();
 
-	while ((alst = amtr, amtr = next_acc()) < NOT_A_TIME) {
+	while ((l = a, alst = amtr, amtr = next_acc()) < NOT_A_TIME) {
 		const tv_t tdif = amtr - alst;
-		const qx_t xdif = a.base;
+		//const qx_t Bdif = a.base - l.base;
+		//const qx_t Tdif = a.term - l.term;
+		//const qx_t Xdif = a.comm - l.comm;
 		const size_t side = (a.base != 0.dd) + (a.base < 0.dd);
 
-		cagg[side]++;
 		tagg[side] += tdif;
-		xagg[side] += xdif;
+		//Bagg[side] += Bdif;
+		//Tagg[side] += Tdif;
+		//Xagg[side] += Xdif;
 
-		ctns[side * countof(cagg) + olsd]++;
+		CNTS(olsd, side)++;
 		olsd = side;
 	}
 
 	char buf[256U];
 	size_t len;
-	for (size_t i = 0U; i < 3U; i++) {
-		len = (memcpy(buf, sstr[i], i + 3U), i + 3U);
+	for (size_t i = 0U; i < countof(sstr); i++) {
+		size_t cagg = 0U;
+		for (size_t j = 0U; j < countof(sstr); j++) {
+			cagg += CNTS(j, i);
+		}
+		len = 0U;
+		buf[len++] = sstr[i];
 		buf[len++] = '\t';
-		len += snprintf(buf + len, sizeof(buf) - len, "%zu", cagg[i]);
+		len += snprintf(buf + len, sizeof(buf) - len, "%zu", cagg);
 		buf[len++] = '\t';
 		len += tvtostr(buf + len, sizeof(buf) - len, tagg[i]);
-		buf[len++] = '\t';
-		len += qxtostr(buf + len, sizeof(buf) - len, xagg[i]);
 		buf[len++] = '\n';
 
 		fwrite(buf, 1, len, stdout);
 	}
 
-	fputs("\nnew v/old >\n", stdout);
-	for (size_t i = 0U; i < countof(cagg); i++) {
+	len = 0U;
+	buf[len++] = '\n';
+	buf[len++] = '\n';
+	for (size_t i = 0U; i < countof(sstr); i++) {
+		buf[len++] = '\t';
+		buf[len++] = sstr[i];
+		len += (memcpy(buf + len, "new", 3U), 3U);
+	}
+	buf[len++] = '\n';
+	fwrite(buf, 1, len, stdout);
+
+	for (size_t i = 0U; i < countof(sstr); i++) {
 		len = 0U;
-		len = (memcpy(buf, sstr[i], i + 3U), i + 3U);
-		for (size_t j = 0U; j < countof(cagg); j++) {
-			const size_t v = ctns[i * countof(cagg) + j];
+		buf[len++] = sstr[i];
+		len += (memcpy(buf + len, "old", 3U), 3U);
+		for (size_t j = 0U; j < countof(sstr); j++) {
+			const size_t v = CNTS(i, j);
 			buf[len++] = '\t';
 			len += snprintf(buf + len, sizeof(buf) - len, "%zu", v);
 		}
