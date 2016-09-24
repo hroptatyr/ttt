@@ -69,6 +69,7 @@ typedef struct {
 } eva_t;
 
 static tv_t intv = 10 * MSECS;
+static unsigned int edgp;
 
 static FILE *qfp;
 static FILE *afp;
@@ -273,7 +274,7 @@ offline(void)
 
 	do {
 		const tv_t tdif = amtr - alst;
-		const qx_t x = a.base;
+		const qx_t x = !edgp ? a.base : a.base - l.base;
 		const size_t side = (x != 0.dd) + (x < 0.dd);
 
 		tagg[olsd] += tdif;
@@ -375,6 +376,8 @@ main(int argc, char *argv[])
 		rc = 1;
 		goto out;
 	}
+
+	edgp = argi->edge_flag;
 
 	if (UNLIKELY((afp = stdin) == NULL)) {
 		errno = 0, serror("\
