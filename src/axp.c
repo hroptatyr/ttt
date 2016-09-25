@@ -69,6 +69,7 @@ typedef struct {
 } eva_t;
 
 static tv_t intv = 10 * MSECS;
+static unsigned int edgp;
 
 static FILE *qfp;
 static FILE *afp;
@@ -164,6 +165,7 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 static tv_t nexv = NOT_A_TIME;
 static quo_t q;
 static acc_t a;
+static acc_t l;
 
 static tv_t
 next_quo(void)
@@ -233,65 +235,125 @@ again:
 	/* get currency indicator */
 	hx = strtohx(on, &on);
 	/* snarf the base amount */
-	newa.base = strtoqx(++on, &on);
-	newa.term = strtoqx(++on, &on);
-	newa.comm = strtoqx(++on, &on);
+	a.base = strtoqx(++on, &on);
+	a.term = strtoqx(++on, &on);
+	a.comm = strtoqx(++on, &on);
 	return newm;
+}
+
+static inline qx_t
+calc_rpnl(void)
+{
+	static qx_t accpnl = 0.dd;
+	qx_t this = (a.term * l.base - a.base * l.term)  / (l.base - a.base);
+	qx_t pnl = this - accpnl;
+
+	/* keep state */
+	accpnl = this;
+	return pnl;
 }
 
 static int
 offline(void)
 {
-	static const char *sstr[3U] = {
-		"UNX", "LONG", "SHORT"
-	};
+	static const char sstr[3U] = "FLS";
 	tv_t alst;
 	tv_t amtr;
 	/* 3 time based moments */
-	size_t cagg[3U] = {0U, 0U, 0U};
-	tv_t tagg[3U] = {0U, 0U, 0U};
-	qx_t xagg[3U] = {0.dd, 0.dd, 0.dd};
+	tv_t tagg[countof(sstr)] = {};
 	/* higher valence metrics */
-	size_t ctns[countof(cagg) * countof(cagg)] = {};
+	size_t wins[countof(sstr) * countof(sstr)] = {};
+	size_t cnts[countof(sstr) * countof(sstr)] = {};
 	size_t olsd = 0U;
+#define _M(a, i, j)	(a[i + countof(sstr) * j])
+#define CNTS(i, j)	(_M(cnts, i, j))
+#define WINS(i, j)	(_M(wins, i, j))
 
 	(void)next_quo();
-	amtr = next_acc();
+	alst = amtr = next_acc();
 
-	while ((alst = amtr, amtr = next_acc()) < NOT_A_TIME) {
+	do {
 		const tv_t tdif = amtr - alst;
-		const qx_t xdif = a.base;
-		const size_t side = (a.base != 0.dd) + (a.base < 0.dd);
+		const qx_t x = !edgp ? a.base : a.base - l.base;
+		const size_t side = (x != 0.dd) + (x < 0.dd);
 
-		cagg[side]++;
-		tagg[side] += tdif;
-		xagg[side] += xdif;
+		tagg[olsd] += tdif;
 
-		ctns[side * countof(cagg) + olsd]++;
+		CNTS(olsd, side)++;
+		/* check for winners */
+		WINS(olsd, side) += calc_rpnl() > 0.dd;
+
 		olsd = side;
-	}
+	} while ((l = a, alst = amtr, amtr = next_acc()) < NOT_A_TIME);
 
 	char buf[256U];
 	size_t len;
-	for (size_t i = 0U; i < 3U; i++) {
-		len = (memcpy(buf, sstr[i], i + 3U), i + 3U);
+
+	/* overview */
+	fputs("\thits\tcount\ttime\n", stdout);
+	for (size_t i = 0U; i < countof(sstr); i++) {
+		size_t hits = 0U;
+		size_t cagg = 0U;
+
+		/* count wins and states */
+		for (size_t j = 0U; j < countof(sstr); j++) {
+			hits += WINS(i, j);
+		}
+		for (size_t j = 0U; j < countof(sstr); j++) {
+			cagg += CNTS(j, i);
+		}
+		len = 0U;
+		buf[len++] = sstr[i];
 		buf[len++] = '\t';
-		len += snprintf(buf + len, sizeof(buf) - len, "%zu", cagg[i]);
+		len += snprintf(buf + len, sizeof(buf) - len, "%zu", hits);
+		buf[len++] = '\t';
+		len += snprintf(buf + len, sizeof(buf) - len, "%zu", cagg);
 		buf[len++] = '\t';
 		len += tvtostr(buf + len, sizeof(buf) - len, tagg[i]);
-		buf[len++] = '\t';
-		len += qxtostr(buf + len, sizeof(buf) - len, xagg[i]);
 		buf[len++] = '\n';
 
 		fwrite(buf, 1, len, stdout);
 	}
 
-	fputs("\nnew v/old >\n", stdout);
-	for (size_t i = 0U; i < countof(cagg); i++) {
+	/* transiitions */
+	len = 0U;
+	buf[len++] = '\n';
+	for (size_t i = 0U; i < countof(sstr); i++) {
+		buf[len++] = '\t';
+		buf[len++] = sstr[i];
+		len += (memcpy(buf + len, "new", 3U), 3U);
+	}
+	buf[len++] = '\n';
+	fwrite(buf, 1, len, stdout);
+	for (size_t i = 0U; i < countof(sstr); i++) {
 		len = 0U;
-		len = (memcpy(buf, sstr[i], i + 3U), i + 3U);
-		for (size_t j = 0U; j < countof(cagg); j++) {
-			const size_t v = ctns[i * countof(cagg) + j];
+		buf[len++] = sstr[i];
+		len += (memcpy(buf + len, "old", 3U), 3U);
+		for (size_t j = 0U; j < countof(sstr); j++) {
+			const size_t v = CNTS(i, j);
+			buf[len++] = '\t';
+			len += snprintf(buf + len, sizeof(buf) - len, "%zu", v);
+		}
+		buf[len++] = '\n';
+		fwrite(buf, 1, len, stdout);
+	}
+
+	/* hits */
+	len = 0U;
+	buf[len++] = '\n';
+	for (size_t i = 0U; i < countof(sstr); i++) {
+		buf[len++] = '\t';
+		buf[len++] = sstr[i];
+		len += (memcpy(buf + len, "new", 3U), 3U);
+	}
+	buf[len++] = '\n';
+	fwrite(buf, 1, len, stdout);
+	for (size_t i = 0U; i < countof(sstr); i++) {
+		len = 0U;
+		buf[len++] = sstr[i];
+		len += (memcpy(buf + len, "old", 3U), 3U);
+		for (size_t j = 0U; j < countof(sstr); j++) {
+			const size_t v = WINS(i, j);
 			buf[len++] = '\t';
 			len += snprintf(buf + len, sizeof(buf) - len, "%zu", v);
 		}
@@ -314,6 +376,8 @@ main(int argc, char *argv[])
 		rc = 1;
 		goto out;
 	}
+
+	edgp = argi->edge_flag;
 
 	if (UNLIKELY((afp = stdin) == NULL)) {
 		errno = 0, serror("\

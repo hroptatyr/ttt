@@ -4,3 +4,6 @@ Analyse the market during periods of exposure.
 
 Output is number of regime switches, total time spent within a regime,
 and the total amount invested within a regime.
+
+  -e, --edge            Treat direction changes as regime switch,
+                        default: levels.
