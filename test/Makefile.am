@@ -33,5 +33,11 @@ TESTS += opt_01.clit
 TESTS += opt_02.clit
 EXTRA_DIST += EURUSD.s
 
+TESTS += accsum_01.clit
+TESTS += accsum_02.clit
+TESTS += accsum_03.clit
+TESTS += accsum_04.clit
+EXTRA_DIST += test1.acc
+EXTRA_DIST += test2.acc
 
 ## Makefile.am ends here
