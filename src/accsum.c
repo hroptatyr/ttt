@@ -318,6 +318,7 @@ offline(void)
 	/* transiitions */
 	len = 0U;
 	buf[len++] = '\n';
+	len += (memcpy(buf + len, "count", 5U), 5U);
 	for (size_t i = 0U; i < countof(sstr); i++) {
 		buf[len++] = '\t';
 		buf[len++] = sstr[i];
@@ -341,6 +342,7 @@ offline(void)
 	/* hits */
 	len = 0U;
 	buf[len++] = '\n';
+	len += (memcpy(buf + len, "hits", 4U), 4U);
 	for (size_t i = 0U; i < countof(sstr); i++) {
 		buf[len++] = '\t';
 		buf[len++] = sstr[i];
@@ -364,7 +366,7 @@ offline(void)
 }
 
 
-#include "axp.yucc"
+#include "accsum.yucc"
 
 int
 main(int argc, char *argv[])

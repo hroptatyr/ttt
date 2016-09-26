@@ -1,0 +1,18 @@
+#!/usr/bin/clitoris
+
+$ accsum --edge < "${srcdir}/test1.acc"
+	hits	count	time
+F	0	0	0.000000000
+L	2	2	18724.727000000
+S	0	2	5.756000000
+
+count	Fnew	Lnew	Snew
+Fold	0	1	0
+Lold	0	1	1
+Sold	0	0	1
+
+hits	Fnew	Lnew	Snew
+Fold	0	0	0
+Lold	0	1	1
+Sold	0	0	0
+$
