@@ -6,6 +6,11 @@ F	0	1	0.000000000
 L	2	3	18730.483000000
 S	0	0	0.000000000
 
+	rpnl
+L	500.00
+S	0.00
+SUM	500.00
+
 count	Fnew	Lnew	Snew
 Fold	0	1	0
 Lold	1	2	0
