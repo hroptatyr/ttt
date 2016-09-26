@@ -364,7 +364,7 @@ offline(void)
 }
 
 
-#include "axp.yucc"
+#include "accsum.yucc"
 
 int
 main(int argc, char *argv[])
