@@ -262,6 +262,8 @@ offline(void)
 	/* stats per side */
 	tv_t tagg[countof(sstr)] = {};
 	qx_t rpnl[countof(sstr)] = {};
+	qx_t best[countof(sstr)] = {};
+	qx_t wrst[countof(sstr)] = {};
 	/* higher valence metrics */
 	size_t wins[countof(sstr) * countof(sstr)] = {};
 	size_t cnts[countof(sstr) * countof(sstr)] = {};
@@ -284,6 +286,8 @@ offline(void)
 		/* check for winners */
 		with (qx_t r = calc_rpnl()) {
 			rpnl[olsd] += r;
+			best[olsd] = best[olsd] >= r ? best[olsd] : r;
+			wrst[olsd] = wrst[olsd] <= r ? wrst[olsd] : r;
 			WINS(olsd, side) += r > 0.dd;
 		}
 
@@ -320,14 +324,20 @@ offline(void)
 	}
 
 	/* rpnl */
-	fputs("\n\trpnl\n", stdout);
+	fputs("\n\trpnl\tbest\tworst\n", stdout);
 	for (size_t i = 1U; i < countof(sstr); i++) {
 		qx_t r = quantized64(rpnl[i], l.term);
+		qx_t B = quantized64(best[i], l.term);
+		qx_t W = quantized64(wrst[i], l.term);
 
 		len = 0U;
 		buf[len++] = sstr[i];
 		buf[len++] = '\t';
 		len += qxtostr(buf + len, sizeof(buf) - len, r);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, B);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, W);
 		buf[len++] = '\n';
 
 		fwrite(buf, 1, len, stdout);
