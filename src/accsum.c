@@ -259,8 +259,11 @@ offline(void)
 	static const char sstr[3U] = "FLS";
 	tv_t alst;
 	tv_t amtr;
-	/* 3 time based moments */
+	/* stats per side */
 	tv_t tagg[countof(sstr)] = {};
+	qx_t rpnl[countof(sstr)] = {};
+	qx_t best[countof(sstr)] = {};
+	qx_t wrst[countof(sstr)] = {};
 	/* higher valence metrics */
 	size_t wins[countof(sstr) * countof(sstr)] = {};
 	size_t cnts[countof(sstr) * countof(sstr)] = {};
@@ -281,7 +284,12 @@ offline(void)
 
 		CNTS(olsd, side)++;
 		/* check for winners */
-		WINS(olsd, side) += calc_rpnl() > 0.dd;
+		with (qx_t r = calc_rpnl()) {
+			rpnl[olsd] += r;
+			best[olsd] = best[olsd] >= r ? best[olsd] : r;
+			wrst[olsd] = wrst[olsd] <= r ? wrst[olsd] : r;
+			WINS(olsd, side) += r > 0.dd;
+		}
 
 		olsd = side;
 	} while ((l = a, alst = amtr, amtr = next_acc()) < NOT_A_TIME);
@@ -310,6 +318,38 @@ offline(void)
 		len += snprintf(buf + len, sizeof(buf) - len, "%zu", cagg);
 		buf[len++] = '\t';
 		len += tvtostr(buf + len, sizeof(buf) - len, tagg[i]);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+
+	/* rpnl */
+	fputs("\n\trpnl\tbest\tworst\n", stdout);
+	for (size_t i = 1U; i < countof(sstr); i++) {
+		qx_t r = quantized64(rpnl[i], l.term);
+		qx_t B = quantized64(best[i], l.term);
+		qx_t W = quantized64(wrst[i], l.term);
+
+		len = 0U;
+		buf[len++] = sstr[i];
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, r);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, B);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, W);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+	len = 0U;
+	len += (memcpy(buf + len, "SUM\t", 4U), 4U);
+	with (qx_t s = 0.dd) {
+		for (size_t i = 0U; i < countof(sstr); i++) {
+			s += rpnl[i];
+		}
+		s = quantized64(s, l.term);
+		len += qxtostr(buf + len, sizeof(buf) - len, s);
 		buf[len++] = '\n';
 
 		fwrite(buf, 1, len, stdout);
