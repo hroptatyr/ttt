@@ -262,6 +262,7 @@ offline(void)
 	/* stats per side */
 	tv_t tagg[countof(sstr)] = {};
 	qx_t rpnl[countof(sstr)] = {};
+	qx_t rp[countof(sstr)] = {};
 	qx_t best[countof(sstr)] = {};
 	qx_t wrst[countof(sstr)] = {};
 	/* higher valence metrics */
@@ -288,6 +289,8 @@ offline(void)
 			rpnl[olsd] += r;
 			best[olsd] = best[olsd] >= r ? best[olsd] : r;
 			wrst[olsd] = wrst[olsd] <= r ? wrst[olsd] : r;
+			/* hits only metrics */
+			rp[olsd] += r > 0.dd ? r : 0.dd;
 			WINS(olsd, side) += r > 0.dd;
 		}
 
@@ -295,27 +298,29 @@ offline(void)
 	} while ((l = a, alst = amtr, amtr = next_acc()) < NOT_A_TIME);
 
 	char buf[256U];
+	size_t hits[countof(sstr)];
+	size_t cagg[countof(sstr)];
 	size_t len;
 
 	/* overview */
 	fputs("\thits\tcount\ttime\n", stdout);
 	for (size_t i = 0U; i < countof(sstr); i++) {
-		size_t hits = 0U;
-		size_t cagg = 0U;
+		hits[i] = 0U;
+		cagg[i] = 0U;
 
 		/* count wins and states */
 		for (size_t j = 0U; j < countof(sstr); j++) {
-			hits += WINS(i, j);
+			hits[i] += WINS(i, j);
 		}
 		for (size_t j = 0U; j < countof(sstr); j++) {
-			cagg += CNTS(j, i);
+			cagg[i] += CNTS(j, i);
 		}
 		len = 0U;
 		buf[len++] = sstr[i];
 		buf[len++] = '\t';
-		len += snprintf(buf + len, sizeof(buf) - len, "%zu", hits);
+		len += snprintf(buf + len, sizeof(buf) - len, "%zu", hits[i]);
 		buf[len++] = '\t';
-		len += snprintf(buf + len, sizeof(buf) - len, "%zu", cagg);
+		len += snprintf(buf + len, sizeof(buf) - len, "%zu", cagg[i]);
 		buf[len++] = '\t';
 		len += tvtostr(buf + len, sizeof(buf) - len, tagg[i]);
 		buf[len++] = '\n';
@@ -323,17 +328,18 @@ offline(void)
 		fwrite(buf, 1, len, stdout);
 	}
 
-	/* rpnl */
-	fputs("\n\trpnl\tbest\tworst\n", stdout);
+	/* single trades */
+	fputs("\n\tavg\tbest\tworst\n", stdout);
 	for (size_t i = 1U; i < countof(sstr); i++) {
-		qx_t r = quantized64(rpnl[i], l.term);
+		qx_t avg = quantized64(
+			cagg[i] ? rpnl[i] / (qx_t)cagg[i] : 0.dd, l.term);
 		qx_t B = quantized64(best[i], l.term);
 		qx_t W = quantized64(wrst[i], l.term);
 
 		len = 0U;
 		buf[len++] = sstr[i];
 		buf[len++] = '\t';
-		len += qxtostr(buf + len, sizeof(buf) - len, r);
+		len += qxtostr(buf + len, sizeof(buf) - len, avg);
 		buf[len++] = '\t';
 		len += qxtostr(buf + len, sizeof(buf) - len, B);
 		buf[len++] = '\t';
@@ -342,14 +348,114 @@ offline(void)
 
 		fwrite(buf, 1, len, stdout);
 	}
-	len = 0U;
-	len += (memcpy(buf + len, "SUM\t", 4U), 4U);
-	with (qx_t s = 0.dd) {
-		for (size_t i = 0U; i < countof(sstr); i++) {
+	len = (memcpy(buf, "L+S\t", 4U), 4U);
+	with (qx_t avg = 0.dd, B, W) {
+		size_t cnt = 0U;
+		for (size_t i = 1U; i < countof(sstr); i++) {
+			avg += rpnl[i];
+			cnt += cagg[i];
+		}
+		avg = quantized64(cnt ? avg / (qx_t)cnt : 0.dd, l.term);
+
+		B = best[1U];
+		W = wrst[1U];
+		for (size_t i = 2U; i < countof(sstr); i++) {
+			B = best[i] > B ? best[i] : B;
+			W = wrst[i] < W ? wrst[i] : W;
+		}
+		B = quantized64(B, l.term);
+		W = quantized64(W, l.term);
+
+		len += qxtostr(buf + len, sizeof(buf) - len, avg);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, B);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, W);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+
+	/* single trades skewed averages */
+	fputs("\n\tn.n.\thit-sk\tloss-sk\n", stdout);
+	for (size_t i = 1U; i < countof(sstr); i++) {
+		qx_t P = quantized64(
+			hits[i] ? rp[i] / (qx_t)hits[i] : 0.dd, l.term);
+		qx_t L = quantized64(
+			cagg[i] - hits[i]
+			? (rpnl[i] - rp[i]) / (qx_t)(cagg[i] - hits[i])
+			: 0.dd, l.term);
+
+		len = 0U;
+		buf[len++] = sstr[i];
+		buf[len++] = '\t';
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, P);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, L);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+	len = (memcpy(buf, "L+S\t", 4U), 4U);
+	with (qx_t s = 0.dd, P = 0.dd, L = 0.dd) {
+		size_t hnt = 0U, cnt = 0U;
+		for (size_t i = 1U; i < countof(sstr); i++) {
+			hnt += hits[i];
+			cnt += cagg[i];
+			P += rp[i];
+			s += rpnl[i];
+		}
+		L = quantized64(
+			cnt - hnt ? (s - P) / (qx_t)(cnt - hnt) : 0.dd, l.term);
+		P = quantized64(hnt ? P / (qx_t)hnt : 0.dd, l.term);
+
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, P);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, L);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+
+	/* rpnl */
+	fputs("\n\trpnl\trp\trl\n", stdout);
+	for (size_t i = 1U; i < countof(sstr); i++) {
+		qx_t r = quantized64(rpnl[i], l.term);
+		qx_t P = quantized64(rp[i], l.term);
+		qx_t L = r - P;
+
+		len = 0U;
+		buf[len++] = sstr[i];
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, r);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, P);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, L);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+	len = (memcpy(buf, "L+S\t", 4U), 4U);
+	with (qx_t s = 0.dd, P = 0.dd, L = 0.dd) {
+		for (size_t i = 1U; i < countof(sstr); i++) {
 			s += rpnl[i];
 		}
 		s = quantized64(s, l.term);
+
+		for (size_t i = 1U; i < countof(sstr); i++) {
+			P += rp[i];
+		}
+		P = quantized64(P, l.term);
+		L = s - P;
+
 		len += qxtostr(buf + len, sizeof(buf) - len, s);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, P);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, L);
 		buf[len++] = '\n';
 
 		fwrite(buf, 1, len, stdout);
