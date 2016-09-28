@@ -377,8 +377,9 @@ offline(void)
 	}
 
 	/* single trades skewed averages */
-	fputs("\n\tn.n.\thit-sk\tloss-sk\n", stdout);
+	fputs("\n\thit-r\thit-sk\tloss-sk\n", stdout);
 	for (size_t i = 1U; i < countof(sstr); i++) {
+		double r = cagg[i] ? (double)hits[i] / cagg[i] : 0.;
 		qx_t P = quantized64(
 			hits[i] ? rp[i] / (qx_t)hits[i] : 0.dd, l.term);
 		qx_t L = quantized64(
@@ -389,6 +390,7 @@ offline(void)
 		len = 0U;
 		buf[len++] = sstr[i];
 		buf[len++] = '\t';
+		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", r);
 		buf[len++] = '\t';
 		len += qxtostr(buf + len, sizeof(buf) - len, P);
 		buf[len++] = '\t';
@@ -399,6 +401,7 @@ offline(void)
 	}
 	len = (memcpy(buf, "L+S\t", 4U), 4U);
 	with (qx_t s = 0.dd, P = 0.dd, L = 0.dd) {
+		double r;
 		size_t hnt = 0U, cnt = 0U;
 		for (size_t i = 1U; i < countof(sstr); i++) {
 			hnt += hits[i];
@@ -406,10 +409,12 @@ offline(void)
 			P += rp[i];
 			s += rpnl[i];
 		}
+		r = cnt ? (double)hnt / cnt : 0.;
 		L = quantized64(
 			cnt - hnt ? (s - P) / (qx_t)(cnt - hnt) : 0.dd, l.term);
 		P = quantized64(hnt ? P / (qx_t)hnt : 0.dd, l.term);
 
+		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", r);
 		buf[len++] = '\t';
 		len += qxtostr(buf + len, sizeof(buf) - len, P);
 		buf[len++] = '\t';
