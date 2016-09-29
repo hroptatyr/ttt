@@ -70,6 +70,7 @@ typedef struct {
 
 static tv_t intv = 10 * MSECS;
 static unsigned int edgp;
+static unsigned int grossp;
 
 static FILE *qfp;
 static FILE *afp;
@@ -253,6 +254,18 @@ calc_rpnl(void)
 	return pnl;
 }
 
+static inline qx_t
+calc_rcom(void)
+{
+	static qx_t acccom = 0.dd;
+	qx_t this = (a.comm * l.base - a.base * l.comm)  / (l.base - a.base);
+	qx_t com = this - acccom;
+
+	/* keep state */
+	acccom = this;
+	return com;
+}
+
 static int
 offline(void)
 {
@@ -286,6 +299,7 @@ offline(void)
 		CNTS(olsd, side)++;
 		/* check for winners */
 		with (qx_t r = calc_rpnl()) {
+			r += !grossp ? calc_rcom() : 0.dd;
 			rpnl[olsd] += r;
 			best[olsd] = best[olsd] >= r ? best[olsd] : r;
 			wrst[olsd] = wrst[olsd] <= r ? wrst[olsd] : r;
@@ -531,6 +545,7 @@ main(int argc, char *argv[])
 	}
 
 	edgp = argi->edge_flag;
+	grossp = argi->gross_flag;
 
 	if (UNLIKELY((afp = stdin) == NULL)) {
 		errno = 0, serror("\

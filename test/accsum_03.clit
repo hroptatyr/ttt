@@ -1,6 +1,6 @@
 #!/usr/bin/clitoris
 
-$ accsum < "${srcdir}/test2.acc"
+$ accsum -g < "${srcdir}/test2.acc"
 	hits	count	time
 F	0	1	0.000000000
 L	3	3	18730.483000000
