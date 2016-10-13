@@ -189,7 +189,8 @@ push_init(char *ln, size_t UNUSED(lz))
 	} else {
 		/* nope, it's probably mid-point spread */
 		minspr = maxspr = minask;
-		minask = maxbid;
+		minask = maxbid + minspr / 2.df;
+		maxbid = maxbid - minspr / 2.df;
 		push_beef = push_mid;
 	}
 
@@ -274,7 +275,7 @@ push_mid(char *ln, size_t UNUSED(lz))
 	quo_t q;
 	char *on;
 	int rc = 0;
-	qx_t bsz, asz;
+	qx_t qty, imb;
 
 	/* metronome is up first */
 	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
@@ -298,30 +299,34 @@ push_mid(char *ln, size_t UNUSED(lz))
 	}
 
 	/* snarf quantities */
-	bsz = strtoqx(++on, &on);
-	asz = strtoqx(++on, &on);
+	qty = strtoqx(++on, &on);
+	imb = strtoqx(++on, &on);
 
-	minask = min_px(minask, q.m);
-	maxbid = max_px(maxbid, q.m);
 	minspr = min_px(minspr, q.s);
 	maxspr = max_px(maxspr, q.s);
+	/* convert to bid/ask */
+	with (quo_t ms = q) {
+		q.b = ms.m - ms.s / 2.df;
+		q.a = ms.m + ms.s / 2.df;
+	}
+	minask = min_px(minask, q.a);
+	maxbid = max_px(maxbid, q.b);
 
 	with (tv_t dlt = t - last) {
 		mindlt = min_tv(mindlt, dlt);
 		maxdlt = max_tv(maxdlt, dlt);
 	}
 
-	with (px_t du = q.m - minask, dd = q.m - maxbid) {
+	with (px_t du = q.a - minask, dd = q.b - maxbid) {
 		maxdu = max_px(maxdu, du);
 		maxdd = min_px(maxdd, dd);
 	}
 
-	maxbsz = max_qx(maxbsz, bsz);
-	maxasz = max_qx(maxasz, asz);
-	with (qx_t imb = asz - bsz) {
-		maxsim = max_qx(maxsim, imb);
-		maxbim = min_qx(maxbim, imb);
-	}
+	maxsim = max_qx(maxsim, imb);
+	maxbim = min_qx(maxbim, imb);
+	/* operate on bsz/asz */
+	maxbsz = max_qx(maxbsz, qty - imb / 2.dd);
+	maxasz = max_qx(maxasz, qty + imb / 2.dd);
 
 out:
 	/* and store state */

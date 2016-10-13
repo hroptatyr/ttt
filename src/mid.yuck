@@ -4,6 +4,7 @@ Produce a bid/ask time series with a constant spread.
 
   --spread[=X]          Clamp bid ask spread at X, default: 0.
                         Or, if omitted, output the actual spread in the
-                        ask column.
+                        ask column and if quantities are present output
+                        the mean quantity alongside the sell imbalance.
   --despread            Assuming a midpoint+spread time series, return
                         the original time series.
