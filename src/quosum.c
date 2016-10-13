@@ -124,6 +124,12 @@ max_px(px_t p1, px_t p2)
 }
 
 static inline __attribute__((pure, const)) qx_t
+min_qx(qx_t q1, qx_t q2)
+{
+	return q1 <= q2 ? q1 : q2;
+}
+
+static inline __attribute__((pure, const)) qx_t
 max_qx(qx_t q1, qx_t q2)
 {
 	return q1 >= q2 ? q1 : q2;
@@ -136,6 +142,9 @@ static px_t minspr;
 static px_t maxspr;
 static qx_t maxasz = 0.dd;
 static qx_t maxbsz = 0.dd;
+/* buy and sell imbalances */
+static qx_t maxbim = 0.dd;
+static qx_t maxsim = 0.dd;
 static tv_t _1st = NOT_A_TIME;
 static tv_t last;
 static tv_t mindlt = NOT_A_TIME;
@@ -199,6 +208,7 @@ push_quo(char *ln, size_t UNUSED(lz))
 	quo_t q;
 	char *on;
 	int rc = 0;
+	qx_t bsz, asz;
 
 	/* metronome is up first */
 	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
@@ -222,13 +232,8 @@ push_quo(char *ln, size_t UNUSED(lz))
 	}
 
 	/* snarf quantities */
-	if (*on == '\t') {
-		qx_t bsz = strtoqx(++on, &on);
-		qx_t asz = strtoqx(++on, &on);
-
-		maxbsz = max_qx(maxbsz, bsz);
-		maxasz = max_qx(maxasz, asz);
-	}
+	bsz = strtoqx(++on, &on);
+	asz = strtoqx(++on, &on);
 
 	maxbid = max_px(maxbid, q.b);
 	minask = min_px(minask, q.a);
@@ -240,6 +245,13 @@ push_quo(char *ln, size_t UNUSED(lz))
 	with (tv_t dlt = t - last) {
 		mindlt = min_tv(mindlt, dlt);
 		maxdlt = max_tv(maxdlt, dlt);
+	}
+
+	maxbsz = max_qx(maxbsz, bsz);
+	maxasz = max_qx(maxasz, asz);
+	with (qx_t imb = asz - bsz) {
+		maxsim = max_qx(maxsim, imb);
+		maxbim = min_qx(maxbim, imb);
 	}
 
 out:
@@ -255,6 +267,7 @@ push_mid(char *ln, size_t UNUSED(lz))
 	quo_t q;
 	char *on;
 	int rc = 0;
+	qx_t bsz, asz;
 
 	/* metronome is up first */
 	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
@@ -278,13 +291,8 @@ push_mid(char *ln, size_t UNUSED(lz))
 	}
 
 	/* snarf quantities */
-	if (*on == '\t') {
-		qx_t bsz = strtoqx(++on, &on);
-		qx_t asz = strtoqx(++on, &on);
-
-		maxbsz = max_qx(maxbsz, bsz);
-		maxasz = max_qx(maxasz, asz);
-	}
+	bsz = strtoqx(++on, &on);
+	asz = strtoqx(++on, &on);
 
 	minask = min_px(minask, q.m);
 	maxbid = max_px(maxbid, q.m);
@@ -294,6 +302,13 @@ push_mid(char *ln, size_t UNUSED(lz))
 	with (tv_t dlt = t - last) {
 		mindlt = min_tv(mindlt, dlt);
 		maxdlt = max_tv(maxdlt, dlt);
+	}
+
+	maxbsz = max_qx(maxbsz, bsz);
+	maxasz = max_qx(maxasz, asz);
+	with (qx_t imb = asz - bsz) {
+		maxsim = max_qx(maxsim, imb);
+		maxbim = min_qx(maxbim, imb);
 	}
 
 out:
@@ -308,7 +323,7 @@ prnt_sum(void)
 	char buf[4096U];
 	size_t len = 0U;
 
-	fputs("ccy\t_1st\tlast\tmindlt\tmaxdlt\tminask\tmaxbid\tminspr\tmaxspr\tmaxbsz\tmaxasz\n", stdout);
+	fputs("ccy\t_1st\tlast\tmindlt\tmaxdlt\tminask\tmaxbid\tminspr\tmaxspr\tmaxbsz\tmaxasz\tmaxbim\tmaxsim\n", stdout);
 
 	len = (memcpy(buf, cont, conz), conz);
 
@@ -334,6 +349,10 @@ prnt_sum(void)
 	len += qxtostr(buf + len, sizeof(buf) - len, maxbsz);
 	buf[len++] = '\t';
 	len += qxtostr(buf + len, sizeof(buf) - len, maxasz);
+	buf[len++] = '\t';
+	len += qxtostr(buf + len, sizeof(buf) - len, -maxbim);
+	buf[len++] = '\t';
+	len += qxtostr(buf + len, sizeof(buf) - len, maxsim);
 
 	buf[len++] = '\n';
 	fwrite(buf, sizeof(*buf), len, stdout);
