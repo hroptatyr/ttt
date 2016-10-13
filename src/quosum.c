@@ -99,6 +99,36 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
 }
 
+static inline __attribute__((pure, const)) tv_t
+min_tv(tv_t t1, tv_t t2)
+{
+	return t1 <= t2 ? t1 : t2;
+}
+
+static inline __attribute__((pure, const)) tv_t
+max_tv(tv_t t1, tv_t t2)
+{
+	return t1 >= t2 ? t1 : t2;
+}
+
+static inline __attribute__((pure, const)) px_t
+min_px(px_t p1, px_t p2)
+{
+	return p1 <= p2 ? p1 : p2;
+}
+
+static inline __attribute__((pure, const)) px_t
+max_px(px_t p1, px_t p2)
+{
+	return p1 >= p2 ? p1 : p2;
+}
+
+static inline __attribute__((pure, const)) qx_t
+max_qx(qx_t q1, qx_t q2)
+{
+	return q1 >= q2 ? q1 : q2;
+}
+
 
 static px_t minask;
 static px_t maxbid;
@@ -196,20 +226,20 @@ push_quo(char *ln, size_t UNUSED(lz))
 		qx_t bsz = strtoqx(++on, &on);
 		qx_t asz = strtoqx(++on, &on);
 
-		maxbsz = bsz <= maxbsz ? maxbsz : bsz;
-		maxasz = asz <= maxasz ? maxasz : asz;
+		maxbsz = max_qx(maxbsz, bsz);
+		maxasz = max_qx(maxasz, asz);
 	}
 
-	maxbid = q.b <= maxbid ? maxbid : q.b;
-	minask = q.a >= minask ? minask : q.a;
+	maxbid = max_px(maxbid, q.b);
+	minask = min_px(minask, q.a);
 	with (px_t s = q.a - q.b) {
-		minspr = s >= minspr ? minspr : s;
-		maxspr = s <= maxspr ? maxspr : s;
+		minspr = min_px(minspr, s);
+		maxspr = max_px(maxspr, s);
 	}
 
 	with (tv_t dlt = t - last) {
-		mindlt = dlt >= mindlt ? mindlt : dlt;
-		maxdlt = dlt <= maxdlt ? maxdlt : dlt;
+		mindlt = min_tv(mindlt, dlt);
+		maxdlt = max_tv(maxdlt, dlt);
 	}
 
 out:
@@ -247,14 +277,23 @@ push_mid(char *ln, size_t UNUSED(lz))
 		return -1;
 	}
 
-	minask = q.m >= minask ? minask : q.m;
-	maxbid = q.m <= maxbid ? maxbid : q.m;
-	minspr = q.s >= minspr ? minspr : q.s;
-	maxspr = q.s <= maxspr ? maxspr : q.s;
+	/* snarf quantities */
+	if (*on == '\t') {
+		qx_t bsz = strtoqx(++on, &on);
+		qx_t asz = strtoqx(++on, &on);
+
+		maxbsz = max_qx(maxbsz, bsz);
+		maxasz = max_qx(maxasz, asz);
+	}
+
+	minask = min_px(minask, q.m);
+	maxbid = max_px(maxbid, q.m);
+	minspr = min_px(minspr, q.s);
+	maxspr = max_px(maxspr, q.s);
 
 	with (tv_t dlt = t - last) {
-		mindlt = dlt >= mindlt ? mindlt : dlt;
-		maxdlt = dlt <= maxdlt ? maxdlt : dlt;
+		mindlt = min_tv(mindlt, dlt);
+		maxdlt = max_tv(maxdlt, dlt);
 	}
 
 out:
