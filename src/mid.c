@@ -34,9 +34,15 @@ typedef long unsigned int tv_t;
 #define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
-typedef struct {
-	px_t b;
-	px_t a;
+typedef union {
+	struct {
+		px_t b;
+		px_t a;
+	};
+	struct {
+		px_t m;
+		px_t s;
+	};
 } quo_t;
 
 static px_t spr = 0.df;
@@ -162,8 +168,17 @@ midspr(void)
 	ssize_t nrd;
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		qx_t bsz, asz;
+
 		if (UNLIKELY(push_beef(line, nrd) < 0)) {
 			continue;
+		}
+
+		/* get quantities too */
+		if (line[end] == '\t') {
+			char *on = line + end;
+			bsz = strtoqx(++on, &on);
+			asz = strtoqx(++on, &on);
 		}
 
 		/* otherwise calc new bid/ask pair */
@@ -175,8 +190,18 @@ midspr(void)
 			len += pxtostr(buf + len, sizeof(buf) - len, mp);
 			buf[len++] = '\t';
 			len += pxtostr(buf + len, sizeof(buf) - len, sp);
+
+			if (line[end] == '\t') {
+				qx_t mq = (bsz + asz) / 2.dd;
+				qx_t im = (asz - bsz);
+
+				buf[len++] = '\t';
+				len += qxtostr(buf + len, sizeof(buf) - len, mq);
+				buf[len++] = '\t';
+				len += qxtostr(buf + len, sizeof(buf) - len, im);
+			}
+			buf[len++] = '\n';
 			fwrite(buf, 1, len, stdout);
-			fwrite(line + end, 1, nrd - end, stdout);
 		}
 	}
 
@@ -193,25 +218,44 @@ desprd(void)
 	ssize_t nrd;
 
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		qx_t mq, im;
+
 		if (UNLIKELY(push_beef(line, nrd) < 0)) {
 			continue;
 		}
 
+		/* get quantities too */
+		if (line[end] == '\t') {
+			char *on = line + end;
+			mq = strtoqx(++on, &on);
+			im = strtoqx(++on, &on);
+		}
+
 		/* otherwise calc new bid/ask pair */
-		with (px_t sp = q.a / 2.df) {
+		with (px_t sp = q.s / 2.df) {
 			char buf[64U];
 			size_t len = 0U;
 			const quo_t newq = {
-				quantized32(q.b - sp, q.a),
-				quantized32(q.b + sp, q.a)
+				quantized32(q.m - sp, q.s),
+				quantized32(q.m + sp, q.s)
 			};
 
 			fwrite(line, 1, beg, stdout);
 			len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
 			buf[len++] = '\t';
 			len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
+
+			if (line[end] == '\t') {
+				qx_t bq = mq - im / 2.dd;
+				qx_t aq = mq + im / 2.dd;
+
+				buf[len++] = '\t';
+				len += qxtostr(buf + len, sizeof(buf) - len, bq);
+				buf[len++] = '\t';
+				len += qxtostr(buf + len, sizeof(buf) - len, aq);
+			}
+			buf[len++] = '\n';
 			fwrite(buf, 1, len, stdout);
-			fwrite(line + end, 1, nrd - end, stdout);
 		}
 	}
 
