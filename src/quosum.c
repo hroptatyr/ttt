@@ -140,6 +140,8 @@ static px_t minask;
 static px_t maxbid;
 static px_t minspr;
 static px_t maxspr;
+static px_t maxdu;
+static px_t maxdd;
 static qx_t maxasz = 0.dd;
 static qx_t maxbsz = 0.dd;
 /* buy and sell imbalances */
@@ -242,6 +244,11 @@ push_quo(char *ln, size_t UNUSED(lz))
 		maxspr = max_px(maxspr, s);
 	}
 
+	with (px_t du = q.a - minask, dd = q.b - maxbid) {
+		maxdu = max_px(maxdu, du);
+		maxdd = min_px(maxdd, dd);
+	}
+
 	with (tv_t dlt = t - last) {
 		mindlt = min_tv(mindlt, dlt);
 		maxdlt = max_tv(maxdlt, dlt);
@@ -304,6 +311,11 @@ push_mid(char *ln, size_t UNUSED(lz))
 		maxdlt = max_tv(maxdlt, dlt);
 	}
 
+	with (px_t du = q.m - minask, dd = q.m - maxbid) {
+		maxdu = max_px(maxdu, du);
+		maxdd = min_px(maxdd, dd);
+	}
+
 	maxbsz = max_qx(maxbsz, bsz);
 	maxasz = max_qx(maxasz, asz);
 	with (qx_t imb = asz - bsz) {
@@ -323,7 +335,7 @@ prnt_sum(void)
 	char buf[4096U];
 	size_t len = 0U;
 
-	fputs("ccy\t_1st\tlast\tmindlt\tmaxdlt\tminask\tmaxbid\tminspr\tmaxspr\tmaxbsz\tmaxasz\tmaxbim\tmaxsim\n", stdout);
+	fputs("ccy\t_1st\tlast\tmindlt\tmaxdlt\tminask\tmaxbid\tminspr\tmaxspr\tmaxbsz\tmaxasz\tmaxbim\tmaxsim\tmaxdu\tmaxdd\n", stdout);
 
 	len = (memcpy(buf, cont, conz), conz);
 
@@ -353,6 +365,11 @@ prnt_sum(void)
 	len += qxtostr(buf + len, sizeof(buf) - len, -maxbim);
 	buf[len++] = '\t';
 	len += qxtostr(buf + len, sizeof(buf) - len, maxsim);
+
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, maxdu);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, maxdd);
 
 	buf[len++] = '\n';
 	fwrite(buf, sizeof(*buf), len, stdout);
