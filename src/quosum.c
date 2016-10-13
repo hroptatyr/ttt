@@ -275,7 +275,7 @@ push_mid(char *ln, size_t UNUSED(lz))
 	quo_t q;
 	char *on;
 	int rc = 0;
-	qx_t bsz, asz;
+	qx_t qty, imb;
 
 	/* metronome is up first */
 	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
@@ -299,8 +299,8 @@ push_mid(char *ln, size_t UNUSED(lz))
 	}
 
 	/* snarf quantities */
-	bsz = strtoqx(++on, &on);
-	asz = strtoqx(++on, &on);
+	qty = strtoqx(++on, &on);
+	imb = strtoqx(++on, &on);
 
 	minspr = min_px(minspr, q.s);
 	maxspr = max_px(maxspr, q.s);
@@ -322,12 +322,11 @@ push_mid(char *ln, size_t UNUSED(lz))
 		maxdd = min_px(maxdd, dd);
 	}
 
-	maxbsz = max_qx(maxbsz, bsz);
-	maxasz = max_qx(maxasz, asz);
-	with (qx_t imb = asz - bsz) {
-		maxsim = max_qx(maxsim, imb);
-		maxbim = min_qx(maxbim, imb);
-	}
+	maxsim = max_qx(maxsim, imb);
+	maxbim = min_qx(maxbim, imb);
+	/* operate on bsz/asz */
+	maxbsz = max_qx(maxbsz, qty - imb / 2.dd);
+	maxasz = max_qx(maxasz, qty + imb / 2.dd);
 
 out:
 	/* and store state */
