@@ -149,20 +149,6 @@ accsum_LDADD = libdfp.a
 accsum_LDADD += -ldecimal
 BUILT_SOURCES += accsum.yucc
 
-bin_PROGRAMS += quosum
-quosum_SOURCES = quosum.c quosum.yuck
-quosum_SOURCES += hash.c hash.h
-quosum_SOURCES += version.c version.h
-quosum_CPPFLAGS = $(AM_CPPFLAGS)
-quosum_CPPFLAGS += -D__STDC_WANT_DEC_FP__
-quosum_CPPFLAGS += $(dfp754_CFLAGS)
-quosum_CPPFLAGS += -DHAVE_VERSION_H
-quosum_LDFLAGS = $(AM_LDFLAGS)
-quosum_LDFLAGS += $(dfp754_LIBS)
-quosum_LDADD = libdfp.a
-quosum_LDADD += -ldecimal
-BUILT_SOURCES += quosum.yucc
-
 bin_PROGRAMS += xevent
 xevent_SOURCES = xevent.c xevent.yuck
 xevent_SOURCES += version.c version.h

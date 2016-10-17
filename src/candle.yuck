@@ -1,7 +1,7 @@
-Usage: candle [< FILE]
+Usage: candle < QUOTES
 
-Produce minute by minute candles.
-The candle provides information about open, high, low, close, 
-max drawdown, max drawup, max increment, max decrement
+Analyse quotes in fixed size windows and print a summary.
 
-  --interval=S          Draw candles every S seconds, default 60.
+  -i, --interval=S      Draw candles every S seconds, can also be
+                        suffixed with m for minutes, h for hours,
+                        d for days, mo for months and y for years.
