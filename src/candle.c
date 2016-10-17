@@ -40,6 +40,13 @@ typedef struct {
 } quo_t;
 
 static tv_t intv;
+static enum {
+	UNIT_NONE,
+	UNIT_SECS,
+	UNIT_DAYS,
+	UNIT_MONTHS,
+	UNIT_YEARS,
+} unit;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -111,6 +118,42 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
 }
 
+static ssize_t
+cttostr(char *restrict buf, size_t bsz, tv_t t)
+{
+	struct tm *tm;
+	time_t u;
+
+	switch (unit) {
+	default:
+	case UNIT_NONE:
+		memcpy(buf, "ALL", 3U);
+		return 3U;
+	case UNIT_SECS:
+		return tvtostr(buf, bsz, t);
+	case UNIT_DAYS:
+	case UNIT_MONTHS:
+	case UNIT_YEARS:
+		break;
+	}
+
+	u = t / MSECS;
+	u--;
+	tm = gmtime(&u);
+
+	switch (unit) {
+	case UNIT_DAYS:
+		return strftime(buf, bsz, "%F", tm);
+	case UNIT_MONTHS:
+		return strftime(buf, bsz, "%Y-%m", tm);
+	case UNIT_YEARS:
+		return strftime(buf, bsz, "%Y", tm);
+	default:
+		break;
+	}
+	return 0;
+}
+
 static inline __attribute__((pure, const)) tv_t
 min_tv(tv_t t1, tv_t t2)
 {
@@ -148,6 +191,9 @@ max_qx(qx_t q1, qx_t q2)
 }
 
 
+/* next candle time */
+static tv_t nxct;
+
 static px_t minask;
 static px_t maxbid;
 static px_t minspr;
@@ -168,6 +214,55 @@ static char cont[64];
 static size_t conz;
 
 static void prnt_cndl(void);
+
+static tv_t
+next_cndl(tv_t t)
+{
+	struct tm *tm;
+	time_t u;
+
+	switch (unit) {
+	default:
+	case UNIT_NONE:
+		return NOT_A_TIME;
+	case UNIT_SECS:
+		return (t / intv + 1U) * intv;
+	case UNIT_DAYS:
+		t /= 24U * 60U * 60U * MSECS;
+		t++;
+		t *= 24U * 60U * 60U * MSECS;
+		return t;
+	case UNIT_MONTHS:
+	case UNIT_YEARS:
+		break;
+	}
+
+	u = t / MSECS;
+	tm = gmtime(&u);
+	tm->tm_mday = 1;
+	tm->tm_yday = 0;
+	tm->tm_hour = 0;
+	tm->tm_min = 0;
+	tm->tm_sec = 0;
+
+	switch (unit) {
+	case UNIT_MONTHS:
+		*tm = (struct tm){
+			.tm_year = tm->tm_year,
+			.tm_mon = tm->tm_mon + 1,
+			.tm_mday = 1,
+		};
+		break;
+	case UNIT_YEARS:
+		*tm = (struct tm){
+			.tm_year = tm->tm_year + 1,
+			.tm_mon = 0,
+			.tm_mday = 1,
+		};
+		break;
+	}
+	return mktime(tm) * MSECS;
+}
 
 static int
 push_init(char *ln, size_t UNUSED(lz))
@@ -210,7 +305,6 @@ push_init(char *ln, size_t UNUSED(lz))
 static int
 push_beef(char *ln, size_t lz)
 {
-	static tv_t nxct;
 	tv_t t;
 	quo_t q;
 	char *on;
@@ -224,9 +318,9 @@ push_beef(char *ln, size_t lz)
 		fputs("Warning: non-chronological\n", stderr);
 		rc = -1;
 		goto out;
-	} else if (t / intv > nxct) {
+	} else if (t >= nxct) {
 		prnt_cndl();
-		nxct = t / intv;
+		nxct = next_cndl(t);
 		_1st = last = t;
 		return push_init(on, lz - (on - ln));
 	}
@@ -297,8 +391,9 @@ prnt_cndl(void)
 	}
 
 	/* candle identifier */
-	buf[len++] = '\t';
+	len = cttostr(buf, sizeof(buf), nxct);
 
+	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 
 	buf[len++] = '\t';
@@ -358,9 +453,52 @@ main(int argc, char *argv[])
 	}
 
        if (argi->interval_arg) {
-	       if (!(intv = strtoul(argi->interval_arg, NULL, 10))) {
+	       char *on;
+
+	       if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
 		       errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
+		       rc = 1;
+		       goto out;
+	       }
+	       switch (*on++) {
+	       secs:
+	       case '\0':
+	       case 'S':
+	       case 's':
+		       /* seconds, don't fiddle */
+		       intv *= MSECS;
+		       unit = UNIT_SECS;
+		       break;
+	       case 'm':
+	       case 'M':
+		       if (*on == 'o' || *on == 'O') {
+			       goto months;
+		       }
+		       intv *= 60U;
+		       goto secs;
+
+	       months:
+		       unit = UNIT_MONTHS;
+		       break;
+
+	       case 'y':
+	       case 'Y':
+		       unit = UNIT_YEARS;
+		       break;
+
+	       case 'h':
+	       case 'H':
+		       intv *= 60U * 60U;
+		       goto secs;
+	       case 'd':
+	       case 'D':
+		       unit = UNIT_DAYS;
+		       break;
+
+	       default:
+		       errno = 0, serror("\
+Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 		       rc = 1;
 		       goto out;
 	       }
