@@ -31,17 +31,15 @@ typedef long unsigned int tv_t;
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
+#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
-typedef struct {
-	tv_t t;
-	px_t p;
-} tik_t;
-
 typedef struct {
 	px_t b;
 	px_t a;
 } quo_t;
+
+static tv_t intv;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -60,276 +58,178 @@ serror(const char *fmt, ...)
 	return;
 }
 
-static inline __attribute__((const, pure)) px_t
-min_px(px_t p1, px_t p2)
+static tv_t
+strtotv(const char *ln, char **endptr)
 {
-	return p1 < p2 ? p1 : p2;
-}
-
-static inline __attribute__((const, pure)) px_t
-max_px(px_t p1, px_t p2)
-{
-	return p1 > p2 ? p1 : p2;
-}
-
-static inline __attribute__((const, pure)) quo_t
-max_quo(quo_t q1, quo_t q2)
-{
-	return q1.b > q2.b ? q1 : q2;
-}
-
-static inline __attribute__((const, pure)) quo_t
-min_quo(quo_t q1, quo_t q2)
-{
-	return q1.a < q2.a ? q1 : q2;
-}
-
-
-static tv_t intv = 60U;
-static px_t thresh = 0.000036df;
-
-static tv_t metr;
-static quo_t _1st;
-static quo_t last;
-static quo_t maxb;
-static quo_t mina;
-static px_t maxdd, maxdu;
-static px_t mindb, maxdb;
-static px_t minda, maxda;
-static px_t lpnl, spnl;
-
-static void
-crst(void)
-{
-	_1st = (quo_t){__DEC32_MAX__, 0.df};
-	lpnl = spnl = 0.df;
-	return;
-}
-
-static int
-cndl(void)
-{
-	char buf[256U];
-	size_t bi;
-
-	bi = snprintf(buf, sizeof(buf), "%lu.000000000", metr * intv);
-	/* open */
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, _1st.b);
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, _1st.a);
-	/* high */
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxb.b);
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxb.a);
-	/* low */
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, mina.b);
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, mina.a);
-	/* close */
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, last.b);
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, last.a);
-	/* max-inc */
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxdb);
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, minda);
-	/* max-dec */
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, mindb);
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxda);
-	/* maxdn/maxdu */
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxdd);
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, maxdu);
-	/* optimal profits l/s */
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, lpnl);
-	buf[bi++] = '\t';
-	bi += pxtostr(buf + bi, sizeof(buf) - bi, spnl);
-
-	buf[bi++] = '\n';
-	fwrite(buf, 1, bi, stdout);
-
-	crst();
-	return 0;
-}
-
-static void
-optim(bool lastp)
-{
-	static tik_t hi_bid = {.p = -__DEC32_MAX__};
-	static tik_t lo_ask = {.p = __DEC32_MAX__};
-	static tik_t h2_bid;
-	static tik_t l2_ask;
-	static tv_t omtr;
-	static enum {
-		RGM_FLAT,
-		RGM_LONG,
-		RGM_SHORT,
-	} rgm;
-	/* last trades */
-	static tik_t bot;
-	static tik_t sld;
-
-	static void buy(tik_t x)
-	{
-		/* calc profits */
-		spnl += sld.p ? sld.p - x.p : 0.df;
-		lo_ask = l2_ask;
-		bot = x;
-
-		switch (rgm) {
-		case RGM_FLAT:
-			rgm = RGM_LONG;
-			break;
-		case RGM_LONG:
-			abort();
-			break;
-		case RGM_SHORT:
-			rgm = RGM_FLAT;
-			break;
-		}
-	}
-
-	static void sell(tik_t x)
-	{
-		/* calc profits */
-		lpnl += bot.p ? x.p - bot.p : 0.df;
-		hi_bid = h2_bid;
-		sld = x;
-
-		switch (rgm) {
-		case RGM_FLAT:
-			rgm = RGM_SHORT;
-			break;
-		case RGM_LONG:
-			rgm = RGM_FLAT;
-			break;
-		case RGM_SHORT:
-			abort();
-			break;
-		}
-	}
-
-	if (UNLIKELY(lastp)) {
-		assert(rgm == RGM_FLAT);
-		if (hi_bid.p - lo_ask.p > thresh &&
-		    h2_bid.p - lo_ask.p > thresh) {
-			if (hi_bid.t < lo_ask.t) {
-				sell(hi_bid);
-				buy(lo_ask);
-			} else if (hi_bid.t > lo_ask.t) {
-				buy(lo_ask);
-				sell(hi_bid);
-			}
-		} else if (hi_bid.p - lo_ask.p > thresh &&
-			   hi_bid.p - l2_ask.p > thresh) {
-			if (lo_ask.t < hi_bid.t) {
-				buy(lo_ask);
-				sell(hi_bid);
-			} else if (lo_ask.t > hi_bid.t) {
-				sell(hi_bid);
-				buy(lo_ask);
-			}
-		}
-
-		hi_bid = (tik_t){.p = -__DEC32_MAX__};
-		lo_ask = (tik_t){.p = __DEC32_MAX__};
-		h2_bid = (tik_t){};
-		l2_ask = (tik_t){};
-		rgm = RGM_FLAT;
-		omtr = 0U;
-		bot.p = 0.df;
-		sld.p = 0.df;
-		return;
-	}
-
-	if (last.b > hi_bid.p) {
-		if (hi_bid.p - lo_ask.p > thresh &&
-		    hi_bid.p - l2_ask.p > thresh) {
-			if (lo_ask.t < hi_bid.t) {
-				buy(lo_ask);
-				sell(hi_bid);
-			} else if (lo_ask.t > hi_bid.t) {
-				sell(hi_bid);
-				buy(lo_ask);
-			}
-		}
-		/* track-keeping */
-		hi_bid = (tik_t){omtr, last.b};
-		l2_ask = (tik_t){omtr, last.a};
-	} else if (last.b > h2_bid.p) {
-		h2_bid = (tik_t){omtr, last.b};
-	}
-	if (last.a < lo_ask.p) {
-		if (hi_bid.p - lo_ask.p > thresh &&
-		    h2_bid.p - lo_ask.p > thresh) {
-			if (hi_bid.t < lo_ask.t) {
-				sell(hi_bid);
-				buy(lo_ask);
-			} else if (hi_bid.t > lo_ask.t) {
-				buy(lo_ask);
-				sell(hi_bid);
-			}
-		}
-		/* track-keeping */
-		lo_ask = (tik_t){omtr, last.a};
-		h2_bid = (tik_t){omtr, last.b};
-	} else if (last.a < l2_ask.p) {
-		l2_ask = (tik_t){omtr, last.a};
-	}
-	omtr++;
-	return;
-}
-
-static int
-push_beef(char *ln, size_t UNUSED(lz))
-{
-	tv_t oldm = metr;
-	quo_t this;
 	char *on;
+	tv_t r;
 
 	/* time value up first */
 	with (long unsigned int s, x) {
+		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
+			r = NOT_A_TIME;
+			goto out;
+		} else if (*on == '.') {
+			char *moron;
 
-		if (ln[20U] != '\t') {
-			return -1;
-		} else if (!(s = strtoul(ln, &on, 10))) {
-			return -1;
-		} else if (*on++ != '.') {
-			return -1;
-		} else if ((x = strtoul(on, &on, 10), *on++ != '\t')) {
-			return -1;
+			x = strtoul(++on, &moron, 10);
+			if (UNLIKELY(moron - on > 9U)) {
+				return NOT_A_TIME;
+			} else if ((moron - on) % 3U) {
+				/* huh? */
+				return NOT_A_TIME;
+			}
+			switch (moron - on) {
+			case 9U:
+				x /= MSECS;
+			case 6U:
+				x /= MSECS;
+			case 3U:
+				break;
+			case 0U:
+			default:
+				break;
+			}
+			on = moron;
+		} else {
+			x = 0U;
 		}
-		/* assign with minute resolution */
-		metr = s / intv;
+		r = s * MSECS + x;
 	}
-
-	/* do we need to draw another candle? */
-	if (UNLIKELY(metr > oldm && _1st.b != __DEC32_MAX__)) {
-		/* yield */
-		optim(true);
-		/* yip */
-		cndl();
+	/* overread up to 3 tabs */
+	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
+out:
+	if (LIKELY(endptr != NULL)) {
+		*endptr = on;
 	}
+	return r;
+}
 
-	/* now comes a descriptor */
-	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
+static ssize_t
+tvtostr(char *restrict buf, size_t bsz, tv_t t)
+{
+	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
+}
+
+static inline __attribute__((pure, const)) tv_t
+min_tv(tv_t t1, tv_t t2)
+{
+	return t1 <= t2 ? t1 : t2;
+}
+
+static inline __attribute__((pure, const)) tv_t
+max_tv(tv_t t1, tv_t t2)
+{
+	return t1 >= t2 ? t1 : t2;
+}
+
+static inline __attribute__((pure, const)) px_t
+min_px(px_t p1, px_t p2)
+{
+	return p1 <= p2 ? p1 : p2;
+}
+
+static inline __attribute__((pure, const)) px_t
+max_px(px_t p1, px_t p2)
+{
+	return p1 >= p2 ? p1 : p2;
+}
+
+static inline __attribute__((pure, const)) qx_t
+min_qx(qx_t q1, qx_t q2)
+{
+	return q1 <= q2 ? q1 : q2;
+}
+
+static inline __attribute__((pure, const)) qx_t
+max_qx(qx_t q1, qx_t q2)
+{
+	return q1 >= q2 ? q1 : q2;
+}
+
+
+static px_t minask;
+static px_t maxbid;
+static px_t minspr;
+static px_t maxspr;
+static px_t maxdu;
+static px_t maxdd;
+static qx_t maxasz = 0.dd;
+static qx_t maxbsz = 0.dd;
+/* buy and sell imbalances */
+static qx_t maxbim = 0.dd;
+static qx_t maxsim = 0.dd;
+static tv_t _1st = NOT_A_TIME;
+static tv_t last;
+static tv_t mindlt = NOT_A_TIME;
+static tv_t maxdlt;
+
+static char cont[64];
+static size_t conz;
+
+static void prnt_cndl(void);
+
+static int
+push_init(char *ln, size_t UNUSED(lz))
+{
+	size_t iz;
+	char *on;
+
+	/* instrument name, don't hash him */
+	if (UNLIKELY((on = strchr(ln, '\t')) == NULL)) {
 		return -1;
 	}
-	on++;
-	/* and an IP/port pair */
-	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
+	iz = on++ - ln;
+
+	/* snarf quotes */
+	if (!(maxbid = strtopx(on, &on)) || *on++ != '\t' ||
+	    !(minask = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
-	on++;
+	/* calc initial spread */
+	minspr = maxspr = minask - maxbid;
+
+	/* snarf quantities */
+	if (*on == '\t') {
+		maxbsz = strtoqx(++on, &on);
+		maxasz = strtoqx(++on, &on);
+
+		maxsim = maxbim = maxasz - maxbsz;
+	}
+
+	/* more resetting */
+	maxdd = maxdu = 0.df;
+
+	mindlt = NOT_A_TIME;
+	maxdlt = 0ULL;
+
+	memcpy(cont, ln, conz = iz);
+	return 0;
+}
+
+static int
+push_beef(char *ln, size_t lz)
+{
+	static tv_t nxct;
+	tv_t t;
+	quo_t q;
+	char *on;
+	int rc = 0;
+	qx_t bsz, asz;
+
+	/* metronome is up first */
+	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
+		return -1;
+	} else if (t < last) {
+		fputs("Warning: non-chronological\n", stderr);
+		rc = -1;
+		goto out;
+	} else if (t / intv > nxct) {
+		prnt_cndl();
+		nxct = t / intv;
+		_1st = last = t;
+		return push_init(on, lz - (on - ln));
+	}
 
 	/* instrument name, don't hash him */
 	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
@@ -338,41 +238,108 @@ push_beef(char *ln, size_t UNUSED(lz))
 	on++;
 
 	/* snarf quotes */
-	if (!(this.b = strtopx(on, &on)) || *on++ != '\t' ||
-	    !(this.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
+	if (!(q.b = strtopx(on, &on)) || *on++ != '\t' ||
+	    !(q.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
 
-	/* ok do the calc'ing */
-	if (UNLIKELY(_1st.b == __DEC32_MAX__)) {
-		_1st = last = maxb = mina = this;
-		mindb = maxdb = maxdd = 0.df;
-		minda = maxda = maxdu = 0.df;
-		return 0;
-	}
-	/* min+max */
-	maxb = max_quo(maxb, this);
-	mina = min_quo(mina, this);
+	/* snarf quantities */
+	bsz = strtoqx(++on, &on);
+	asz = strtoqx(++on, &on);
 
-	/* lucky we've got lastb/lasta */
-	with (px_t db = this.b - last.b, da = this.a - last.a) {
-		maxdb = max_px(maxdb, db);
-		mindb = min_px(mindb, db);
-		maxda = max_px(maxda, da);
-		minda = min_px(minda, da);
+	maxbid = max_px(maxbid, q.b);
+	minask = min_px(minask, q.a);
+	with (px_t s = q.a - q.b) {
+		minspr = min_px(minspr, s);
+		maxspr = max_px(maxspr, s);
 	}
 
-	with (px_t du = this.a - mina.b, dd = this.b - maxb.a) {
+	with (px_t du = q.a - minask, dd = q.b - maxbid) {
 		maxdu = max_px(maxdu, du);
 		maxdd = min_px(maxdd, dd);
 	}
 
-	/* keep some state */
-	last = this;
+	with (tv_t dlt = t - last) {
+		mindlt = min_tv(mindlt, dlt);
+		maxdlt = max_tv(maxdlt, dlt);
+	}
 
-	/* skim for optim */
-	optim(false);
-	return 0;
+	maxbsz = max_qx(maxbsz, bsz);
+	maxasz = max_qx(maxasz, asz);
+	with (qx_t imb = asz - bsz) {
+		maxsim = max_qx(maxsim, imb);
+		maxbim = min_qx(maxbim, imb);
+	}
+
+out:
+	/* and store state */
+	last = t;
+	return rc;
+}
+
+static void
+prnt_cndl(void)
+{
+	static size_t ncndl;
+	char buf[4096U];
+	size_t len = 0U;
+
+	if (UNLIKELY(_1st == NOT_A_TIME)) {
+		return;
+	}
+
+	switch (ncndl++) {
+	default:
+		break;
+	case 0U:
+		fputs("cndl\tccy\t_1st\tlast\tmindlt\tmaxdlt\tminask\tmaxbid\tminspr\tmaxspr\tmaxbsz\tmaxasz\tmaxbim\tmaxsim\tmaxdu\tmaxdd\n", stdout);
+		break;
+	}
+
+	/* candle identifier */
+	buf[len++] = '\t';
+
+	len += (memcpy(buf + len, cont, conz), conz);
+
+	buf[len++] = '\t';
+	len += tvtostr(buf + len, sizeof(buf) - len, _1st);
+	buf[len++] = '\t';
+	len += tvtostr(buf + len, sizeof(buf) - len, last);
+	buf[len++] = '\t';
+	if (mindlt != NOT_A_TIME) {
+		len += tvtostr(buf + len, sizeof(buf) - len, mindlt);
+	}
+	buf[len++] = '\t';
+	if (maxdlt != 0) {
+		len += tvtostr(buf + len, sizeof(buf) - len, maxdlt);
+	}
+
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, minask);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, maxbid);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, minspr);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, maxspr);
+
+	buf[len++] = '\t';
+	len += qxtostr(buf + len, sizeof(buf) - len, maxbsz);
+	buf[len++] = '\t';
+	len += qxtostr(buf + len, sizeof(buf) - len, maxasz);
+	buf[len++] = '\t';
+	len += qxtostr(buf + len, sizeof(buf) - len, -maxbim);
+	buf[len++] = '\t';
+	len += qxtostr(buf + len, sizeof(buf) - len, maxsim);
+
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, maxdu);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, maxdd);
+
+	buf[len++] = '\n';
+	fwrite(buf, sizeof(*buf), len, stdout);
+	return;
 }
 
 
@@ -381,7 +348,6 @@ push_beef(char *ln, size_t UNUSED(lz))
 int
 main(int argc, char *argv[])
 {
-/* grep -F 'EURUSD FAST Curncy' | cut -f1,5,6 */
 	static yuck_t argi[1U];
 
 	int rc = 0;
@@ -391,28 +357,30 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (argi->interval_arg) {
-		if (!(intv = strtoul(argi->interval_arg, NULL, 10))) {
-			errno = 0, serror("\
+       if (argi->interval_arg) {
+	       if (!(intv = strtoul(argi->interval_arg, NULL, 10))) {
+		       errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
-			rc = 1;
-			goto out;
-		}
-	}
+		       rc = 1;
+		       goto out;
+	       }
+       }
 
-	{
-		char *line = NULL;
-		size_t llen = 0UL;
-		ssize_t nrd;
+       {
+	       char *line = NULL;
+	       size_t llen = 0UL;
+	       ssize_t nrd;
 
-		crst();
-		while ((nrd = getline(&line, &llen, stdin)) > 0) {
-			push_beef(line, nrd);
-		}
+	       while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		       (void)push_beef(line, nrd);
+	       }
 
-		/* finalise our findings */
-		free(line);
-	}
+	       /* finalise our findings */
+	       free(line);
+
+	       /* print the final candle */
+	       prnt_cndl();
+       }
 
 out:
 	yuck_free(argi);
