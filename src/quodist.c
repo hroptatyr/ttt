@@ -15,6 +15,7 @@
 #include <time.h>
 #include <assert.h>
 #include <ieee754.h>
+#include <math.h>
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #endif	/* HAVE_DFP754_H */
@@ -188,7 +189,7 @@ max_px(px_t p1, px_t p2)
 }
 
 static inline __attribute__((pure, const)) uint32_t
-log2(const uint32_t x)
+ilog2(const uint32_t x)
 {
 	return 31U - __builtin_clz(x);
 }
@@ -367,25 +368,29 @@ push_beef(char *ln, size_t lz)
 	maxbid = max_px(maxbid, q.b);
 	minask = min_px(minask, q.a);
 
-	with (tv_t dlt = t - last, dlS = dlt / MSECS, dlm = dlt % MSECS) {
+	with (tv_t dlt = t - last) {
 		unsigned int slot;
 
 		mindlt = min_tv(mindlt, dlt);
 		maxdlt = max_tv(maxdlt, dlt);
 
-		slot = log2(dlS + 1U);
-		slot &= (1U << highbits) - 1U;
+		switch (highbits) {
+			double x;
 
-		if (highbits > 5U) {
-			dlS &= (1U << slot) - 1U;
+		case 0U:
+			slot = 0U;
+			break;
+		case 5U:
+			slot = ilog2(dlt / MSECS + 1U);
+			slot &= (1U << highbits) - 1U;
+			break;
 
-			dlt = dlS * MSECS + dlm;
-			dlt <<= __builtin_clz(dlt) & -(highbits - 5U);
-			dlt >>= 32U - (highbits - 5U);
-			dlt &= (1U << (highbits - 5U)) - 1U;
-
-			slot <<= highbits - 5U;
-			slot ^= dlt;
+		case 9U:
+		case 13U:
+			x = log((double)dlt / MSECS + 1.) / M_LN2;
+			x *= (double)(1U << (highbits - 5U));
+			slot = (unsigned int)x;
+			break;
 		}
 
 		/* poisson fit */
