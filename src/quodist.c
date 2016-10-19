@@ -208,27 +208,31 @@ static char cont[64];
 static size_t conz;
 
 /* stats */
-static size_t logdlt[32U];
 static union {
-	char start[];
+	size_t start[];
 	struct {
-		size_t mantb[1U];
-		size_t manta[1U];
+		size_t dlt[1U];
+		size_t bid[1U];
+		size_t ask[1U];
 	} _0;
 	struct {
-		size_t mantb[32U];
-		size_t manta[32U];
+		size_t dlt[32U];
+		size_t bid[32U];
+		size_t ask[32U];
 	} _5;
 	struct {
-		size_t mantb[512U];
-		size_t manta[512U];
+		size_t dlt[512U];
+		size_t bid[512U];
+		size_t ask[512U];
 	} _9;
 	struct {
-		size_t mantb[8192U];
-		size_t manta[8192U];
+		size_t dlt[8192U];
+		size_t bid[8192U];
+		size_t ask[8192U];
 	} _13;
-} logquo;
+} cnt;
 
+static size_t *logdlt;
 static size_t *pmantb;
 static size_t *pmanta;
 
@@ -363,14 +367,24 @@ push_beef(char *ln, size_t lz)
 	maxbid = max_px(maxbid, q.b);
 	minask = min_px(minask, q.a);
 
-	with (tv_t dlt = t - last) {
+	with (tv_t dlt = t - last, dlS = dlt / MSECS + 1U) {
 		mindlt = min_tv(mindlt, dlt);
 		maxdlt = max_tv(maxdlt, dlt);
 
+		dlS = log2(dlS);
+		dlS &= (1U << highbits) - 1U;
+
+		if (highbits > 5U) {
+			dlt <<= __builtin_clz(dlt);
+			dlt >>= 32U - highbits - 5U;
+			dlt &= (1U << (highbits - 5U)) - 1U;
+
+			dlS <<= highbits - 5U;
+			dlS ^= dlt;
+		}
+
 		/* poisson fit */
-		dlt /= MSECS;
-		dlt++;
-		logdlt[log2(dlt)]++;
+		logdlt[dlS]++;
 	}
 
 out:
@@ -413,7 +427,7 @@ prnt_cndl(void)
 	buf[len++] = '\t';
 	len += tvtostr(buf + len, sizeof(buf) - len, last);
 
-	for (size_t i = 0U; i < countof(logdlt); i++) {
+	for (size_t i = 0U; i < (1U << highbits); i++) {
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, logdlt[i]);
 	}
@@ -462,8 +476,7 @@ prnt_cndl(void)
 	fwrite(buf, sizeof(*buf), len, stdout);
 
 	/* just reset all stats pages */
-	memset(logdlt, 0, sizeof(logdlt));
-	memset(logquo.start, 0, sizeof(logquo));
+	memset(cnt.start, 0, sizeof(cnt));
 	return;
 }
 
@@ -539,20 +552,24 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 
        switch (highbits) {
        case 0U:
-	       pmantb = logquo._0.mantb;
-	       pmanta = logquo._0.manta;
+	       logdlt = cnt._0.dlt;
+	       pmantb = cnt._0.bid;
+	       pmanta = cnt._0.ask;
 	       break;
        case 5U:
-	       pmantb = logquo._5.mantb;
-	       pmanta = logquo._5.manta;
+	       logdlt = cnt._5.dlt;
+	       pmantb = cnt._5.bid;
+	       pmanta = cnt._5.ask;
 	       break;
        case 9U:
-	       pmantb = logquo._9.mantb;
-	       pmanta = logquo._9.manta;
+	       logdlt = cnt._9.dlt;
+	       pmantb = cnt._9.bid;
+	       pmanta = cnt._9.ask;
 	       break;
        case 13U:
-	       pmantb = logquo._13.mantb;
-	       pmanta = logquo._13.manta;
+	       logdlt = cnt._13.dlt;
+	       pmantb = cnt._13.bid;
+	       pmanta = cnt._13.ask;
 	       break;
        default:
 	       errno = 0, serror("\
