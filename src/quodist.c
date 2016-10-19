@@ -397,7 +397,7 @@ static void
 prnt_cndl(void)
 {
 	static size_t ncndl;
-	static char buf[4096U];
+	static char buf[sizeof(cnt)];
 	size_t len = 0U;
 
 	if (UNLIKELY(_1st == NOT_A_TIME)) {
@@ -405,10 +405,18 @@ prnt_cndl(void)
 	}
 
 	switch (ncndl++) {
+		static const char hdr[] = "cndl\tccy\ttype\tmin\tmax";
 	default:
 		break;
 	case 0U:
-		fputs("cndl\tccy\ttype\tmin\tmax\n", stdout);
+		len = (memcpy(buf, hdr, strlenof(hdr)), strlenof(hdr));
+		for (size_t i = 0U; i < (1U << highbits); i++) {
+			buf[len++] = '\t';
+			buf[len++] = 'v';
+			len += snprintf(buf + len, sizeof(buf) - len, "%zu", i);
+		}
+		buf[len++] = '\n';
+		fwrite(buf, sizeof(*buf), len, stdout);
 		break;
 	}
 
