@@ -54,6 +54,19 @@ snap_LDADD = libdfp.a
 snap_LDADD += -ldecimal
 BUILT_SOURCES += snap.yucc
 
+bin_PROGRAMS += quodist
+quodist_SOURCES = quodist.c quodist.yuck
+quodist_SOURCES += version.c version.h
+quodist_CPPFLAGS = $(AM_CPPFLAGS)
+quodist_CPPFLAGS += -D__STDC_WANT_DEC_FP__
+quodist_CPPFLAGS += $(dfp754_CFLAGS)
+quodist_CPPFLAGS += -DHAVE_VERSION_H
+quodist_LDFLAGS = $(AM_LDFLAGS)
+quodist_LDFLAGS += $(dfp754_LIBS)
+quodist_LDADD = libdfp.a
+quodist_LDADD += -ldecimal
+BUILT_SOURCES += quodist.yucc
+
 bin_PROGRAMS += sex
 sex_SOURCES = sex.c sex.yuck
 sex_SOURCES += hash.c hash.h

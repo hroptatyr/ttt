@@ -14,6 +14,7 @@
 #include <sys/time.h>
 #include <time.h>
 #include <assert.h>
+#include <ieee754.h>
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #endif	/* HAVE_DFP754_H */
@@ -47,6 +48,8 @@ static enum {
 	UNIT_MONTHS,
 	UNIT_YEARS,
 } unit;
+
+static unsigned int highbits = 1U;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -154,6 +157,12 @@ cttostr(char *restrict buf, size_t bsz, tv_t t)
 	return 0;
 }
 
+static ssize_t
+ztostr(char *restrict buf, size_t bsz, size_t n)
+{
+	return snprintf(buf, bsz, "%zu", n);
+}
+
 static inline __attribute__((pure, const)) tv_t
 min_tv(tv_t t1, tv_t t2)
 {
@@ -178,40 +187,54 @@ max_px(px_t p1, px_t p2)
 	return p1 >= p2 ? p1 : p2;
 }
 
-static inline __attribute__((pure, const)) qx_t
-min_qx(qx_t q1, qx_t q2)
+static inline __attribute__((pure, const)) uint32_t
+log2(const uint32_t x)
 {
-	return q1 <= q2 ? q1 : q2;
-}
-
-static inline __attribute__((pure, const)) qx_t
-max_qx(qx_t q1, qx_t q2)
-{
-	return q1 >= q2 ? q1 : q2;
+	return 31U - __builtin_clz(x);
 }
 
 
 /* next candle time */
 static tv_t nxct;
 
-static px_t minask;
-static px_t maxbid;
-static px_t minspr;
-static px_t maxspr;
-static px_t maxdu;
-static px_t maxdd;
-static qx_t maxasz = 0.dd;
-static qx_t maxbsz = 0.dd;
-/* buy and sell imbalances */
-static qx_t maxbim = 0.dd;
-static qx_t maxsim = 0.dd;
 static tv_t _1st = NOT_A_TIME;
 static tv_t last;
+static px_t minask;
+static px_t maxbid;
 static tv_t mindlt = NOT_A_TIME;
 static tv_t maxdlt;
 
 static char cont[64];
 static size_t conz;
+
+/* stats */
+static union {
+	size_t start[];
+	struct {
+		size_t dlt[1U];
+		size_t bid[1U];
+		size_t ask[1U];
+	} _0;
+	struct {
+		size_t dlt[32U];
+		size_t bid[32U];
+		size_t ask[32U];
+	} _5;
+	struct {
+		size_t dlt[512U];
+		size_t bid[512U];
+		size_t ask[512U];
+	} _9;
+	struct {
+		size_t dlt[8192U];
+		size_t bid[8192U];
+		size_t ask[8192U];
+	} _13;
+} cnt;
+
+static size_t *logdlt;
+static size_t *pmantb;
+static size_t *pmanta;
 
 static void prnt_cndl(void);
 
@@ -281,19 +304,6 @@ push_init(char *ln, size_t UNUSED(lz))
 	    !(minask = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
-	/* calc initial spread */
-	minspr = maxspr = minask - maxbid;
-
-	/* snarf quantities */
-	if (*on == '\t') {
-		maxbsz = strtoqx(++on, &on);
-		maxasz = strtoqx(++on, &on);
-
-		maxsim = maxbim = maxasz - maxbsz;
-	}
-
-	/* more resetting */
-	maxdd = maxdu = 0.df;
 
 	mindlt = NOT_A_TIME;
 	maxdlt = 0ULL;
@@ -309,12 +319,11 @@ push_beef(char *ln, size_t lz)
 	quo_t q;
 	char *on;
 	int rc = 0;
-	qx_t bsz, asz;
 
 	/* metronome is up first */
 	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
 		return -1;
-	} else if (UNLIKELY(t < last)) {
+	} else if (t < last) {
 		fputs("Warning: non-chronological\n", stderr);
 		rc = -1;
 		goto out;
@@ -322,7 +331,7 @@ push_beef(char *ln, size_t lz)
 		prnt_cndl();
 		nxct = next_cndl(t);
 		_1st = last = t;
-		return push_init(on, lz - (on - ln));
+		(void)push_init(on, lz - (on - ln));
 	}
 
 	/* instrument name, don't hash him */
@@ -337,32 +346,45 @@ push_beef(char *ln, size_t lz)
 		return -1;
 	}
 
-	/* snarf quantities */
-	bsz = strtoqx(++on, &on);
-	asz = strtoqx(++on, &on);
+	with (unsigned int bm, am) {
+		bm = decompd32(q.b).mant;
+		am = decompd32(q.a).mant;
 
+		bm <<= __builtin_clz(bm);
+		am <<= __builtin_clz(am);
+
+		bm >>= 32U - highbits;
+		am >>= 32U - highbits;
+
+		bm &= (1U << highbits) - 1U;
+		am &= (1U << highbits) - 1U;
+
+		pmantb[bm]++;
+		pmanta[am]++;
+	}
+
+	/* go for ranges */
 	maxbid = max_px(maxbid, q.b);
 	minask = min_px(minask, q.a);
-	with (px_t s = q.a - q.b) {
-		minspr = min_px(minspr, s);
-		maxspr = max_px(maxspr, s);
-	}
 
-	with (px_t du = q.a - minask, dd = q.b - maxbid) {
-		maxdu = max_px(maxdu, du);
-		maxdd = min_px(maxdd, dd);
-	}
-
-	with (tv_t dlt = t - last) {
+	with (tv_t dlt = t - last, dlS = dlt / MSECS + 1U) {
 		mindlt = min_tv(mindlt, dlt);
 		maxdlt = max_tv(maxdlt, dlt);
-	}
 
-	maxbsz = max_qx(maxbsz, bsz);
-	maxasz = max_qx(maxasz, asz);
-	with (qx_t imb = asz - bsz) {
-		maxsim = max_qx(maxsim, imb);
-		maxbim = min_qx(maxbim, imb);
+		dlS = log2(dlS);
+		dlS &= (1U << highbits) - 1U;
+
+		if (highbits > 5U) {
+			dlt <<= __builtin_clz(dlt);
+			dlt >>= 32U - highbits - 5U;
+			dlt &= (1U << (highbits - 5U)) - 1U;
+
+			dlS <<= highbits - 5U;
+			dlS ^= dlt;
+		}
+
+		/* poisson fit */
+		logdlt[dlS]++;
 	}
 
 out:
@@ -375,7 +397,7 @@ static void
 prnt_cndl(void)
 {
 	static size_t ncndl;
-	char buf[4096U];
+	static char buf[sizeof(cnt)];
 	size_t len = 0U;
 
 	if (UNLIKELY(_1st == NOT_A_TIME)) {
@@ -383,10 +405,18 @@ prnt_cndl(void)
 	}
 
 	switch (ncndl++) {
+		static const char hdr[] = "cndl\tccy\ttype\tmin\tmax";
 	default:
 		break;
 	case 0U:
-		fputs("cndl\tccy\t_1st\tlast\tmindlt\tmaxdlt\tminask\tmaxbid\tminspr\tmaxspr\tmaxbsz\tmaxasz\tmaxbim\tmaxsim\tmaxdu\tmaxdd\n", stdout);
+		len = (memcpy(buf, hdr, strlenof(hdr)), strlenof(hdr));
+		for (size_t i = 0U; i < (1U << highbits); i++) {
+			buf[len++] = '\t';
+			buf[len++] = 'v';
+			len += snprintf(buf + len, sizeof(buf) - len, "%zu", i);
+		}
+		buf[len++] = '\n';
+		fwrite(buf, sizeof(*buf), len, stdout);
 		break;
 	}
 
@@ -396,49 +426,70 @@ prnt_cndl(void)
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 
+	/* type t */
+	buf[len++] = '\t';
+	buf[len++] = 't';
+
 	buf[len++] = '\t';
 	len += tvtostr(buf + len, sizeof(buf) - len, _1st);
 	buf[len++] = '\t';
 	len += tvtostr(buf + len, sizeof(buf) - len, last);
-	buf[len++] = '\t';
-	if (mindlt != NOT_A_TIME) {
-		len += tvtostr(buf + len, sizeof(buf) - len, mindlt);
+
+	for (size_t i = 0U; i < (1U << highbits); i++) {
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, logdlt[i]);
 	}
+	buf[len++] = '\n';
+
+	/* candle identifier */
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+
 	buf[len++] = '\t';
-	if (maxdlt != 0) {
-		len += tvtostr(buf + len, sizeof(buf) - len, maxdlt);
-	}
+	len += (memcpy(buf + len, cont, conz), conz);
+
+	buf[len++] = '\t';
+	buf[len++] = 'b';
 
 	buf[len++] = '\t';
 	len += pxtostr(buf + len, sizeof(buf) - len, minask);
 	buf[len++] = '\t';
 	len += pxtostr(buf + len, sizeof(buf) - len, maxbid);
-	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, minspr);
-	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, maxspr);
+
+	for (size_t i = 0U; i < (1U << highbits); i++) {
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, pmantb[i]);
+	}
+	buf[len++] = '\n';
+
+	/* candle identifier */
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
 
 	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, maxbsz);
-	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, maxasz);
-	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, -maxbim);
-	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, maxsim);
+	len += (memcpy(buf + len, cont, conz), conz);
 
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, maxdu);
+	buf[len++] = 'a';
+
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, maxdd);
+	len += pxtostr(buf + len, sizeof(buf) - len, minask);
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, maxbid);
+
+	for (size_t i = 0U; i < (1U << highbits); i++) {
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, pmanta[i]);
+	}
 
 	buf[len++] = '\n';
 	fwrite(buf, sizeof(*buf), len, stdout);
+
+	/* just reset all stats pages */
+	memset(cnt.start, 0, sizeof(cnt));
 	return;
 }
 
 
-#include "candle.yucc"
+#include "quodist.yucc"
 
 int
 main(int argc, char *argv[])
@@ -502,6 +553,37 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 		       rc = 1;
 		       goto out;
 	       }
+       }
+
+       /* set resolution */
+       highbits = (argi->verbose_flag << 2U) ^ (argi->verbose_flag > 0U);
+
+       switch (highbits) {
+       case 0U:
+	       logdlt = cnt._0.dlt;
+	       pmantb = cnt._0.bid;
+	       pmanta = cnt._0.ask;
+	       break;
+       case 5U:
+	       logdlt = cnt._5.dlt;
+	       pmantb = cnt._5.bid;
+	       pmanta = cnt._5.ask;
+	       break;
+       case 9U:
+	       logdlt = cnt._9.dlt;
+	       pmantb = cnt._9.bid;
+	       pmanta = cnt._9.ask;
+	       break;
+       case 13U:
+	       logdlt = cnt._13.dlt;
+	       pmantb = cnt._13.bid;
+	       pmanta = cnt._13.ask;
+	       break;
+       default:
+	       errno = 0, serror("\
+Error: verbose flag can only be used once, twice or three times..");
+	       rc = 1;
+	       goto out;
        }
 
        {
