@@ -367,24 +367,29 @@ push_beef(char *ln, size_t lz)
 	maxbid = max_px(maxbid, q.b);
 	minask = min_px(minask, q.a);
 
-	with (tv_t dlt = t - last, dlS = dlt / MSECS + 1U) {
+	with (tv_t dlt = t - last, dlS = dlt / MSECS, dlm = dlt % MSECS) {
+		unsigned int slot;
+
 		mindlt = min_tv(mindlt, dlt);
 		maxdlt = max_tv(maxdlt, dlt);
 
-		dlS = log2(dlS);
-		dlS &= (1U << highbits) - 1U;
+		slot = log2(dlS + 1U);
+		slot &= (1U << highbits) - 1U;
 
 		if (highbits > 5U) {
+			dlS &= (1U << slot) - 1U;
+
+			dlt = dlS * MSECS + dlm;
 			dlt <<= __builtin_clz(dlt);
 			dlt >>= 32U - (highbits - 5U);
 			dlt &= (1U << (highbits - 5U)) - 1U;
 
-			dlS <<= highbits - 5U;
-			dlS ^= dlt;
+			slot <<= highbits - 5U;
+			slot ^= dlt;
 		}
 
 		/* poisson fit */
-		logdlt[dlS]++;
+		logdlt[slot]++;
 	}
 
 out:
