@@ -1,0 +1,9 @@
+Usage: quodist < QUOTES
+
+Analyse quotes in fixed size windows and print counts..
+
+  -i, --interval=S      Draw candles every S seconds, can also be
+                        suffixed with m for minutes, h for hours,
+                        d for days, mo for months and y for years.
+  -v, --verbose         Draw candles of time delta, bid and ask counts.
+                        Use twice for more bins.
