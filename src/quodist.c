@@ -380,7 +380,7 @@ push_beef(char *ln, size_t lz)
 			dlS &= (1U << slot) - 1U;
 
 			dlt = dlS * MSECS + dlm;
-			dlt <<= __builtin_clz(dlt);
+			dlt <<= __builtin_clz(dlt) & -(highbits - 5U);
 			dlt >>= 32U - (highbits - 5U);
 			dlt &= (1U << (highbits - 5U)) - 1U;
 
