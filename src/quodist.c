@@ -374,25 +374,20 @@ push_beef(char *ln, size_t lz)
 		mindlt = min_tv(mindlt, dlt);
 		maxdlt = max_tv(maxdlt, dlt);
 
-		switch (highbits) {
-			double x;
+		slot = ilog2(dlt / MSECS + 1U);
+		/* determine sub slot, if applicable */
+		with (unsigned int width = (1U << slot), base = width - 1U) {
+			unsigned int subs;
 
-		case 0U:
-			slot = 0U;
-			break;
-		case 5U:
-			slot = ilog2(dlt / MSECS + 1U);
-			slot &= (1U << highbits) - 1U;
-			break;
+			/* translate in terms of base */
+			subs = (dlt - base * MSECS) << (highbits - 5U);
+			/* divide by width */
+			subs /= width * MSECS;
 
-		case 9U:
-		case 13U:
-			x = log((double)dlt / MSECS + 1.) / M_LN2;
-			x *= (double)(1U << (highbits - 5U));
-			slot = (unsigned int)x;
-			break;
+			slot <<= highbits;
+			slot >>= 5U;
+			slot ^= subs;
 		}
-
 		/* poisson fit */
 		logdlt[slot]++;
 	}
