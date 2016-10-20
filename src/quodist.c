@@ -284,7 +284,7 @@ static size_t conz;
 
 /* stats */
 static union {
-	size_t start[];
+	size_t start[0U];
 	struct {
 		size_t dlt[1U];
 		size_t bid[1U];
