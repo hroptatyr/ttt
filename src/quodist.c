@@ -1001,7 +1001,7 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 	}
 
 	/* set candle printer */
-	prnt_cndl = argi->molten_flag ? prnt_cndl_molt : prnt_cndl_mtrx;
+	prnt_cndl = !argi->table_flag ? prnt_cndl_molt : prnt_cndl_mtrx;
 
 	/* set resolution */
 	highbits = (argi->verbose_flag << 2U) ^ (argi->verbose_flag > 0U);
