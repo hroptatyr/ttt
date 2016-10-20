@@ -46,6 +46,16 @@ typedef struct {
 	qx_t a;
 } qty_t;
 
+typedef struct {
+	px_t lo;
+	px_t hi;
+} pxrng_t;
+
+typedef struct {
+	qx_t lo;
+	qx_t hi;
+} qxrng_t;
+
 static tv_t intv;
 static enum {
 	UNIT_NONE,
@@ -124,7 +134,9 @@ out:
 static ssize_t
 tvtostr(char *restrict buf, size_t bsz, tv_t t)
 {
-	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
+	return t < NOT_A_TIME
+		? snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS)
+		: 0U;
 }
 
 static ssize_t
@@ -168,6 +180,55 @@ ztostr(char *restrict buf, size_t bsz, size_t n)
 {
 	return snprintf(buf, bsz, "%zu", n);
 }
+
+static size_t
+zztostr(char *restrict buf, size_t bsz, const size_t *zv, size_t nz)
+{
+	size_t len = 0U;
+
+	for (size_t i = 0U; i < nz; i++) {
+		buf[len++] = '\t';
+		len += ztostr(buf + len, bsz - len, zv[i]);
+	}
+	return len;
+}
+
+static size_t
+pztostr(char *restrict buf, size_t bsz, const px_t *rv, size_t nv)
+{
+	size_t len = 0U;
+
+	for (size_t i = 0U; i < nv; i++) {
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, bsz - len, rv[i]);
+	}
+	return len;
+}
+
+static size_t
+qztostr(char *restrict buf, size_t bsz, const qx_t *rv, size_t nv)
+{
+	size_t len = 0U;
+
+	for (size_t i = 0U; i < nv; i++) {
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, bsz - len, rv[i]);
+	}
+	return len;
+}
+
+static size_t
+tztostr(char *restrict buf, size_t bsz, const tv_t *rv, size_t nv)
+{
+	size_t len = 0U;
+
+	for (size_t i = 0U; i < nv; i++) {
+		buf[len++] = '\t';
+		len += tvtostr(buf + len, bsz - len, rv[i]);
+	}
+	return len;
+}
+
 
 static inline __attribute__((pure, const)) tv_t
 min_tv(tv_t t1, tv_t t2)
@@ -217,16 +278,6 @@ static tv_t nxct;
 
 static tv_t _1st = NOT_A_TIME;
 static tv_t last;
-static px_t minbid;
-static px_t maxbid;
-static px_t minask;
-static px_t maxask;
-static qx_t minbsz;
-static qx_t maxbsz;
-static qx_t minasz;
-static qx_t maxasz;
-static tv_t mindlt = NOT_A_TIME;
-static tv_t maxdlt;
 
 static char cont[64];
 static size_t conz;
@@ -240,6 +291,19 @@ static union {
 		size_t ask[1U];
 		size_t bsz[1U];
 		size_t asz[1U];
+
+		tv_t tlo[1U];
+		tv_t thi[1U];
+
+		px_t bhi[1U];
+		px_t ahi[1U];
+		px_t blo[1U];
+		px_t alo[1U];
+
+		qx_t Bhi[1U];
+		qx_t Ahi[1U];
+		qx_t Blo[1U];
+		qx_t Alo[1U];
 	} _0;
 	struct {
 		size_t dlt[32U];
@@ -247,6 +311,19 @@ static union {
 		size_t ask[32U];
 		size_t bsz[32U];
 		size_t asz[32U];
+
+		tv_t tlo[32U];
+		tv_t thi[32U];
+
+		px_t bhi[32U];
+		px_t ahi[32U];
+		px_t blo[32U];
+		px_t alo[32U];
+
+		qx_t Bhi[32U];
+		qx_t Ahi[32U];
+		qx_t Blo[32U];
+		qx_t Alo[32U];
 	} _5;
 	struct {
 		size_t dlt[512U];
@@ -254,6 +331,19 @@ static union {
 		size_t ask[512U];
 		size_t bsz[512U];
 		size_t asz[512U];
+
+		tv_t tlo[512U];
+		tv_t thi[512U];
+
+		px_t bhi[512U];
+		px_t ahi[512U];
+		px_t blo[512U];
+		px_t alo[512U];
+
+		qx_t Bhi[512U];
+		qx_t Ahi[512U];
+		qx_t Blo[512U];
+		qx_t Alo[512U];
 	} _9;
 	struct {
 		size_t dlt[8192U];
@@ -261,14 +351,37 @@ static union {
 		size_t ask[8192U];
 		size_t bsz[8192U];
 		size_t asz[8192U];
+
+		tv_t tlo[8192U];
+		tv_t thi[8192U];
+
+		px_t bhi[8192U];
+		px_t ahi[8192U];
+		px_t blo[8192U];
+		px_t alo[8192U];
+
+		qx_t Bhi[8192U];
+		qx_t Ahi[8192U];
+		qx_t Blo[8192U];
+		qx_t Alo[8192U];
 	} _13;
 } cnt;
 
-static size_t *logdlt;
-static size_t *pmantb;
-static size_t *pmanta;
-static size_t *qmantb;
-static size_t *qmanta;
+static size_t *dlt;
+static size_t *bid;
+static size_t *ask;
+static size_t *bsz;
+static size_t *asz;
+static tv_t *tlo;
+static tv_t *thi;
+static px_t *blo;
+static px_t *bhi;
+static px_t *alo;
+static px_t *ahi;
+static qx_t *Blo;
+static qx_t *Bhi;
+static qx_t *Alo;
+static qx_t *Ahi;
 static size_t cntz;
 
 static void prnt_cndl(void);
@@ -322,6 +435,15 @@ next_cndl(tv_t t)
 	return mktime(tm) * MSECS;
 }
 
+static void
+rset_cndl(void)
+{
+	/* just reset all stats pages */
+	memset(cnt.start, 0, cntz);
+	memset(tlo, -1, (1U << highbits) * sizeof(*tlo));
+	return;
+}
+
 static int
 push_init(char *ln, size_t UNUSED(lz))
 {
@@ -335,21 +457,10 @@ push_init(char *ln, size_t UNUSED(lz))
 	iz = on++ - ln;
 
 	/* snarf quotes */
-	if (!(maxbid = strtopx(on, &on)) || *on++ != '\t' ||
-	    !(minask = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
+	if (!strtopx(on, &on) || *on++ != '\t' ||
+	    !strtopx(on, &on) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
-	minbid = maxbid;
-	maxask = minask;
-
-	/* snarf quantities */
-	if (*on == '\t') {
-		minbsz = maxbsz = strtoqx(++on, &on);
-		minasz = maxasz = strtoqx(++on, &on);
-	}
-
-	mindlt = NOT_A_TIME;
-	maxdlt = 0ULL;
 
 	memcpy(cont, ln, conz = iz);
 	return 0;
@@ -373,9 +484,12 @@ push_beef(char *ln, size_t lz)
 		goto out;
 	} else if (UNLIKELY(t >= nxct)) {
 		prnt_cndl();
+		rset_cndl();
 		nxct = next_cndl(t);
 		_1st = last = t;
-		(void)push_init(on, lz - (on - ln));
+		if (UNLIKELY(push_init(on, lz - (on - ln)) < 0)) {
+			return -1;
+		}
 	}
 
 	/* instrument name, don't hash him */
@@ -391,38 +505,10 @@ push_beef(char *ln, size_t lz)
 	}
 
 	/* snarf quantities */
-	Q.b = strtoqx(++on, &on);
-	Q.a = strtoqx(++on, &on);
-
-	with (unsigned int bm, am) {
-		minbid = min_px(minbid, q.b);
-		maxbid = max_px(maxbid, q.b);
-		minask = min_px(minask, q.a);
-		maxask = max_px(maxask, q.a);
-
-		bm = decompd32(q.b).mant;
-		am = decompd32(q.a).mant;
-
-		bm <<= __builtin_clz(bm);
-		am <<= __builtin_clz(am);
-
-		bm >>= 32U - highbits;
-		am >>= 32U - highbits;
-
-		bm &= (1U << highbits) - 1U;
-		am &= (1U << highbits) - 1U;
-
-		pmantb[bm]++;
-		pmanta[am]++;
-	}
-
-	if (maxbsz || maxasz) {
+	if (*on == '\t' &&
+	    ((Q.b = strtoqx(++on, &on)) || *on == '\t') &&
+	    ((Q.a = strtoqx(++on, &on)) || *on == '\n')) {
 		unsigned int bm, am;
-
-		minbsz = min_qx(minbsz, Q.b);
-		maxbsz = max_qx(maxbsz, Q.b);
-		minasz = min_qx(minasz, Q.a);
-		maxasz = max_qx(maxasz, Q.a);
 
 		with (uint64_t bm64, am64) {
 			bm64 = decompd64(Q.b).mant;
@@ -442,23 +528,47 @@ push_beef(char *ln, size_t lz)
 		bm &= (1U << highbits) - 1U;
 		am &= (1U << highbits) - 1U;
 
-		qmantb[bm]++;
-		qmanta[am]++;
+		bsz[bm]++;
+		asz[am]++;
+
+		Blo[bm] = min_qx(Blo[bm] ?: __DEC64_MOST_POSITIVE__, Q.b);
+		Bhi[bm] = max_qx(Bhi[bm], Q.b);
+		Alo[am] = min_qx(Alo[am] ?: __DEC64_MOST_POSITIVE__, Q.a);
+		Ahi[am] = max_qx(Ahi[am], Q.a);
 	}
 
-	with (tv_t dlt = t - last) {
+	with (unsigned int bm, am) {
+		bm = decompd32(q.b).mant;
+		am = decompd32(q.a).mant;
+
+		bm <<= __builtin_clz(bm);
+		am <<= __builtin_clz(am);
+
+		bm >>= 32U - highbits;
+		am >>= 32U - highbits;
+
+		bm &= (1U << highbits) - 1U;
+		am &= (1U << highbits) - 1U;
+
+		bid[bm]++;
+		ask[am]++;
+
+		blo[bm] = min_px(blo[bm] ?: __DEC32_MOST_POSITIVE__, q.b);
+		bhi[bm] = max_px(bhi[bm], q.b);
+		alo[am] = min_px(alo[am] ?: __DEC32_MOST_POSITIVE__, q.a);
+		ahi[am] = max_px(ahi[am], q.a);
+	}
+
+	with (tv_t dt = t - last) {
 		unsigned int slot;
 
-		mindlt = min_tv(mindlt, dlt);
-		maxdlt = max_tv(maxdlt, dlt);
-
-		slot = ilog2(dlt / MSECS + 1U);
+		slot = ilog2(dt / MSECS + 1U);
 		/* determine sub slot, if applicable */
 		with (unsigned int width = (1U << slot), base = width - 1U) {
 			unsigned int subs;
 
 			/* translate in terms of base */
-			subs = (dlt - base * MSECS) << (highbits - 5U);
+			subs = (dt - base * MSECS) << (highbits - 5U);
 			/* divide by width */
 			subs /= width * MSECS;
 
@@ -467,25 +577,16 @@ push_beef(char *ln, size_t lz)
 			slot ^= subs;
 		}
 		/* poisson fit */
-		logdlt[slot]++;
+		dlt[slot]++;
+
+		tlo[slot] = min_tv(tlo[slot], dt);
+		thi[slot] = max_tv(thi[slot], dt);
 	}
 
 out:
 	/* and store state */
 	last = t;
 	return rc;
-}
-
-static size_t
-zztostr(char *restrict buf, size_t bsz, const size_t *zv, size_t nz)
-{
-	size_t len = 0U;
-
-	for (size_t i = 0U; i < nz; i++) {
-		buf[len++] = '\t';
-		len += ztostr(buf + len, bsz - len, zv[i]);
-	}
-	return len;
 }
 
 static void
@@ -500,7 +601,7 @@ prnt_cndl(void)
 	}
 
 	switch (ncndl++) {
-		static const char hdr[] = "cndl\tccy\ttype\tmin\tmax";
+		static const char hdr[] = "cndl\tccy\tdimen\tmetric";
 	default:
 		break;
 	case 0U:
@@ -512,105 +613,190 @@ prnt_cndl(void)
 		}
 		buf[len++] = '\n';
 		fwrite(buf, sizeof(*buf), len, stdout);
+		len = 0U;
 		break;
 	}
 
 	/* delta t */
-	len = cttostr(buf, sizeof(buf), nxct);
-
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
-
 	/* type t */
 	buf[len++] = '\t';
 	buf[len++] = 't';
-
 	buf[len++] = '\t';
-	len += tvtostr(buf + len, sizeof(buf) - len, _1st);
-	buf[len++] = '\t';
-	len += tvtostr(buf + len, sizeof(buf) - len, last);
+	buf[len++] = 'n';
+	len += zztostr(buf + len, sizeof(buf) - len, dlt, 1U << highbits);
+	buf[len++] = '\n';
 
-	len += zztostr(buf + len, sizeof(buf) - len, logdlt, 1U << highbits);
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	/* type t */
+	buf[len++] = '\t';
+	buf[len++] = 't';
+	buf[len++] = '\t';
+	buf[len++] = 'L';
+	len += tztostr(buf + len, sizeof(buf) - len, tlo, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	/* type t */
+	buf[len++] = '\t';
+	buf[len++] = 't';
+	buf[len++] = '\t';
+	buf[len++] = 'H';
+	len += tztostr(buf + len, sizeof(buf) - len, thi, 1U << highbits);
 	buf[len++] = '\n';
 
 
 	/* bid */
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
-
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
-
 	buf[len++] = '\t';
 	buf[len++] = 'b';
-
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, minbid);
-	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, maxbid);
-
-	len += zztostr(buf + len, sizeof(buf) - len, pmantb, 1U << highbits);
+	buf[len++] = 'n';
+	len += zztostr(buf + len, sizeof(buf) - len, bid, 1U << highbits);
 	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'b';
+	buf[len++] = '\t';
+	buf[len++] = 'L';
+	len += pztostr(buf + len, sizeof(buf) - len, blo, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'b';
+	buf[len++] = '\t';
+	buf[len++] = 'H';
+	len += pztostr(buf + len, sizeof(buf) - len, bhi, 1U << highbits);
+	buf[len++] = '\n';
+
 
 	/* ask */
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
-
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
-
 	buf[len++] = '\t';
 	buf[len++] = 'a';
-
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, minask);
-	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, maxask);
-
-	len += zztostr(buf + len, sizeof(buf) - len, pmanta, 1U << highbits);
+	buf[len++] = 'n';
+	len += zztostr(buf + len, sizeof(buf) - len, ask, 1U << highbits);
 	buf[len++] = '\n';
 
-	if (!maxbsz && !maxasz) {
-		goto prnt;
-	}
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'a';
+	buf[len++] = '\t';
+	buf[len++] = 'L';
+	len += pztostr(buf + len, sizeof(buf) - len, alo, 1U << highbits);
+	buf[len++] = '\n';
 
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'a';
+	buf[len++] = '\t';
+	buf[len++] = 'H';
+	len += pztostr(buf + len, sizeof(buf) - len, ahi, 1U << highbits);
+	buf[len++] = '\n';
+
+	/* check if there's quantities */
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (bsz[i]) {
+			goto Bsz;
+		}
+	}
+	goto prnt;
+
+Bsz:
 	/* bid quantities */
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
-
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
-
 	buf[len++] = '\t';
 	buf[len++] = 'B';
-
 	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, minbsz);
-	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, maxbsz);
-
-	len += zztostr(buf + len, sizeof(buf) - len, qmantb, 1U << highbits);
+	buf[len++] = 'n';
+	len += zztostr(buf + len, sizeof(buf) - len, bsz, 1U << highbits);
 	buf[len++] = '\n';
 
-	/* ask quantities */
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
-
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'B';
+	buf[len++] = '\t';
+	buf[len++] = 'L';
+	len += qztostr(buf + len, sizeof(buf) - len, Blo, 1U << highbits);
+	buf[len++] = '\n';
 
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'B';
+	buf[len++] = '\t';
+	buf[len++] = 'H';
+	len += qztostr(buf + len, sizeof(buf) - len, Bhi, 1U << highbits);
+	buf[len++] = '\n';
+
+	/* check for ask quantities */
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (asz[i]) {
+			goto Asz;
+		}
+	}
+	goto prnt;
+
+Asz:
+	/* ask quantities */
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
 	buf[len++] = 'A';
-
 	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, minasz);
-	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, maxasz);
+	buf[len++] = 'n';
+	len += zztostr(buf + len, sizeof(buf) - len, asz, 1U << highbits);
+	buf[len++] = '\n';
 
-	len += zztostr(buf + len, sizeof(buf) - len, qmanta, 1U << highbits);
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'A';
+	buf[len++] = '\t';
+	buf[len++] = 'L';
+	len += qztostr(buf + len, sizeof(buf) - len, Alo, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'A';
+	buf[len++] = '\t';
+	buf[len++] = 'H';
+	len += qztostr(buf + len, sizeof(buf) - len, Ahi, 1U << highbits);
 	buf[len++] = '\n';
 
 prnt:
 	fwrite(buf, sizeof(*buf), len, stdout);
-
-	/* just reset all stats pages */
-	memset(cnt.start, 0, cntz);
 	return;
 }
 
@@ -684,37 +870,97 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 	/* set resolution */
 	highbits = (argi->verbose_flag << 2U) ^ (argi->verbose_flag > 0U);
 
-	/* number of bytes used in CNT for counting */
-	cntz = (1U << highbits) * sizeof(size_t);
-
 	switch (highbits) {
 	case 0U:
-		logdlt = cnt._0.dlt;
-		pmantb = cnt._0.bid;
-		pmanta = cnt._0.ask;
-		qmantb = cnt._0.bsz;
-		qmanta = cnt._0.asz;
+		dlt = cnt._0.dlt;
+		bid = cnt._0.bid;
+		ask = cnt._0.ask;
+		bsz = cnt._0.bsz;
+		asz = cnt._0.asz;
+
+		tlo = cnt._0.tlo;
+		thi = cnt._0.thi;
+
+		blo = cnt._0.blo;
+		bhi = cnt._0.bhi;
+		alo = cnt._0.alo;
+		ahi = cnt._0.ahi;
+
+		Blo = cnt._0.Blo;
+		Bhi = cnt._0.Bhi;
+		Alo = cnt._0.Alo;
+		Ahi = cnt._0.Ahi;
+
+		cntz = sizeof(cnt._0);
 		break;
+
 	case 5U:
-		logdlt = cnt._5.dlt;
-		pmantb = cnt._5.bid;
-		pmanta = cnt._5.ask;
-		qmantb = cnt._5.bsz;
-		qmanta = cnt._5.asz;
+		dlt = cnt._5.dlt;
+		bid = cnt._5.bid;
+		ask = cnt._5.ask;
+		bsz = cnt._5.bsz;
+		asz = cnt._5.asz;
+
+		tlo = cnt._5.tlo;
+		thi = cnt._5.thi;
+
+		blo = cnt._5.blo;
+		bhi = cnt._5.bhi;
+		alo = cnt._5.alo;
+		ahi = cnt._5.ahi;
+
+		Blo = cnt._5.Blo;
+		Bhi = cnt._5.Bhi;
+		Alo = cnt._5.Alo;
+		Ahi = cnt._5.Ahi;
+
+		cntz = sizeof(cnt._5);
 		break;
+
 	case 9U:
-		logdlt = cnt._9.dlt;
-		pmantb = cnt._9.bid;
-		pmanta = cnt._9.ask;
-		qmantb = cnt._9.bsz;
-		qmanta = cnt._9.asz;
+		dlt = cnt._9.dlt;
+		bid = cnt._9.bid;
+		ask = cnt._9.ask;
+		bsz = cnt._9.bsz;
+		asz = cnt._9.asz;
+
+		tlo = cnt._9.tlo;
+		thi = cnt._9.thi;
+
+		blo = cnt._9.blo;
+		bhi = cnt._9.bhi;
+		alo = cnt._9.alo;
+		ahi = cnt._9.ahi;
+
+		Blo = cnt._9.Blo;
+		Bhi = cnt._9.Bhi;
+		Alo = cnt._9.Alo;
+		Ahi = cnt._9.Ahi;
+
+		cntz = sizeof(cnt._9);
 		break;
+
 	case 13U:
-		logdlt = cnt._13.dlt;
-		pmantb = cnt._13.bid;
-		pmanta = cnt._13.ask;
-		qmantb = cnt._13.bsz;
-		qmanta = cnt._13.asz;
+		dlt = cnt._13.dlt;
+		bid = cnt._13.bid;
+		ask = cnt._13.ask;
+		bsz = cnt._13.bsz;
+		asz = cnt._13.asz;
+
+		tlo = cnt._13.tlo;
+		thi = cnt._13.thi;
+
+		blo = cnt._13.blo;
+		bhi = cnt._13.bhi;
+		alo = cnt._13.alo;
+		ahi = cnt._13.ahi;
+
+		Blo = cnt._13.Blo;
+		Bhi = cnt._13.Bhi;
+		Alo = cnt._13.Alo;
+		Ahi = cnt._13.Ahi;
+
+		cntz = sizeof(cnt._13);
 		break;
 	default:
 		errno = 0, serror("\
