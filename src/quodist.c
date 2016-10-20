@@ -508,104 +508,104 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
-       if (argi->interval_arg) {
-	       char *on;
+	if (argi->interval_arg) {
+		char *on;
 
-	       if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
-		       errno = 0, serror("\
+		if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
+			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
-		       rc = 1;
-		       goto out;
-	       }
-	       switch (*on++) {
-	       secs:
-	       case '\0':
-	       case 'S':
-	       case 's':
-		       /* seconds, don't fiddle */
-		       intv *= MSECS;
-		       unit = UNIT_SECS;
-		       break;
-	       case 'm':
-	       case 'M':
-		       if (*on == 'o' || *on == 'O') {
-			       goto months;
-		       }
-		       intv *= 60U;
-		       goto secs;
+			rc = 1;
+			goto out;
+		}
+		switch (*on++) {
+		secs:
+		case '\0':
+		case 'S':
+		case 's':
+			/* seconds, don't fiddle */
+			intv *= MSECS;
+			unit = UNIT_SECS;
+			break;
+		case 'm':
+		case 'M':
+			if (*on == 'o' || *on == 'O') {
+				goto months;
+			}
+			intv *= 60U;
+			goto secs;
 
-	       months:
-		       unit = UNIT_MONTHS;
-		       break;
+		months:
+			unit = UNIT_MONTHS;
+			break;
 
-	       case 'y':
-	       case 'Y':
-		       unit = UNIT_YEARS;
-		       break;
+		case 'y':
+		case 'Y':
+			unit = UNIT_YEARS;
+			break;
 
-	       case 'h':
-	       case 'H':
-		       intv *= 60U * 60U;
-		       goto secs;
-	       case 'd':
-	       case 'D':
-		       unit = UNIT_DAYS;
-		       break;
+		case 'h':
+		case 'H':
+			intv *= 60U * 60U;
+			goto secs;
+		case 'd':
+		case 'D':
+			unit = UNIT_DAYS;
+			break;
 
-	       default:
-		       errno = 0, serror("\
+		default:
+			errno = 0, serror("\
 Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
-		       rc = 1;
-		       goto out;
-	       }
-       }
+			rc = 1;
+			goto out;
+		}
+	}
 
-       /* set resolution */
-       highbits = (argi->verbose_flag << 2U) ^ (argi->verbose_flag > 0U);
+	/* set resolution */
+	highbits = (argi->verbose_flag << 2U) ^ (argi->verbose_flag > 0U);
 
-       switch (highbits) {
-       case 0U:
-	       logdlt = cnt._0.dlt;
-	       pmantb = cnt._0.bid;
-	       pmanta = cnt._0.ask;
-	       break;
-       case 5U:
-	       logdlt = cnt._5.dlt;
-	       pmantb = cnt._5.bid;
-	       pmanta = cnt._5.ask;
-	       break;
-       case 9U:
-	       logdlt = cnt._9.dlt;
-	       pmantb = cnt._9.bid;
-	       pmanta = cnt._9.ask;
-	       break;
-       case 13U:
-	       logdlt = cnt._13.dlt;
-	       pmantb = cnt._13.bid;
-	       pmanta = cnt._13.ask;
-	       break;
-       default:
-	       errno = 0, serror("\
+	switch (highbits) {
+	case 0U:
+		logdlt = cnt._0.dlt;
+		pmantb = cnt._0.bid;
+		pmanta = cnt._0.ask;
+		break;
+	case 5U:
+		logdlt = cnt._5.dlt;
+		pmantb = cnt._5.bid;
+		pmanta = cnt._5.ask;
+		break;
+	case 9U:
+		logdlt = cnt._9.dlt;
+		pmantb = cnt._9.bid;
+		pmanta = cnt._9.ask;
+		break;
+	case 13U:
+		logdlt = cnt._13.dlt;
+		pmantb = cnt._13.bid;
+		pmanta = cnt._13.ask;
+		break;
+	default:
+		errno = 0, serror("\
 Error: verbose flag can only be used once, twice or three times..");
-	       rc = 1;
-	       goto out;
-       }
+		rc = 1;
+		goto out;
+	}
 
-       {
-	       char *line = NULL;
-	       size_t llen = 0UL;
-	       ssize_t nrd;
+	{
+		char *line = NULL;
+		size_t llen = 0UL;
+		ssize_t nrd;
 
-	       while ((nrd = getline(&line, &llen, stdin)) > 0) {
-		       (void)push_beef(line, nrd);
-	       }
+		while ((nrd = getline(&line, &llen, stdin)) > 0) {
+			(void)push_beef(line, nrd);
+		}
 
-	       /* finalise our findings */
-	       free(line);
+		/* finalise our findings */
+		free(line);
 
-	       /* print the final candle */
-	       prnt_cndl();
-       }
+		/* print the final candle */
+		prnt_cndl();
+	}
 
 out:
 	yuck_free(argi);
