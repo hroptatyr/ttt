@@ -39,6 +39,11 @@ typedef struct {
 	px_t a;
 } quo_t;
 
+typedef struct {
+	qx_t b;
+	qx_t a;
+} qty_t;
+
 static tv_t intv;
 static enum {
 	UNIT_NONE,
@@ -307,9 +312,9 @@ push_beef(char *ln, size_t lz)
 {
 	tv_t t;
 	quo_t q;
+	qty_t Q;
 	char *on;
 	int rc = 0;
-	qx_t bsz, asz;
 
 	/* metronome is up first */
 	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
@@ -338,8 +343,8 @@ push_beef(char *ln, size_t lz)
 	}
 
 	/* snarf quantities */
-	bsz = strtoqx(++on, &on);
-	asz = strtoqx(++on, &on);
+	Q.b = strtoqx(++on, &on);
+	Q.a = strtoqx(++on, &on);
 
 	maxbid = max_px(maxbid, q.b);
 	minask = min_px(minask, q.a);
@@ -358,9 +363,9 @@ push_beef(char *ln, size_t lz)
 		maxdlt = max_tv(maxdlt, dlt);
 	}
 
-	maxbsz = max_qx(maxbsz, bsz);
-	maxasz = max_qx(maxasz, asz);
-	with (qx_t imb = asz - bsz) {
+	maxbsz = max_qx(maxbsz, Q.b);
+	maxasz = max_qx(maxasz, Q.a);
+	with (qx_t imb = Q.a - Q.b) {
 		maxsim = max_qx(maxsim, imb);
 		maxbim = min_qx(maxbim, imb);
 	}
