@@ -155,7 +155,7 @@ quantexpd64(_Decimal64 x)
 #endif	/* !HAVE_DFP754_*_LITERALS */
 
 #if !defined HAVE_NAND64
-# define NAND64		((union {uint64_t u, _Decimal64 x;}){NAND64_U}.x)
+# define NAND64		((union {uint64_t u; _Decimal64 x;}){NAND64_U}.x)
 inline __attribute__((pure, const)) _Decimal64
 nand64(char *__tagp __attribute__((unused)))
 {
