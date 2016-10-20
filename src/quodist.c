@@ -200,8 +200,10 @@ static tv_t nxct;
 
 static tv_t _1st = NOT_A_TIME;
 static tv_t last;
-static px_t minask;
+static px_t minbid;
 static px_t maxbid;
+static px_t minask;
+static px_t maxask;
 static tv_t mindlt = NOT_A_TIME;
 static tv_t maxdlt;
 
@@ -305,6 +307,8 @@ push_init(char *ln, size_t UNUSED(lz))
 	    !(minask = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
+	minbid = maxbid;
+	maxask = minask;
 
 	mindlt = NOT_A_TIME;
 	maxdlt = 0ULL;
@@ -348,6 +352,11 @@ push_beef(char *ln, size_t lz)
 	}
 
 	with (unsigned int bm, am) {
+		minbid = min_px(minbid, q.b);
+		maxbid = max_px(maxbid, q.b);
+		minask = min_px(minask, q.a);
+		maxask = max_px(maxask, q.a);
+
 		bm = decompd32(q.b).mant;
 		am = decompd32(q.a).mant;
 
@@ -363,10 +372,6 @@ push_beef(char *ln, size_t lz)
 		pmantb[bm]++;
 		pmanta[am]++;
 	}
-
-	/* go for ranges */
-	maxbid = max_px(maxbid, q.b);
-	minask = min_px(minask, q.a);
 
 	with (tv_t dlt = t - last) {
 		unsigned int slot;
@@ -456,7 +461,7 @@ prnt_cndl(void)
 	buf[len++] = 'b';
 
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, minask);
+	len += pxtostr(buf + len, sizeof(buf) - len, minbid);
 	buf[len++] = '\t';
 	len += pxtostr(buf + len, sizeof(buf) - len, maxbid);
 
@@ -478,7 +483,7 @@ prnt_cndl(void)
 	buf[len++] = '\t';
 	len += pxtostr(buf + len, sizeof(buf) - len, minask);
 	buf[len++] = '\t';
-	len += pxtostr(buf + len, sizeof(buf) - len, maxbid);
+	len += pxtostr(buf + len, sizeof(buf) - len, maxask);
 
 	for (size_t i = 0U; i < (1U << highbits); i++) {
 		buf[len++] = '\t';
