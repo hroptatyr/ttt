@@ -39,6 +39,11 @@ typedef struct {
 	px_t a;
 } quo_t;
 
+typedef struct {
+	qx_t b;
+	qx_t a;
+} qty_t;
+
 static tv_t intv;
 static enum {
 	UNIT_NONE,
@@ -307,9 +312,9 @@ push_beef(char *ln, size_t lz)
 {
 	tv_t t;
 	quo_t q;
+	qty_t Q;
 	char *on;
 	int rc = 0;
-	qx_t bsz, asz;
 
 	/* metronome is up first */
 	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
@@ -338,8 +343,8 @@ push_beef(char *ln, size_t lz)
 	}
 
 	/* snarf quantities */
-	bsz = strtoqx(++on, &on);
-	asz = strtoqx(++on, &on);
+	Q.b = strtoqx(++on, &on);
+	Q.a = strtoqx(++on, &on);
 
 	maxbid = max_px(maxbid, q.b);
 	minask = min_px(minask, q.a);
@@ -358,9 +363,9 @@ push_beef(char *ln, size_t lz)
 		maxdlt = max_tv(maxdlt, dlt);
 	}
 
-	maxbsz = max_qx(maxbsz, bsz);
-	maxasz = max_qx(maxasz, asz);
-	with (qx_t imb = asz - bsz) {
+	maxbsz = max_qx(maxbsz, Q.b);
+	maxasz = max_qx(maxasz, Q.a);
+	with (qx_t imb = Q.a - Q.b) {
 		maxsim = max_qx(maxsim, imb);
 		maxbim = min_qx(maxbim, imb);
 	}
@@ -452,73 +457,73 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
-       if (argi->interval_arg) {
-	       char *on;
+	if (argi->interval_arg) {
+		char *on;
 
-	       if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
-		       errno = 0, serror("\
+		if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
+			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
-		       rc = 1;
-		       goto out;
-	       }
-	       switch (*on++) {
-	       secs:
-	       case '\0':
-	       case 'S':
-	       case 's':
-		       /* seconds, don't fiddle */
-		       intv *= MSECS;
-		       unit = UNIT_SECS;
-		       break;
-	       case 'm':
-	       case 'M':
-		       if (*on == 'o' || *on == 'O') {
-			       goto months;
-		       }
-		       intv *= 60U;
-		       goto secs;
+			rc = 1;
+			goto out;
+		}
+		switch (*on++) {
+		secs:
+		case '\0':
+		case 'S':
+		case 's':
+			/* seconds, don't fiddle */
+			intv *= MSECS;
+			unit = UNIT_SECS;
+			break;
+		case 'm':
+		case 'M':
+			if (*on == 'o' || *on == 'O') {
+				goto months;
+			}
+			intv *= 60U;
+			goto secs;
 
-	       months:
-		       unit = UNIT_MONTHS;
-		       break;
+		months:
+			unit = UNIT_MONTHS;
+			break;
 
-	       case 'y':
-	       case 'Y':
-		       unit = UNIT_YEARS;
-		       break;
+		case 'y':
+		case 'Y':
+			unit = UNIT_YEARS;
+			break;
 
-	       case 'h':
-	       case 'H':
-		       intv *= 60U * 60U;
-		       goto secs;
-	       case 'd':
-	       case 'D':
-		       unit = UNIT_DAYS;
-		       break;
+		case 'h':
+		case 'H':
+			intv *= 60U * 60U;
+			goto secs;
+		case 'd':
+		case 'D':
+			unit = UNIT_DAYS;
+			break;
 
-	       default:
-		       errno = 0, serror("\
+		default:
+			errno = 0, serror("\
 Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
-		       rc = 1;
-		       goto out;
-	       }
-       }
+			rc = 1;
+			goto out;
+		}
+	}
 
-       {
-	       char *line = NULL;
-	       size_t llen = 0UL;
-	       ssize_t nrd;
+	{
+		char *line = NULL;
+		size_t llen = 0UL;
+		ssize_t nrd;
 
-	       while ((nrd = getline(&line, &llen, stdin)) > 0) {
-		       (void)push_beef(line, nrd);
-	       }
+		while ((nrd = getline(&line, &llen, stdin)) > 0) {
+			(void)push_beef(line, nrd);
+		}
 
-	       /* finalise our findings */
-	       free(line);
+		/* finalise our findings */
+		free(line);
 
-	       /* print the final candle */
-	       prnt_cndl();
-       }
+		/* print the final candle */
+		prnt_cndl();
+	}
 
 out:
 	yuck_free(argi);
