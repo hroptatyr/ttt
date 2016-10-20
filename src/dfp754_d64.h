@@ -159,7 +159,7 @@ quantexpd64(_Decimal64 x)
 inline __attribute__((pure, const)) _Decimal64
 nand64(char *__tagp __attribute__((unused)))
 {
-	return NAND64
+	return NAND64;
 }
 #endif	/* !HAVE_NAND64 */
 
