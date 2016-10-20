@@ -269,6 +269,7 @@ static size_t *pmantb;
 static size_t *pmanta;
 static size_t *qmantb;
 static size_t *qmanta;
+static size_t cntz;
 
 static void prnt_cndl(void);
 
@@ -609,7 +610,7 @@ prnt:
 	fwrite(buf, sizeof(*buf), len, stdout);
 
 	/* just reset all stats pages */
-	memset(cnt.start, 0, sizeof(cnt));
+	memset(cnt.start, 0, cntz);
 	return;
 }
 
@@ -682,6 +683,9 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 
 	/* set resolution */
 	highbits = (argi->verbose_flag << 2U) ^ (argi->verbose_flag > 0U);
+
+	/* number of bytes used in CNT for counting */
+	cntz = (1U << highbits) * sizeof(size_t);
 
 	switch (highbits) {
 	case 0U:
