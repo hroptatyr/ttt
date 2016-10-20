@@ -285,86 +285,35 @@ static size_t conz;
 /* stats */
 static union {
 	size_t start[0U];
-	struct {
-		size_t dlt[1U];
-		size_t bid[1U];
-		size_t ask[1U];
-		size_t bsz[1U];
-		size_t asz[1U];
 
-		tv_t tlo[1U];
-		tv_t thi[1U];
+#define MAKE_SLOTS(n)				\
+	struct {				\
+		size_t dlt[1U << (n)];		\
+		size_t bid[1U << (n)];		\
+		size_t ask[1U << (n)];		\
+		size_t bsz[1U << (n)];		\
+		size_t asz[1U << (n)];		\
+						\
+		tv_t tlo[1U << (n)];		\
+		tv_t thi[1U << (n)];		\
+						\
+		px_t bhi[1U << (n)];		\
+		px_t ahi[1U << (n)];		\
+		px_t blo[1U << (n)];		\
+		px_t alo[1U << (n)];		\
+						\
+		qx_t Bhi[1U << (n)];		\
+		qx_t Ahi[1U << (n)];		\
+		qx_t Blo[1U << (n)];		\
+		qx_t Alo[1U << (n)];		\
+	} _##n
 
-		px_t bhi[1U];
-		px_t ahi[1U];
-		px_t blo[1U];
-		px_t alo[1U];
-
-		qx_t Bhi[1U];
-		qx_t Ahi[1U];
-		qx_t Blo[1U];
-		qx_t Alo[1U];
-	} _0;
-	struct {
-		size_t dlt[32U];
-		size_t bid[32U];
-		size_t ask[32U];
-		size_t bsz[32U];
-		size_t asz[32U];
-
-		tv_t tlo[32U];
-		tv_t thi[32U];
-
-		px_t bhi[32U];
-		px_t ahi[32U];
-		px_t blo[32U];
-		px_t alo[32U];
-
-		qx_t Bhi[32U];
-		qx_t Ahi[32U];
-		qx_t Blo[32U];
-		qx_t Alo[32U];
-	} _5;
-	struct {
-		size_t dlt[512U];
-		size_t bid[512U];
-		size_t ask[512U];
-		size_t bsz[512U];
-		size_t asz[512U];
-
-		tv_t tlo[512U];
-		tv_t thi[512U];
-
-		px_t bhi[512U];
-		px_t ahi[512U];
-		px_t blo[512U];
-		px_t alo[512U];
-
-		qx_t Bhi[512U];
-		qx_t Ahi[512U];
-		qx_t Blo[512U];
-		qx_t Alo[512U];
-	} _9;
-	struct {
-		size_t dlt[8192U];
-		size_t bid[8192U];
-		size_t ask[8192U];
-		size_t bsz[8192U];
-		size_t asz[8192U];
-
-		tv_t tlo[8192U];
-		tv_t thi[8192U];
-
-		px_t bhi[8192U];
-		px_t ahi[8192U];
-		px_t blo[8192U];
-		px_t alo[8192U];
-
-		qx_t Bhi[8192U];
-		qx_t Ahi[8192U];
-		qx_t Blo[8192U];
-		qx_t Alo[8192U];
-	} _13;
+	MAKE_SLOTS(0);
+	MAKE_SLOTS(5);
+	MAKE_SLOTS(9);
+	MAKE_SLOTS(13);
+	MAKE_SLOTS(17);
+	MAKE_SLOTS(21);
 } cnt;
 
 static size_t *dlt;
@@ -385,6 +334,7 @@ static qx_t *Ahi;
 static size_t cntz;
 
 static void(*prnt_cndl)(void);
+static char buf[sizeof(cnt)];
 
 static tv_t
 next_cndl(tv_t t)
@@ -593,7 +543,6 @@ static void
 prnt_cndl_mtrx(void)
 {
 	static size_t ncndl;
-	char buf[sizeof(cnt)];
 	size_t len = 0U;
 
 	if (UNLIKELY(_1st == NOT_A_TIME)) {
@@ -804,7 +753,6 @@ static void
 prnt_cndl_molt(void)
 {
 	static size_t ncndl;
-	char buf[sizeof(cnt)];
 	size_t len = 0U;
 
 	if (UNLIKELY(_1st == NOT_A_TIME)) {
@@ -1007,100 +955,55 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 	highbits = (argi->verbose_flag << 2U) ^ (argi->verbose_flag > 0U);
 
 	switch (highbits) {
+#define ASS_PTRS(n)				\
+		dlt = cnt._##n.dlt;		\
+		bid = cnt._##n.bid;		\
+		ask = cnt._##n.ask;		\
+		bsz = cnt._##n.bsz;		\
+		asz = cnt._##n.asz;		\
+						\
+		tlo = cnt._##n.tlo;		\
+		thi = cnt._##n.thi;		\
+						\
+		blo = cnt._##n.blo;		\
+		bhi = cnt._##n.bhi;		\
+		alo = cnt._##n.alo;		\
+		ahi = cnt._##n.ahi;		\
+						\
+		Blo = cnt._##n.Blo;		\
+		Bhi = cnt._##n.Bhi;		\
+		Alo = cnt._##n.Alo;		\
+		Ahi = cnt._##n.Ahi;		\
+						\
+		cntz = sizeof(cnt._##n)
+
 	case 0U:
-		dlt = cnt._0.dlt;
-		bid = cnt._0.bid;
-		ask = cnt._0.ask;
-		bsz = cnt._0.bsz;
-		asz = cnt._0.asz;
-
-		tlo = cnt._0.tlo;
-		thi = cnt._0.thi;
-
-		blo = cnt._0.blo;
-		bhi = cnt._0.bhi;
-		alo = cnt._0.alo;
-		ahi = cnt._0.ahi;
-
-		Blo = cnt._0.Blo;
-		Bhi = cnt._0.Bhi;
-		Alo = cnt._0.Alo;
-		Ahi = cnt._0.Ahi;
-
-		cntz = sizeof(cnt._0);
+		ASS_PTRS(0);
 		break;
 
 	case 5U:
-		dlt = cnt._5.dlt;
-		bid = cnt._5.bid;
-		ask = cnt._5.ask;
-		bsz = cnt._5.bsz;
-		asz = cnt._5.asz;
-
-		tlo = cnt._5.tlo;
-		thi = cnt._5.thi;
-
-		blo = cnt._5.blo;
-		bhi = cnt._5.bhi;
-		alo = cnt._5.alo;
-		ahi = cnt._5.ahi;
-
-		Blo = cnt._5.Blo;
-		Bhi = cnt._5.Bhi;
-		Alo = cnt._5.Alo;
-		Ahi = cnt._5.Ahi;
-
-		cntz = sizeof(cnt._5);
+		ASS_PTRS(5);
 		break;
 
 	case 9U:
-		dlt = cnt._9.dlt;
-		bid = cnt._9.bid;
-		ask = cnt._9.ask;
-		bsz = cnt._9.bsz;
-		asz = cnt._9.asz;
-
-		tlo = cnt._9.tlo;
-		thi = cnt._9.thi;
-
-		blo = cnt._9.blo;
-		bhi = cnt._9.bhi;
-		alo = cnt._9.alo;
-		ahi = cnt._9.ahi;
-
-		Blo = cnt._9.Blo;
-		Bhi = cnt._9.Bhi;
-		Alo = cnt._9.Alo;
-		Ahi = cnt._9.Ahi;
-
-		cntz = sizeof(cnt._9);
+		ASS_PTRS(9);
 		break;
 
 	case 13U:
-		dlt = cnt._13.dlt;
-		bid = cnt._13.bid;
-		ask = cnt._13.ask;
-		bsz = cnt._13.bsz;
-		asz = cnt._13.asz;
-
-		tlo = cnt._13.tlo;
-		thi = cnt._13.thi;
-
-		blo = cnt._13.blo;
-		bhi = cnt._13.bhi;
-		alo = cnt._13.alo;
-		ahi = cnt._13.ahi;
-
-		Blo = cnt._13.Blo;
-		Bhi = cnt._13.Bhi;
-		Alo = cnt._13.Alo;
-		Ahi = cnt._13.Ahi;
-
-		cntz = sizeof(cnt._13);
+		ASS_PTRS(13);
 		break;
+
+	case 17U:
+		ASS_PTRS(17);
+		break;
+
+	case 21U:
+		ASS_PTRS(21);
+		break;
+
 	default:
 		errno = 0, serror("\
-Error: verbose flag can only be used once, twice or three times..");
+Error: verbose flag can only be used one to five times..");
 		rc = 1;
 		goto out;
 	}
