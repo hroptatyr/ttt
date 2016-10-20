@@ -384,7 +384,7 @@ static qx_t *Alo;
 static qx_t *Ahi;
 static size_t cntz;
 
-static void prnt_cndl(void);
+static void(*prnt_cndl)(void);
 
 static tv_t
 next_cndl(tv_t t)
@@ -590,10 +590,10 @@ out:
 }
 
 static void
-prnt_cndl(void)
+prnt_cndl_mtrx(void)
 {
 	static size_t ncndl;
-	static char buf[sizeof(cnt)];
+	char buf[sizeof(cnt)];
 	size_t len = 0U;
 
 	if (UNLIKELY(_1st == NOT_A_TIME)) {
@@ -800,6 +800,139 @@ prnt:
 	return;
 }
 
+static void
+prnt_cndl_molt(void)
+{
+	static size_t ncndl;
+	char buf[sizeof(cnt)];
+	size_t len = 0U;
+
+	if (UNLIKELY(_1st == NOT_A_TIME)) {
+		return;
+	}
+
+	switch (ncndl++) {
+		static const char hdr[] = "cndl\tccy\tdimen\tlo\thi\tcnt\n";
+	default:
+		break;
+	case 0U:
+		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
+		break;
+	}
+
+	/* delta t */
+	len = 0U;
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!dlt[i]) {
+			continue;
+		}
+		/* otherwise */
+		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		buf[len++] = '\t';
+		len += (memcpy(buf + len, cont, conz), conz);
+		/* type t */
+		buf[len++] = '\t';
+		buf[len++] = 't';
+		buf[len++] = '\t';
+		len += tvtostr(buf + len, sizeof(buf) - len, tlo[i]);
+		buf[len++] = '\t';
+		len += tvtostr(buf + len, sizeof(buf) - len, thi[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
+		buf[len++] = '\n';
+	}
+	fwrite(buf, sizeof(*buf), len, stdout);
+
+	/* bid */
+	len = 0U;
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!bid[i]) {
+			continue;
+		}
+		/* otherwise */
+		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		buf[len++] = '\t';
+		len += (memcpy(buf + len, cont, conz), conz);
+		buf[len++] = '\t';
+		buf[len++] = 'b';
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, blo[i]);
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, bhi[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, bid[i]);
+		buf[len++] = '\n';
+	}
+	fwrite(buf, sizeof(*buf), len, stdout);
+
+	/* ask */
+	len = 0U;
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!ask[i]) {
+			continue;
+		}
+		/* otherwise */
+		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		buf[len++] = '\t';
+		len += (memcpy(buf + len, cont, conz), conz);
+		buf[len++] = '\t';
+		buf[len++] = 'a';
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, alo[i]);
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, ahi[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, ask[i]);
+		buf[len++] = '\n';
+	}
+	fwrite(buf, sizeof(*buf), len, stdout);
+
+	/* bid quantities */
+	len = 0U;
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!bsz[i]) {
+			continue;
+		}
+		/* otherwise */
+		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		buf[len++] = '\t';
+		len += (memcpy(buf + len, cont, conz), conz);
+		buf[len++] = '\t';
+		buf[len++] = 'B';
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, Blo[i]);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, Bhi[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, bsz[i]);
+		buf[len++] = '\n';
+	}
+	fwrite(buf, sizeof(*buf), len, stdout);
+
+	/* ask quantities */
+	len = 0U;
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!bsz[i]) {
+			continue;
+		}
+		/* otherwise */
+		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		buf[len++] = '\t';
+		len += (memcpy(buf + len, cont, conz), conz);
+		buf[len++] = '\t';
+		buf[len++] = 'A';
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, Alo[i]);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, Ahi[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, asz[i]);
+		buf[len++] = '\n';
+	}
+	fwrite(buf, sizeof(*buf), len, stdout);
+	return;
+}
+
 
 #include "quodist.yucc"
 
@@ -866,6 +999,9 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 			goto out;
 		}
 	}
+
+	/* set candle printer */
+	prnt_cndl = argi->molten_flag ? prnt_cndl_molt : prnt_cndl_mtrx;
 
 	/* set resolution */
 	highbits = (argi->verbose_flag << 2U) ^ (argi->verbose_flag > 0U);

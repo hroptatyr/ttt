@@ -7,3 +7,4 @@ Analyse quotes in fixed size windows and print counts..
                         d for days, mo for months and y for years.
   -v, --verbose         Draw candles of time delta, bid and ask counts.
                         Use twice for more bins.
+  --molten              Print non-zero counts as ranges in molten form.
