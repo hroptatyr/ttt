@@ -3,4 +3,4 @@ Usage: candle [< FILE]
 Produce minute by minute snapshots.
 This regularises a timeseries.
 
-  --interval=S          Shoot snaps every S seconds, default 60.
+  -i, --interval=S      Shoot snaps every S seconds, default 60.
