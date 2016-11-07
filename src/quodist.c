@@ -860,7 +860,7 @@ prnt_cndl_molt(void)
 	/* ask quantities */
 	len = 0U;
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
-		if (!bsz[i]) {
+		if (!asz[i]) {
 			continue;
 		}
 		/* otherwise */
