@@ -40,4 +40,12 @@ TESTS += accsum_04.clit
 EXTRA_DIST += test1.acc
 EXTRA_DIST += test2.acc
 
+TESTS += quodist_01.clit
+TESTS += quodist_02.clit
+TESTS += quodist_03.clit
+TESTS += quodist_04.clit
+TESTS += quodist_05.clit
+TESTS += quodist_06.clit
+EXTRA_DIST += EURUSD
+
 ## Makefile.am ends here

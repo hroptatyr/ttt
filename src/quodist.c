@@ -66,6 +66,7 @@ static enum {
 } unit;
 
 static unsigned int highbits = 1U;
+static unsigned int elapsp;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -176,10 +177,12 @@ cttostr(char *restrict buf, size_t bsz, tv_t t)
 }
 
 static ssize_t
-ztostr(char *restrict buf, size_t bsz, size_t n)
+zutostr(char *restrict buf, size_t bsz, size_t n)
 {
 	return snprintf(buf, bsz, "%zu", n);
 }
+
+static ssize_t(*ztostr)(char *restrict buf, size_t bsz, size_t n) = zutostr;
 
 static size_t
 zztostr(char *restrict buf, size_t bsz, const size_t *zv, size_t nz)
@@ -419,6 +422,7 @@ push_init(char *ln, size_t UNUSED(lz))
 static int
 push_beef(char *ln, size_t lz)
 {
+	size_t acc;
 	tv_t t;
 	quo_t q;
 	qty_t Q;
@@ -454,6 +458,9 @@ push_beef(char *ln, size_t lz)
 		return -1;
 	}
 
+	/* measure time */
+	acc = !elapsp ? 1ULL : (t - last);
+
 	/* snarf quantities */
 	if (*on == '\t' &&
 	    ((Q.b = strtoqx(++on, &on)) || *on == '\t') &&
@@ -478,8 +485,8 @@ push_beef(char *ln, size_t lz)
 		bm &= (1U << highbits) - 1U;
 		am &= (1U << highbits) - 1U;
 
-		bsz[bm]++;
-		asz[am]++;
+		bsz[bm] += acc;
+		asz[am] += acc;
 
 		Blo[bm] = min_qx(Blo[bm] ?: __DEC64_MOST_POSITIVE__, Q.b);
 		Bhi[bm] = max_qx(Bhi[bm], Q.b);
@@ -500,8 +507,8 @@ push_beef(char *ln, size_t lz)
 		bm &= (1U << highbits) - 1U;
 		am &= (1U << highbits) - 1U;
 
-		bid[bm]++;
-		ask[am]++;
+		bid[bm] += acc;
+		ask[am] += acc;
 
 		blo[bm] = min_px(blo[bm] ?: __DEC32_MOST_POSITIVE__, q.b);
 		bhi[bm] = max_px(bhi[bm], q.b);
@@ -510,9 +517,8 @@ push_beef(char *ln, size_t lz)
 	}
 
 	with (tv_t dt = t - last) {
-		unsigned int slot;
+		unsigned int slot = ilog2(dt / MSECS + 1U);
 
-		slot = ilog2(dt / MSECS + 1U);
 		/* determine sub slot, if applicable */
 		with (unsigned int width = (1U << slot), base = width - 1U) {
 			unsigned int subs;
@@ -527,7 +533,7 @@ push_beef(char *ln, size_t lz)
 			slot ^= subs;
 		}
 		/* poisson fit */
-		dlt[slot]++;
+		dlt[slot] += acc;
 
 		tlo[slot] = min_tv(tlo[slot], dt);
 		thi[slot] = max_tv(thi[slot], dt);
@@ -860,7 +866,7 @@ prnt_cndl_molt(void)
 	/* ask quantities */
 	len = 0U;
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
-		if (!bsz[i]) {
+		if (!asz[i]) {
 			continue;
 		}
 		/* otherwise */
@@ -1007,6 +1013,10 @@ Error: verbose flag can only be used one to five times..");
 		rc = 1;
 		goto out;
 	}
+
+	/* count events or elapsed times */
+	elapsp = argi->time_flag;
+	ztostr = !elapsp ? zutostr : tvtostr;
 
 	{
 		char *line = NULL;

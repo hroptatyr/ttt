@@ -9,3 +9,5 @@ Analyse quotes in fixed size windows and print counts..
                         Use twice for more bins.
   -t, --table           Print counts and ranges as table, 
                         default: print as molten data.
+  -T, --time            Add up elapsed times between events,
+                        default: count events.
