@@ -318,13 +318,13 @@ yield_ord:
 		case 'L'/*ONG*/:
 			adq = !maxq ? qty : acc.base <= 0.dd ? qty : 0.dd;
 			adq += absq && acc.base < 0.dd ? qty : 0.dd;
-			o = (ord_t){RGM_LONG, .q = adq, .lp = __DEC32_MAX__};
+			o = (ord_t){RGM_LONG, .q = adq, .lp = INFD32};
 			on += 4U;
 			goto ord;
 		case 'S'/*HORT*/:
 			adq = !maxq ? qty : acc.base >= 0.dd ? qty : 0.dd;
 			adq += absq && acc.base > 0.dd ? qty : 0.dd;
-			o = (ord_t){RGM_SHORT, .q = -adq, .lp = __DEC32_MIN__};
+			o = (ord_t){RGM_SHORT, .q = -adq, .lp = MINFD32};
 			on += 5U;
 			goto ord;
 		case 'C'/*ANCEL*/:
