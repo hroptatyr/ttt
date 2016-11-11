@@ -39,6 +39,7 @@
 #endif	/* HAVE_CONFIG_H */
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #elif defined HAVE_DFP_STDLIB_H
@@ -73,6 +74,12 @@ deconst(const void *cp)
 		void *p;
 	} tmp = {cp};
 	return tmp.p;
+}
+
+static inline __attribute__((const, pure)) size_t
+min_z(size_t z1, size_t z2)
+{
+	return z1 <= z2 ? z1 : z2;
 }
 
 
@@ -687,6 +694,11 @@ dpd32tostr(char *restrict buf, size_t bsz, _Decimal32 x)
 int
 d32tostr(char *restrict buf, size_t bsz, _Decimal32 x)
 {
+	if (UNLIKELY(isnand32(x))) {
+		const size_t z = min_z(3U, bsz);
+		memcpy(buf, "nan", z);
+		return z;
+	}
 #if defined HAVE_DFP754_BID_LITERALS
 	return bid32tostr(buf, bsz, x);
 #elif defined HAVE_DFP754_DPD_LITERALS
