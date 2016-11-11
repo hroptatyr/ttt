@@ -6,6 +6,6 @@ Simulate executions of ORDERS using QUOTES.
                         in under N milliseconds (default: 60)
   --commission=PX       Commissions per roundtrip.  These will be
                         accrued in a separate account.
-  --quantity=QX         Trade QX contracts per order.
+  -Q, --quantity=QX     Trade QX contracts per order.
   --maxqty              Allow at most two signals in the same direction.
   --absqty              Position absolute quantities.
