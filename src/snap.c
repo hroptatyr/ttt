@@ -118,7 +118,7 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 static tv_t intv = 60U * MSECS;
 
 static tv_t metr;
-static quo_t last = {__DEC32_MAX__, __DEC32_MIN__};
+static quo_t last;
 static qua_t that;
 
 static char cont[64];
@@ -127,7 +127,7 @@ static size_t conz;
 static void
 crst(void)
 {
-	last = (quo_t){__DEC32_MAX__, __DEC32_MIN__};
+	last = (quo_t){nand32(""), nand32("")};
 	return;
 }
 
@@ -143,11 +143,11 @@ snap(void)
 	buf[bi++] = '\t';
 	bi += (memcpy(buf + bi, cont, conz), conz);
 	buf[bi++] = '\t';
-	if (LIKELY(last.b < __DEC32_MAX__)) {
+	if (LIKELY(!isnand32(last.b))) {
 		bi += pxtostr(buf + bi, sizeof(buf) - bi, last.b);
 	}
 	buf[bi++] = '\t';
-	if (LIKELY(last.a > __DEC32_MIN__)) {
+	if (LIKELY(!isnand32(last.a))) {
 		bi += pxtostr(buf + bi, sizeof(buf) - bi, last.a);
 	}
 	if (that.b > 0.dd && that.a > 0.dd) {
@@ -266,6 +266,8 @@ Error: cannot read interval argument, must be positive.");
 		intv *= MSECS;
 	}
 
+	/* reset candles */
+	crst();
 	{
 		char *line = NULL;
 		size_t llen = 0UL;
