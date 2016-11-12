@@ -118,7 +118,7 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 static tv_t intv = 60U * MSECS;
 
 static tv_t metr;
-static quo_t last = {__DEC32_MAX__, __DEC32_MIN__};
+static quo_t last;
 static qua_t that;
 
 static char cont[64];
@@ -127,7 +127,7 @@ static size_t conz;
 static void
 crst(void)
 {
-	last = (quo_t){__DEC32_MAX__, __DEC32_MIN__};
+	last = (quo_t){nand32(""), nand32("")};
 	return;
 }
 
@@ -137,17 +137,17 @@ snap(void)
 	char buf[256U];
 	size_t bi;
 
-	bi = tvtostr(buf, sizeof(buf), metr * intv);
+	bi = tvtostr(buf, sizeof(buf), (metr + 1ULL) * intv);
 	buf[bi++] = '\t';
 	buf[bi++] = '\t';
 	buf[bi++] = '\t';
 	bi += (memcpy(buf + bi, cont, conz), conz);
 	buf[bi++] = '\t';
-	if (LIKELY(last.b < __DEC32_MAX__)) {
+	if (LIKELY(!isnand32(last.b))) {
 		bi += pxtostr(buf + bi, sizeof(buf) - bi, last.b);
 	}
 	buf[bi++] = '\t';
-	if (LIKELY(last.a > __DEC32_MIN__)) {
+	if (LIKELY(!isnand32(last.a))) {
 		bi += pxtostr(buf + bi, sizeof(buf) - bi, last.a);
 	}
 	if (that.b > 0.dd && that.a > 0.dd) {
@@ -175,6 +175,7 @@ push_init(char *ln, size_t UNUSED(lz))
 		return -1;
 	}
 	/* align metronome to interval */
+	metr--;
 	metr /= intv;
 
 	/* instrument name, don't hash him */
@@ -204,23 +205,26 @@ push_init(char *ln, size_t UNUSED(lz))
 static int
 push_beef(char *ln, size_t UNUSED(lz))
 {
-	tv_t oldm = metr;
+	tv_t nmtr;
 	quo_t this;
 	char *on;
 
 	/* metronome is up first */
-	if (UNLIKELY((metr = strtotv(ln, &on)) == NOT_A_TIME)) {
+	if (UNLIKELY((nmtr = strtotv(ln, &on)) == NOT_A_TIME)) {
 		return -1;
 	}
 	/* align metronome to interval */
-	metr /= intv;
+	nmtr--;
+	nmtr /= intv;
 
 	/* do we need to draw another candle? */
-	if (UNLIKELY(metr > oldm)) {
+	if (UNLIKELY(nmtr > metr)) {
 		/* yip */
 		snap();
 		/* and reset */
 		crst();
+		/* assign new metr */
+		metr = nmtr;
 	}
 
 	/* instrument name, don't hash him */
@@ -266,6 +270,8 @@ Error: cannot read interval argument, must be positive.");
 		intv *= MSECS;
 	}
 
+	/* reset candles */
+	crst();
 	{
 		char *line = NULL;
 		size_t llen = 0UL;
