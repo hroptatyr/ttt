@@ -137,7 +137,7 @@ snap(void)
 	char buf[256U];
 	size_t bi;
 
-	bi = tvtostr(buf, sizeof(buf), metr * intv);
+	bi = tvtostr(buf, sizeof(buf), (metr + 1ULL) * intv);
 	buf[bi++] = '\t';
 	buf[bi++] = '\t';
 	buf[bi++] = '\t';
@@ -175,6 +175,7 @@ push_init(char *ln, size_t UNUSED(lz))
 		return -1;
 	}
 	/* align metronome to interval */
+	metr--;
 	metr /= intv;
 
 	/* instrument name, don't hash him */
@@ -204,23 +205,26 @@ push_init(char *ln, size_t UNUSED(lz))
 static int
 push_beef(char *ln, size_t UNUSED(lz))
 {
-	tv_t oldm = metr;
+	tv_t nmtr;
 	quo_t this;
 	char *on;
 
 	/* metronome is up first */
-	if (UNLIKELY((metr = strtotv(ln, &on)) == NOT_A_TIME)) {
+	if (UNLIKELY((nmtr = strtotv(ln, &on)) == NOT_A_TIME)) {
 		return -1;
 	}
 	/* align metronome to interval */
-	metr /= intv;
+	nmtr--;
+	nmtr /= intv;
 
 	/* do we need to draw another candle? */
-	if (UNLIKELY(metr > oldm)) {
+	if (UNLIKELY(nmtr > metr)) {
 		/* yip */
 		snap();
 		/* and reset */
 		crst();
+		/* assign new metr */
+		metr = nmtr;
 	}
 
 	/* instrument name, don't hash him */
