@@ -323,7 +323,7 @@ push_beef(char *ln, size_t lz)
 		fputs("Warning: non-chronological\n", stderr);
 		rc = -1;
 		goto out;
-	} else if (UNLIKELY(t >= nxct)) {
+	} else if (UNLIKELY(t > nxct)) {
 		prnt_cndl();
 		nxct = next_cndl(t);
 		_1st = last = t;
