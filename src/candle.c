@@ -201,6 +201,9 @@ static tv_t nxct;
 
 static px_t minask;
 static px_t maxbid;
+/* only used for draw-up/draw-down */
+static px_t maxask;
+static px_t minbid;
 static px_t minspr;
 static px_t maxspr;
 static px_t maxdu;
@@ -299,6 +302,9 @@ push_init(char *ln, size_t UNUSED(lz))
 
 	/* more resetting */
 	maxdd = maxdu = 0.df;
+	/* just so we can kick off max-du and max-dd calcs */
+	minbid = maxbid;
+	maxask = minask;
 
 	mindlt = NOT_A_TIME;
 	maxdlt = 0ULL;
@@ -353,9 +359,12 @@ push_beef(char *ln, size_t lz)
 		maxspr = max_px(maxspr, s);
 	}
 
-	with (px_t du = q.a - minask, dd = q.b - maxbid) {
+	with (px_t du = q.a - minbid, dd = q.b - maxask) {
 		maxdu = max_px(maxdu, du);
 		maxdd = min_px(maxdd, dd);
+		/* for next round */
+		minbid = min_px(minbid, q.b);
+		maxask = max_px(maxask, q.a);
 	}
 
 	with (tv_t dlt = t - last) {
