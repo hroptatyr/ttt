@@ -282,6 +282,8 @@ Error: cannot read interval argument, must be positive.");
 		while ((nrd = getline(&line, &llen, stdin)) > 0) {
 			push_beef(line, nrd);
 		}
+		/* produce the final candle */
+		snap();
 
 		/* finalise our findings */
 		free(line);
