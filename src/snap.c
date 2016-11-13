@@ -114,7 +114,7 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 
 static tv_t intv = 60U * MSECS;
 
-static tv_t metr;
+static tv_t metr = NOT_A_TIME;
 static quo_t last;
 
 static char cont[64];
@@ -132,6 +132,10 @@ snap(void)
 {
 	char buf[256U];
 	size_t bi;
+
+	if (UNLIKELY(metr == NOT_A_TIME)) {
+		return -1;
+	}
 
 	bi = tvtostr(buf, sizeof(buf), (metr + 1ULL) * intv);
 	buf[bi++] = '\t';
