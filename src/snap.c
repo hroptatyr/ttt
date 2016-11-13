@@ -37,12 +37,9 @@ typedef long unsigned int tv_t;
 typedef struct {
 	px_t b;
 	px_t a;
+	qx_t B;
+	qx_t A;
 } quo_t;
-
-typedef struct {
-	qx_t b;
-	qx_t a;
-} qua_t;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -119,7 +116,6 @@ static tv_t intv = 60U * MSECS;
 
 static tv_t metr;
 static quo_t last;
-static qua_t that;
 
 static char cont[64];
 static size_t conz;
@@ -150,11 +146,15 @@ snap(void)
 	if (LIKELY(!isnand32(last.a))) {
 		bi += pxtostr(buf + bi, sizeof(buf) - bi, last.a);
 	}
-	if (that.b > 0.dd && that.a > 0.dd) {
+	if (last.B > 0.dd || last.A > 0.dd) {
 		buf[bi++] = '\t';
-		bi += qxtostr(buf + bi, sizeof(buf) - bi, that.b);
+		if (last.B > 0.dd) {
+			bi += qxtostr(buf + bi, sizeof(buf) - bi, last.B);
+		}
 		buf[bi++] = '\t';
-		bi += qxtostr(buf + bi, sizeof(buf) - bi, that.a);
+		if (last.A > 0.dd) {
+			bi += qxtostr(buf + bi, sizeof(buf) - bi, last.A);
+		}
 	}
 
 	buf[bi++] = '\n';
@@ -191,8 +191,8 @@ push_init(char *ln, size_t UNUSED(lz))
 	}
 	/* snarf quantities */
 	if (*on == '\t') {
-		that.b = strtoqx(++on, &on);
-		that.a = strtoqx(++on, &on);
+		this.B = strtoqx(++on, &on);
+		this.A = strtoqx(++on, &on);
 	}
 
 	/* we're init'ing, so everything is the last value */
@@ -238,6 +238,11 @@ push_beef(char *ln, size_t UNUSED(lz))
 	    !(this.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
+	/* snarf quantities */
+	if (*on == '\t') {
+		this.B = strtoqx(++on, &on);
+		this.A = strtoqx(++on, &on);
+	}
 
 	/* keep some state */
 	last = this;
@@ -282,6 +287,8 @@ Error: cannot read interval argument, must be positive.");
 		while ((nrd = getline(&line, &llen, stdin)) > 0) {
 			push_beef(line, nrd);
 		}
+		/* produce the final candle */
+		snap();
 
 		/* finalise our findings */
 		free(line);
