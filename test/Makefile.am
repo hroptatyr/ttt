@@ -40,6 +40,10 @@ TESTS += accsum_04.clit
 EXTRA_DIST += test1.acc
 EXTRA_DIST += test2.acc
 
+TESTS += snap_01.clit
+TESTS += snap_02.clit
+EXTRA_DIST += EURUSD
+
 TESTS += quodist_01.clit
 TESTS += quodist_02.clit
 TESTS += quodist_03.clit
