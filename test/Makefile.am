@@ -27,6 +27,7 @@ TESTS += sex_02.clit
 TESTS += sex_03.clit
 TESTS += sex_04.clit
 TESTS += sex_05.clit
+TESTS += sex_06.clit
 EXTRA_DIST += EURUSD
 
 TESTS += opt_01.clit
