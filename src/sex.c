@@ -252,6 +252,8 @@ try_exec(ord_t o, quo_t q)
 		} else if (o.q < 0.dd && (p = q.b) < o.lp) {
 			/* no can do exec */
 			break;
+		} else {
+			p = 0.df;
 		}
 		return (exe_t){t, p, o.q, o.q};
 
