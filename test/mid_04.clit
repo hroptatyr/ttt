@@ -1,0 +1,5 @@
+#!/usr/bin/clitoris  ## -*- shell-script -*-
+
+$ mid --spread < "${srcdir}/EURUSD" | mid --despread
+< "${srcdir}/EURUSD"
+$
