@@ -24,6 +24,7 @@ noinst_LIBRARIES = libmydfp.a
 libmydfp_a_SOURCES =
 libmydfp_a_SOURCES += dfp754_d32.c dfp754_d32.h
 libmydfp_a_SOURCES += dfp754_d64.c dfp754_d64.h
+libmydfp_a_SOURCES += nifty.h
 libmydfp_a_CPPFLAGS = $(AM_CPPFLAGS)
 libmydfp_a_CPPFLAGS += $(dfp754_CFLAGS)
 
