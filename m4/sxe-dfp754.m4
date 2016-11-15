@@ -364,6 +364,9 @@ AC_DEFUN([_SXE_CHECK_DFP754_HEADERS], [dnl
 
 
 AC_DEFUN([_SXE_CHECK_DFP754_SYMBOLS], [dnl
+	save_LDFLAGS="${LDFLAGS}"
+	LDFLAGS="${LDFLAGS} ${dfp754_LIBS}"
+
 	AC_CHECK_FUNCS([strtod32])
 	AC_CHECK_FUNCS([quantized32])
 	AC_CHECK_FUNCS([scalbnd32])
@@ -371,6 +374,16 @@ AC_DEFUN([_SXE_CHECK_DFP754_SYMBOLS], [dnl
 	AC_CHECK_FUNCS([strtod64])
 	AC_CHECK_FUNCS([quantized64])
 	AC_CHECK_FUNCS([scalbnd64])
+
+	AC_CHECK_FUNCS([nand32])
+	AC_CHECK_FUNCS([isnand32])
+
+	AC_CHECK_FUNCS([nand64])
+	AC_CHECK_FUNCS([isnand64])
+
+	AC_CHECK_FUNCS([fabsd32])
+	AC_CHECK_FUNCS([fabsd64])
+	LDFLAGS="${save_LDFLAGS}"
 
 	## see if strtod64/strtod32 are clean
 	if test "${ac_cv_func_strtod32}" = "yes"; then
@@ -380,14 +393,6 @@ AC_DEFUN([_SXE_CHECK_DFP754_SYMBOLS], [dnl
 		_SXE_CHECK_DFP754_STRTOD([strtod64])
 	fi
 
-	save_LDFLAGS="${LDFLAGS}"
-	LDFLAGS="${LDFLAGS} -lm"
-	AC_CHECK_FUNCS([nand32])
-	AC_CHECK_FUNCS([isnand32])
-
-	AC_CHECK_FUNCS([nand64])
-	AC_CHECK_FUNCS([isnand64])
-	LDFLAGS="${save_LDFLAGS}"
 ])dnl _SXE_CHECK_DFP754_SYMBOLS
 
 AC_DEFUN([SXE_CHECK_DFP754], [dnl
