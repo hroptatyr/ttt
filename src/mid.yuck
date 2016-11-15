@@ -6,5 +6,7 @@ Produce a bid/ask time series with a constant spread.
                         Or, if omitted, output the actual spread in the
                         ask column and if quantities are present output
                         the mean quantity alongside the sell imbalance.
+                        X can also take the form of +Y or -Y which will
+                        widen or tighten the spread by Y.
   --despread            Assuming a midpoint+spread time series, return
                         the original time series.
