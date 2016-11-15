@@ -20,12 +20,12 @@ SUFFIXES =
 CLEANFILES += version.c
 EXTRA_DIST += version.c.in
 
-noinst_LIBRARIES = libdfp.a
-libdfp_a_SOURCES =
-libdfp_a_SOURCES += dfp754_d32.c dfp754_d32.h
-libdfp_a_SOURCES += dfp754_d64.c dfp754_d64.h
-libdfp_a_CPPFLAGS = $(AM_CPPFLAGS)
-libdfp_a_CPPFLAGS += $(dfp754_CFLAGS)
+noinst_LIBRARIES = libmydfp.a
+libmydfp_a_SOURCES =
+libmydfp_a_SOURCES += dfp754_d32.c dfp754_d32.h
+libmydfp_a_SOURCES += dfp754_d64.c dfp754_d64.h
+libmydfp_a_CPPFLAGS = $(AM_CPPFLAGS)
+libmydfp_a_CPPFLAGS += $(dfp754_CFLAGS)
 
 
 bin_PROGRAMS += candle
@@ -37,7 +37,7 @@ candle_CPPFLAGS += $(dfp754_CFLAGS)
 candle_CPPFLAGS += -DHAVE_VERSION_H
 candle_LDFLAGS = $(AM_LDFLAGS)
 candle_LDFLAGS += $(dfp754_LIBS)
-candle_LDADD = libdfp.a
+candle_LDADD = libmydfp.a
 candle_LDADD += -ldecimal
 BUILT_SOURCES += candle.yucc
 
@@ -50,7 +50,7 @@ snap_CPPFLAGS += $(dfp754_CFLAGS)
 snap_CPPFLAGS += -DHAVE_VERSION_H
 snap_LDFLAGS = $(AM_LDFLAGS)
 snap_LDFLAGS += $(dfp754_LIBS)
-snap_LDADD = libdfp.a
+snap_LDADD = libmydfp.a
 snap_LDADD += -ldecimal
 BUILT_SOURCES += snap.yucc
 
@@ -63,7 +63,7 @@ quodist_CPPFLAGS += $(dfp754_CFLAGS)
 quodist_CPPFLAGS += -DHAVE_VERSION_H
 quodist_LDFLAGS = $(AM_LDFLAGS)
 quodist_LDFLAGS += $(dfp754_LIBS)
-quodist_LDADD = libdfp.a
+quodist_LDADD = libmydfp.a
 quodist_LDADD += -ldecimal
 BUILT_SOURCES += quodist.yucc
 
@@ -77,7 +77,7 @@ sex_CPPFLAGS += $(dfp754_CFLAGS)
 sex_CPPFLAGS += -DHAVE_VERSION_H
 sex_LDFLAGS = $(AM_LDFLAGS)
 sex_LDFLAGS += $(dfp754_LIBS)
-sex_LDADD = libdfp.a
+sex_LDADD = libmydfp.a
 sex_LDADD += -ldecimal
 BUILT_SOURCES += sex.yucc
 
@@ -91,7 +91,7 @@ eva_CPPFLAGS += $(dfp754_CFLAGS)
 eva_CPPFLAGS += -DHAVE_VERSION_H
 eva_LDFLAGS = $(AM_LDFLAGS)
 eva_LDFLAGS += $(dfp754_LIBS)
-eva_LDADD = libdfp.a
+eva_LDADD = libmydfp.a
 eva_LDADD += -ldecimal
 BUILT_SOURCES += eva.yucc
 
@@ -105,7 +105,7 @@ imp_CPPFLAGS += $(dfp754_CFLAGS)
 imp_CPPFLAGS += -DHAVE_VERSION_H
 imp_LDFLAGS = $(AM_LDFLAGS)
 imp_LDFLAGS += $(dfp754_LIBS)
-imp_LDADD = libdfp.a
+imp_LDADD = libmydfp.a
 imp_LDADD += -ldecimal
 BUILT_SOURCES += imp.yucc
 
@@ -118,7 +118,7 @@ mid_CPPFLAGS += $(dfp754_CFLAGS)
 mid_CPPFLAGS += -DHAVE_VERSION_H
 mid_LDFLAGS = $(AM_LDFLAGS)
 mid_LDFLAGS += $(dfp754_LIBS)
-mid_LDADD = libdfp.a
+mid_LDADD = libmydfp.a
 mid_LDADD += -ldecimal
 BUILT_SOURCES += mid.yucc
 
@@ -131,7 +131,7 @@ qq_CPPFLAGS += $(dfp754_CFLAGS)
 qq_CPPFLAGS += -DHAVE_VERSION_H
 qq_LDFLAGS = $(AM_LDFLAGS)
 qq_LDFLAGS += $(dfp754_LIBS)
-qq_LDADD = libdfp.a
+qq_LDADD = libmydfp.a
 qq_LDADD += -ldecimal
 BUILT_SOURCES += qq.yucc
 
@@ -144,7 +144,7 @@ sea_CPPFLAGS += $(dfp754_CFLAGS)
 sea_CPPFLAGS += -DHAVE_VERSION_H
 sea_LDFLAGS = $(AM_LDFLAGS)
 sea_LDFLAGS += $(dfp754_LIBS)
-sea_LDADD = libdfp.a
+sea_LDADD = libmydfp.a
 sea_LDADD += -ldecimal
 BUILT_SOURCES += sea.yucc
 
@@ -158,7 +158,7 @@ accsum_CPPFLAGS += $(dfp754_CFLAGS)
 accsum_CPPFLAGS += -DHAVE_VERSION_H
 accsum_LDFLAGS = $(AM_LDFLAGS)
 accsum_LDFLAGS += $(dfp754_LIBS)
-accsum_LDADD = libdfp.a
+accsum_LDADD = libmydfp.a
 accsum_LDADD += -ldecimal
 BUILT_SOURCES += accsum.yucc
 
@@ -186,7 +186,7 @@ sma_CPPFLAGS += $(dfp754_CFLAGS)
 sma_CPPFLAGS += -DHAVE_VERSION_H
 sma_LDFLAGS = $(AM_LDFLAGS)
 sma_LDFLAGS += $(dfp754_LIBS)
-sma_LDADD = libdfp.a
+sma_LDADD = libmydfp.a
 sma_LDADD += -ldecimal
 BUILT_SOURCES += sma.yucc
 
@@ -200,7 +200,7 @@ opt_CPPFLAGS += $(dfp754_CFLAGS)
 opt_CPPFLAGS += -DHAVE_VERSION_H
 opt_LDFLAGS = $(AM_LDFLAGS)
 opt_LDFLAGS += $(dfp754_LIBS)
-opt_LDADD = libdfp.a
+opt_LDADD = libmydfp.a
 opt_LDADD += -ldecimal
 BUILT_SOURCES += opt.yucc
 
@@ -214,7 +214,7 @@ fra_CPPFLAGS += $(dfp754_CFLAGS)
 fra_CPPFLAGS += -DHAVE_VERSION_H
 fra_LDFLAGS = $(AM_LDFLAGS)
 fra_LDFLAGS += $(dfp754_LIBS)
-fra_LDADD = libdfp.a
+fra_LDADD = libmydfp.a
 fra_LDADD += -ldecimal
 BUILT_SOURCES += fra.yucc
 
@@ -228,7 +228,7 @@ spread_CPPFLAGS += $(dfp754_CFLAGS)
 spread_CPPFLAGS += -DHAVE_VERSION_H
 spread_LDFLAGS = $(AM_LDFLAGS)
 spread_LDFLAGS += $(dfp754_LIBS)
-spread_LDADD = libdfp.a
+spread_LDADD = libmydfp.a
 spread_LDADD += -ldecimal
 BUILT_SOURCES += spread.yucc
 
