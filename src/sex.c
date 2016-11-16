@@ -93,9 +93,6 @@ static px_t comm = 0.df;
 static unsigned int absq;
 static unsigned int maxq;
 
-#define FRONT	(0U)
-#define HIND	(1U)
-
 
 static __attribute__((format(printf, 1, 2))) void
 serror(const char *fmt, ...)
