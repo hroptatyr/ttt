@@ -238,7 +238,7 @@ try_exec(ord_t o, quo_t q)
 {
 /* this takes an order + quotes and executes it at market price */
 	const tv_t t = max_tv(o.t, metr);
-	px_t p;
+	px_t p = 0.df;
 
 	switch (o.r) {
 	case RGM_LONG:
@@ -258,8 +258,6 @@ try_exec(ord_t o, quo_t q)
 			p = q.b;
 		} else if (o.q < 0.dd) {
 			p = q.a;
-		} else {
-			p = 0.df;
 		}
 		return (exe_t){t, p, -o.q, -o.q};
 
