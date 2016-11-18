@@ -2,6 +2,7 @@ Usage: sex QUOTES < ORDERS
 
 Simulate executions of ORDERS using QUOTES.
 
+  --pair=X              In output tag accounts as X.
   --exe-delay=N         In offline mode assume we can execute
                         in under N milliseconds (default: 60)
   --commission=PX       Commissions per roundtrip.  These will be

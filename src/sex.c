@@ -481,6 +481,11 @@ Error: QUOTES file is mandatory.");
 		goto out;
 	}
 
+	if (argi->pair_arg) {
+		cont = argi->pair_arg;
+		conz = strlen(cont);
+	}
+
 	if (argi->exe_delay_arg) {
 		exe_age = strtoul(argi->exe_delay_arg, NULL, 10);
 	}
