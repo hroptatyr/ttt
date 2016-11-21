@@ -39,10 +39,6 @@ typedef long unsigned int tv_t;
 /* relevant tick dimensions */
 typedef struct {
 	tv_t t;
-	px_t p;
-} tik_t;
-
-typedef struct {
 	px_t b;
 	px_t a;
 } quo_t;
@@ -51,13 +47,17 @@ typedef struct {
 	tv_t t;
 	px_t p;
 	qx_t q;
-	qx_t totq;
+	/* spread at the time */
+	px_t s;
+	/* quote age */
+	tv_t g;
 } exe_t;
 
 typedef struct {
 	qx_t base;
 	qx_t term;
-	qx_t comm;
+	qx_t comb;
+	qx_t comt;
 } acc_t;
 
 /* regimes
@@ -89,7 +89,8 @@ typedef struct {
 
 static tv_t exe_age = 60U;
 static qx_t qty = 1.dd;
-static px_t comm = 0.df;
+static px_t comb = 0.df;
+static px_t comt = 0.df;
 static unsigned int absq;
 static unsigned int maxq;
 
@@ -179,6 +180,12 @@ out:
 	return r;
 }
 
+static ssize_t
+tvtostr(char *restrict buf, size_t bsz, tv_t t)
+{
+	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
+}
+
 static inline __attribute__((const, pure)) tv_t
 max_tv(tv_t t1, tv_t t2)
 {
@@ -195,9 +202,7 @@ send_exe(exe_t x)
 	char buf[256U];
 	size_t len;
 
-	len = snprintf(
-		buf, sizeof(buf), "%lu.%03lu000000",
-		x.t / MSECS, x.t % MSECS);
+	len = tvtostr(buf, sizeof(buf), x.t);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, (x.q ? vexe : vrej), strlenof(vexe)),
 		strlenof(vexe));
@@ -206,6 +211,12 @@ send_exe(exe_t x)
 	len += qxtostr(buf + len, sizeof(buf) - len, x.q);
 	buf[len++] = '\t';
 	len += pxtostr(buf + len, sizeof(buf) - len, x.p);
+	/* spread at the time */
+	buf[len++] = '\t';
+	len += pxtostr(buf + len, sizeof(buf) - len, x.s);
+	/* how long was quote standing */
+	buf[len++] = '\t';
+	len += tvtostr(buf + len, sizeof(buf) - len, x.g);
 	buf[len++] = '\n';
 	return fwrite(buf, 1, len, stdout);
 }
@@ -217,9 +228,7 @@ send_acc(tv_t t, acc_t a)
 	char buf[256U];
 	size_t len;
 
-	len = snprintf(
-		buf, sizeof(buf), "%lu.%03lu000000",
-		t / MSECS, t % MSECS);
+	len = tvtostr(buf, sizeof(buf), t);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
 	len += (memcpy(buf + len, cont, conz), conz);
@@ -228,7 +237,9 @@ send_acc(tv_t t, acc_t a)
 	buf[len++] = '\t';
 	len += qxtostr(buf + len, sizeof(buf) - len, a.term);
 	buf[len++] = '\t';
-	len += qxtostr(buf + len, sizeof(buf) - len, a.comm);
+	len += qxtostr(buf + len, sizeof(buf) - len, a.comb);
+	buf[len++] = '\t';
+	len += qxtostr(buf + len, sizeof(buf) - len, a.comt);
 	buf[len++] = '\n';
 	return fwrite(buf, 1, len, stdout);
 }
@@ -239,6 +250,8 @@ try_exec(ord_t o, quo_t q)
 /* this takes an order + quotes and executes it at market price */
 	const tv_t t = max_tv(o.t, metr);
 	px_t p = 0.df;
+	px_t s = q.a - q.b;
+	tv_t age = t - q.t;
 
 	switch (o.r) {
 	case RGM_LONG:
@@ -250,7 +263,7 @@ try_exec(ord_t o, quo_t q)
 			/* no can do exec */
 			break;
 		}
-		return (exe_t){t, p, o.q, o.q};
+		return (exe_t){t, p, o.q, s, age};
 
 	case RGM_CANCEL:
 	case RGM_EMERGCLOSE:
@@ -259,27 +272,30 @@ try_exec(ord_t o, quo_t q)
 		} else if (o.q < 0.dd) {
 			p = q.a;
 		}
-		return (exe_t){t, p, -o.q, -o.q};
+		return (exe_t){t, p, -o.q, s, age};
 
 	default:
 		/* otherwise do nothing */
 		break;
 	}
-	return (exe_t){t, 0.df, 0.dd, 0.dd};
+	return (exe_t){t, 0.df, 0.dd, s, age};
 }
 
 static acc_t
-alloc(acc_t a, exe_t x, px_t c/*ommission*/)
+alloc(acc_t a, exe_t x, px_t cb/*base comm*/, px_t ct/*terms coommission*/)
 {
 /* allocate execution X to account A. */
 	/* calc accounts */
 	a.base += x.q;
 	a.term -= x.q * x.p;
-	a.comm -= fabsd64(x.q) * c;
+	a.comb -= fabsd64(x.q) * cb;
+	a.comt -= fabsd64(x.q * x.p) * ct;
 
 	/* quantize to make them look nicer */
 	a.base = quantized64(a.base, 0.00dd);
 	a.term = quantized64(a.term, 0.00dd);
+	a.comb = quantized64(a.comb, 0.00dd);
+	a.comt = quantized64(a.comt, 0.00dd);
 	return a;
 }
 
@@ -288,7 +304,7 @@ static int
 offline(FILE *qfp)
 {
 	acc_t acc = {
-		.base = 0.dd, .term = 0.dd, .comm = 0.dd,
+		.base = 0.dd, .term = 0.dd, .comb = 0.dd, .comt = 0.dd,
 	};
 	ord_t oq[256U];
 	size_t ioq = 0U, noq = 0U;
@@ -371,17 +387,16 @@ yield_ord:
 yield_quo:
 	while (getline(&line, &llen, qfp) > 0) {
 		char *on;
-		tv_t newm;
 		quo_t newq;
 
-		newm = strtotv(line, &on);
+		newq.t = strtotv(line, &on);
 		/* instrument next */
 		on = strchr(on, '\t');
 		newq.b = strtopx(++on, &on);
 		newq.a = strtopx(++on, &on);
 
 		/* process limit order queue */
-		for (size_t i = ioq, n = noq; i < n && oq[i].t < newm; i++) {
+		for (size_t i = ioq, n = noq; i < n && oq[i].t < newq.t; i++) {
 			exe_t x;
 
 			switch (oq[i].r) {
@@ -412,7 +427,7 @@ yield_quo:
 			}
 			/* otherwise send post-trade details */
 			send_exe(x);
-			acc = alloc(acc, x, comm);
+			acc = alloc(acc, x, comb, comt);
 			send_acc(x.t, acc);
 
 			/* check for brackets */
@@ -441,7 +456,7 @@ yield_quo:
 
 		/* shift quotes */
 		q = newq;
-		metr = newm;
+		metr = newq.t;
 
 		if (metr >= omtr) {
 			goto yield_ord;
@@ -453,7 +468,7 @@ yield_quo:
 		ord_t o = {RGM_CANCEL, .t = metr, .q = acc.base};
 		exe_t x = try_exec(o, q);
 		send_exe(x);
-		acc = alloc(acc, x, comm);
+		acc = alloc(acc, x, comb, comt);
 		send_acc(metr, acc);
 	}
 
@@ -491,7 +506,24 @@ Error: QUOTES file is mandatory.");
 	}
 
 	if (argi->commission_arg) {
-		comm = strtopx(argi->commission_arg, NULL);
+		char *on = argi->commission_arg;
+
+		switch (*on) {
+		default:
+			comb = strtopx(on, &on);
+
+			if (*on == '/') {
+		case '/':
+			comt = strtopx(++on, &on);
+			if (*on == '/') {
+				errno = 0, serror("\
+Error: commission must be given as PXb[/PXt]");
+				rc = 1;
+				goto out;
+			}
+			}
+			break;
+		}
 	}
 
 	if (argi->quantity_arg) {
