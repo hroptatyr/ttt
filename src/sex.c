@@ -39,10 +39,6 @@ typedef long unsigned int tv_t;
 /* relevant tick dimensions */
 typedef struct {
 	tv_t t;
-	px_t p;
-} tik_t;
-
-typedef struct {
 	px_t b;
 	px_t a;
 } quo_t;
@@ -53,6 +49,8 @@ typedef struct {
 	qx_t q;
 	/* spread at the time */
 	px_t s;
+	/* quote age */
+	tv_t g;
 } exe_t;
 
 typedef struct {
@@ -182,6 +180,12 @@ out:
 	return r;
 }
 
+static ssize_t
+tvtostr(char *restrict buf, size_t bsz, tv_t t)
+{
+	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
+}
+
 static inline __attribute__((const, pure)) tv_t
 max_tv(tv_t t1, tv_t t2)
 {
@@ -198,9 +202,7 @@ send_exe(exe_t x)
 	char buf[256U];
 	size_t len;
 
-	len = snprintf(
-		buf, sizeof(buf), "%lu.%03lu000000",
-		x.t / MSECS, x.t % MSECS);
+	len = tvtostr(buf, sizeof(buf), x.t);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, (x.q ? vexe : vrej), strlenof(vexe)),
 		strlenof(vexe));
@@ -209,8 +211,12 @@ send_exe(exe_t x)
 	len += qxtostr(buf + len, sizeof(buf) - len, x.q);
 	buf[len++] = '\t';
 	len += pxtostr(buf + len, sizeof(buf) - len, x.p);
+	/* spread at the time */
 	buf[len++] = '\t';
 	len += pxtostr(buf + len, sizeof(buf) - len, x.s);
+	/* how long was quote standing */
+	buf[len++] = '\t';
+	len += tvtostr(buf + len, sizeof(buf) - len, x.g);
 	buf[len++] = '\n';
 	return fwrite(buf, 1, len, stdout);
 }
@@ -222,9 +228,7 @@ send_acc(tv_t t, acc_t a)
 	char buf[256U];
 	size_t len;
 
-	len = snprintf(
-		buf, sizeof(buf), "%lu.%03lu000000",
-		t / MSECS, t % MSECS);
+	len = tvtostr(buf, sizeof(buf), t);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
 	len += (memcpy(buf + len, cont, conz), conz);
@@ -247,6 +251,7 @@ try_exec(ord_t o, quo_t q)
 	const tv_t t = max_tv(o.t, metr);
 	px_t p = 0.df;
 	px_t s = q.a - q.b;
+	tv_t age = t - q.t;
 
 	switch (o.r) {
 	case RGM_LONG:
@@ -258,7 +263,7 @@ try_exec(ord_t o, quo_t q)
 			/* no can do exec */
 			break;
 		}
-		return (exe_t){t, p, o.q, s};
+		return (exe_t){t, p, o.q, s, age};
 
 	case RGM_CANCEL:
 	case RGM_EMERGCLOSE:
@@ -267,13 +272,13 @@ try_exec(ord_t o, quo_t q)
 		} else if (o.q < 0.dd) {
 			p = q.a;
 		}
-		return (exe_t){t, p, -o.q, s};
+		return (exe_t){t, p, -o.q, s, age};
 
 	default:
 		/* otherwise do nothing */
 		break;
 	}
-	return (exe_t){t, 0.df, 0.dd, s};
+	return (exe_t){t, 0.df, 0.dd, s, age};
 }
 
 static acc_t
@@ -382,17 +387,16 @@ yield_ord:
 yield_quo:
 	while (getline(&line, &llen, qfp) > 0) {
 		char *on;
-		tv_t newm;
 		quo_t newq;
 
-		newm = strtotv(line, &on);
+		newq.t = strtotv(line, &on);
 		/* instrument next */
 		on = strchr(on, '\t');
 		newq.b = strtopx(++on, &on);
 		newq.a = strtopx(++on, &on);
 
 		/* process limit order queue */
-		for (size_t i = ioq, n = noq; i < n && oq[i].t < newm; i++) {
+		for (size_t i = ioq, n = noq; i < n && oq[i].t < newq.t; i++) {
 			exe_t x;
 
 			switch (oq[i].r) {
@@ -452,7 +456,7 @@ yield_quo:
 
 		/* shift quotes */
 		q = newq;
-		metr = newm;
+		metr = newq.t;
 
 		if (metr >= omtr) {
 			goto yield_ord;
