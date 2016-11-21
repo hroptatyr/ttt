@@ -7,6 +7,10 @@ Simulate executions of ORDERS using QUOTES.
                         in under N milliseconds (default: 60)
   --commission=PX       Commissions per roundtrip.  These will be
                         accrued in a separate account.
+                        The format is PXb[/PXt] or /PXt where PXb is
+                        commission based on the base and PXt is
+                        commission based on the price (terms account).
+                        Default: 0/0
   -Q, --quantity=QX     Trade QX contracts per order.
   --maxqty              Allow at most two signals in the same direction.
   --absqty              Position absolute quantities.
