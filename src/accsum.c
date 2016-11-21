@@ -238,6 +238,7 @@ again:
 	/* snarf the base amount */
 	a.base = strtoqx(++on, &on);
 	a.term = strtoqx(++on, &on);
+	(void)strtoqx(++on, &on);
 	a.comm = strtoqx(++on, &on);
 	return newm;
 }
