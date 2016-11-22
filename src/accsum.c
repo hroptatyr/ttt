@@ -71,6 +71,7 @@ typedef struct {
 static tv_t intv = 10 * MSECS;
 static unsigned int edgp;
 static unsigned int grossp;
+static unsigned int verbp;
 
 static FILE *qfp;
 static FILE *afp;
@@ -528,6 +529,40 @@ offline(void)
 		buf[len++] = '\n';
 		fwrite(buf, 1, len, stdout);
 	}
+
+	if (LIKELY(!verbp)) {
+		return 0;
+	}
+
+	/* print an explanation */
+	static const char x[] = "\
+\f\n\
+Legend:\n\
+F\tflat\n\
+L\tlong\n\
+S\tshort\n\
+L+S\tlong and short together\n\
+Xold\tX was the old position\n\
+Xnew\tX is the new position\n\
+\n\
+hits\ta position that, when left, turned out to be profitable\n\
+count\tthe number of positions entered, profitable or not\n\
+time\ttotal time spent in the designated position\n\
+\n\
+avg\taverage profit/loss per position\n\
+best\tbest position\n\
+worst\tworst position\n\
+\n\
+hit-r\thit rate, ratio of hits versus count\n\
+hit-sk\taverage profit on a hit\n\
+loss-sk\taverage loss on a non-hit\n\
+\n\
+rpnl\trealised profit or loss\n\
+rp\trealised profit\n\
+rl\trealised loss\n\
+";
+
+	fwrite(x, sizeof(*x), countof(x), stdout);
 	return 0;
 }
 
@@ -547,6 +582,7 @@ main(int argc, char *argv[])
 
 	edgp = argi->edge_flag;
 	grossp = argi->gross_flag;
+	verbp = argi->verbose_flag;
 
 	if (UNLIKELY((afp = stdin) == NULL)) {
 		errno = 0, serror("\
