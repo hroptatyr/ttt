@@ -500,9 +500,6 @@ offline(void)
 		for (size_t j = 0U; j < countof(sstr); j++) {
 			const size_t v = CNTS(i, j);
 			buf[len++] = '\t';
-			if (UNLIKELY(i == j)) {
-				continue;
-			}
 			len += snprintf(buf + len, sizeof(buf) - len, "%zu", v);
 		}
 		buf[len++] = '\n';
@@ -527,9 +524,6 @@ offline(void)
 		for (size_t j = 0U; j < countof(sstr); j++) {
 			const size_t v = WINS(i, j);
 			buf[len++] = '\t';
-			if (UNLIKELY(i == j)) {
-				continue;
-			}
 			len += snprintf(buf + len, sizeof(buf) - len, "%zu", v);
 		}
 		buf[len++] = '\n';
