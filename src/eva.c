@@ -330,6 +330,11 @@ Error: QUOTES file is mandatory.");
 		goto out;
 	}
 
+	if (argi->pair_arg) {
+		cont = argi->pair_arg;
+		conz = strlen(cont);
+	}
+
 	if (argi->interval_arg) {
 		if (!(intv = strtoul(argi->interval_arg, NULL, 10))) {
 			errno = 0, serror("\

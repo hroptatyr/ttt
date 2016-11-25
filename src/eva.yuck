@@ -2,4 +2,5 @@ Usage: eva QUOTES < ACCOUNTS
 
 Continuously evaluate ACCOUNTS using QUOTES.
 
+  --pair=X              In output tag evaluations as X.
   --interval=T          Evaluate portfolio every T seconds, default: 10
