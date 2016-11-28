@@ -45,6 +45,8 @@ TESTS += snap_01.clit
 TESTS += snap_02.clit
 TESTS += snap_03.clit
 TESTS += snap_04.clit
+TESTS += snap_05.clit
+TESTS += snap_06.clit
 EXTRA_DIST += EURUSD
 
 TESTS += mid_01.clit
