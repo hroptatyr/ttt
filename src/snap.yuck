@@ -4,3 +4,6 @@ Produce minute by minute snapshots.
 This regularises a timeseries.
 
   -i, --interval=S      Shoot snaps every S seconds, default 60.
+                        Can be suffixed with 'ms', 's', 'm', 'h' to
+                        denote milliseconds, seconds, minutes, hours
+                        respectively.

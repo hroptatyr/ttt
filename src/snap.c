@@ -182,13 +182,49 @@ main(int argc, char *argv[])
 	}
 
 	if (argi->interval_arg) {
-		if (!(intv = strtoul(argi->interval_arg, NULL, 10))) {
+		char *on;
+
+		if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
 			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
 			rc = 1;
 			goto out;
 		}
-		intv *= MSECS;
+		switch (*on) {
+		case '\0':
+		case 's':
+		case 'S':
+			/* user wants seconds, do they not? */
+			intv *= MSECS;
+			break;
+		case 'm':
+		case 'M':
+			switch (*++on) {
+			case '\0':
+				/* they want minutes, oh oh */
+				intv *= 60UL * MSECS;
+				break;
+			case 's':
+			case 'S':
+				/* milliseconds it is then */
+				intv = intv;
+				break;
+			default:
+				goto invalid;
+			}
+			break;
+		case 'h':
+		case 'H':
+			/* them hours we use */
+			intv *= 60UL * 60UL * MSECS;
+			break;
+		default:
+		invalid:
+			errno = 0, serror("\
+Error: invalid suffix in interval, use `ms', `s', `m', or `h'");
+			rc = 1;
+			goto out;
+		}
 	}
 
 	{
