@@ -7,3 +7,7 @@ This regularises a timeseries.
                         Can be suffixed with 'ms', 's', 'm', 'h' to
                         denote milliseconds, seconds, minutes, hours
                         respectively.
+  -o, --offset=S        Offset snaps by S seconds, can also be
+                        suffixed with 'ms', 's', 'm', 'h' to denote
+                        milliseconds, seconds, minutes, or hours.
+                        Default: 0

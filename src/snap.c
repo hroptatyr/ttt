@@ -24,6 +24,7 @@ typedef long unsigned int tv_t;
 
 /* command line params */
 static tv_t intv = 1U * MSECS;
+static tv_t offs = 0U * MSECS;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -127,6 +128,7 @@ push_beef(char *ln, size_t UNUSED(lz))
 	}
 	/* align metronome to interval */
 	nmtr--;
+	nmtr -= offs;
 	nmtr /= intv;
 
 	/* do we need to draw another candle? */
@@ -136,7 +138,7 @@ push_beef(char *ln, size_t UNUSED(lz))
 
 	snap:
 		/* materialise snapshot */
-		slen = tvtostr(sbuf, sizeof(sbuf), (metr + 1ULL) * intv);
+		slen = tvtostr(sbuf, sizeof(sbuf), (metr + 1ULL) * intv + offs);
 		/* copy over (lbuf has space for the metronome) */
 		memcpy(lbuf + (24UL - slen), sbuf, slen);
 		/* and out */
@@ -207,7 +209,7 @@ Error: cannot read interval argument, must be positive.");
 				intv = intv;
 				break;
 			default:
-				goto invalid;
+				goto invalid_intv;
 			}
 			break;
 		case 'h':
@@ -216,11 +218,61 @@ Error: cannot read interval argument, must be positive.");
 			intv *= 60UL * 60UL * MSECS;
 			break;
 		default:
-		invalid:
+		invalid_intv:
 			errno = 0, serror("\
 Error: invalid suffix in interval, use `ms', `s', `m', or `h'");
 			rc = 1;
 			goto out;
+		}
+	}
+
+	if (argi->offset_arg) {
+		char *on;
+		long int o;
+
+		o = strtol(argi->offset_arg, &on, 10);
+
+		switch (*on) {
+		case '\0':
+		case 's':
+		case 'S':
+			/* user wants seconds, do they not? */
+			o *= MSECS;
+			break;
+		case 'm':
+		case 'M':
+			switch (*++on) {
+			case '\0':
+				/* they want minutes, oh oh */
+				o *= 60U * MSECS;
+				break;
+			case 's':
+			case 'S':
+				/* milliseconds it is then */
+				o = o;
+				break;
+			default:
+				goto invalid_offs;
+			}
+			break;
+		case 'h':
+		case 'H':
+			/* them hours we use */
+			o *= 60U * 60U * MSECS;
+			break;
+		default:
+		invalid_offs:
+			errno = 0, serror("\
+Error: invalid suffix in offset, use `ms', `s', `m', or `h'");
+			rc = 1;
+			goto out;
+		}
+
+		/* canonicalise */
+		if (o >= 0) {
+			offs = o % intv;
+		} else {
+			offs = intv - (-o % intv);
 		}
 	}
 
