@@ -18,28 +18,15 @@
 # include <dfp754.h>
 #endif	/* HAVE_DFP754_H */
 #include "nifty.h"
-#include "dfp754_d32.h"
-#include "dfp754_d64.h"
 
 #define NSECS	(1000000000)
 #define MSECS	(1000)
 
-typedef _Decimal32 px_t;
-typedef _Decimal64 qx_t;
 typedef long unsigned int tv_t;
-#define strtopx		strtod32
-#define pxtostr		d32tostr
-#define strtoqx		strtod64
-#define qxtostr		d64tostr
 #define NOT_A_TIME	((tv_t)-1ULL)
 
-/* relevant tick dimensions */
-typedef struct {
-	px_t b;
-	px_t a;
-	qx_t B;
-	qx_t A;
-} quo_t;
+/* command line params */
+static tv_t intv = 60U * MSECS;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -56,6 +43,20 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
+}
+
+static size_t
+_next_2pow(size_t z)
+{
+	z--;
+	z |= z >> 1U;
+	z |= z >> 2U;
+	z |= z >> 4U;
+	z |= z >> 8U;
+	z |= z >> 16U;
+	z |= z >> 32U;
+	z++;
+	return z;
 }
 
 static tv_t
@@ -96,8 +97,6 @@ strtotv(const char *ln, char **endptr)
 		}
 		r = s * MSECS + x;
 	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
 out:
 	if (LIKELY(endptr != NULL)) {
 		*endptr = on;
@@ -112,109 +111,21 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 }
 
 
-static tv_t intv = 60U * MSECS;
-
 static tv_t metr = NOT_A_TIME;
-static quo_t last;
-
-static char cont[64];
-static size_t conz;
-
-static void
-crst(void)
-{
-	last = (quo_t){nand32(""), nand32("")};
-	return;
-}
-
-static int
-snap(void)
-{
-	char buf[256U];
-	size_t bi;
-
-	if (UNLIKELY(metr == NOT_A_TIME)) {
-		return -1;
-	}
-
-	bi = tvtostr(buf, sizeof(buf), (metr + 1ULL) * intv);
-	buf[bi++] = '\t';
-	buf[bi++] = '\t';
-	buf[bi++] = '\t';
-	bi += (memcpy(buf + bi, cont, conz), conz);
-	buf[bi++] = '\t';
-	if (LIKELY(!isnand32(last.b))) {
-		bi += pxtostr(buf + bi, sizeof(buf) - bi, last.b);
-	}
-	buf[bi++] = '\t';
-	if (LIKELY(!isnand32(last.a))) {
-		bi += pxtostr(buf + bi, sizeof(buf) - bi, last.a);
-	}
-	if (last.B > 0.dd || last.A > 0.dd) {
-		buf[bi++] = '\t';
-		if (last.B > 0.dd) {
-			bi += qxtostr(buf + bi, sizeof(buf) - bi, last.B);
-		}
-		buf[bi++] = '\t';
-		if (last.A > 0.dd) {
-			bi += qxtostr(buf + bi, sizeof(buf) - bi, last.A);
-		}
-	}
-
-	buf[bi++] = '\n';
-	fwrite(buf, 1, bi, stdout);
-	return 0;
-}
-
-static int
-push_init(char *ln, size_t UNUSED(lz))
-{
-	quo_t this;
-	const char *ip;
-	size_t iz;
-	char *on;
-
-	/* metronome is up first */
-	if (UNLIKELY((metr = strtotv(ln, &on)) == NOT_A_TIME)) {
-		return -1;
-	}
-	/* align metronome to interval */
-	metr--;
-	metr /= intv;
-
-	/* instrument name, don't hash him */
-	if (UNLIKELY((on = strchr(ip = on, '\t')) == NULL)) {
-		return -1;
-	}
-	iz = on++ - ip;
-
-	/* snarf quotes */
-	if (!(this.b = strtopx(on, &on)) || *on++ != '\t' ||
-	    !(this.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
-		return -1;
-	}
-	/* snarf quantities */
-	if (*on == '\t') {
-		this.B = strtoqx(++on, &on);
-		this.A = strtoqx(++on, &on);
-	}
-
-	/* we're init'ing, so everything is the last value */
-	last = this;
-
-	memcpy(cont, ip, conz = iz);
-	return 0;
-}
 
 static int
 push_beef(char *ln, size_t UNUSED(lz))
 {
+	static char *lbuf;
+	static size_t lbsz;
+	static size_t llen;
 	tv_t nmtr;
-	quo_t this;
 	char *on;
 
 	/* metronome is up first */
-	if (UNLIKELY((nmtr = strtotv(ln, &on)) == NOT_A_TIME)) {
+	if (UNLIKELY(ln == NULL)) {
+		goto snap;
+	} else if (UNLIKELY((nmtr = strtotv(ln, &on)) == NOT_A_TIME)) {
 		return -1;
 	}
 	/* align metronome to interval */
@@ -223,33 +134,35 @@ push_beef(char *ln, size_t UNUSED(lz))
 
 	/* do we need to draw another candle? */
 	if (UNLIKELY(nmtr > metr)) {
-		/* yip */
-		snap();
-		/* and reset */
-		crst();
-		/* assign new metr */
-		metr = nmtr;
+		char sbuf[24U];
+		size_t slen;
+
+	snap:
+		/* materialise snapshot */
+		slen = tvtostr(sbuf, sizeof(sbuf), (metr + 1ULL) * intv);
+		/* copy over (lbuf has space for the metronome) */
+		memcpy(lbuf + (24UL - slen), sbuf, slen);
+		/* and out */
+		fwrite(lbuf + (24UL - slen), 1, llen + slen, stdout);
+
+		if (UNLIKELY(ln == NULL && lbuf != NULL)) {
+			free(lbuf);
+			lbsz = 0ULL;
+			return 0;
+		}
 	}
 
-	/* instrument name, don't hash him */
-	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
-		return -1;
+	/* assign new metr */
+	metr = nmtr;
+	/* and keep copy of line */
+	llen = lz - (on - ln);
+	if (UNLIKELY(llen + 24U > lbsz)) {
+		size_t newz = _next_2pow(llen + 24U);
+		lbuf = realloc(lbuf, newz);
+		lbsz = newz;
 	}
-	on++;
-
-	/* snarf quotes */
-	if (!(this.b = strtopx(on, &on)) || *on++ != '\t' ||
-	    !(this.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
-		return -1;
-	}
-	/* snarf quantities */
-	if (*on == '\t') {
-		this.B = strtoqx(++on, &on);
-		this.A = strtoqx(++on, &on);
-	}
-
-	/* keep some state */
-	last = this;
+	/* leave space for metronome */
+	memcpy(lbuf + 24U, on, llen);
 	return 0;
 }
 
@@ -259,7 +172,6 @@ push_beef(char *ln, size_t UNUSED(lz))
 int
 main(int argc, char *argv[])
 {
-/* grep -F 'EURUSD FAST Curncy' | cut -f1,5,6 */
 	static yuck_t argi[1U];
 
 	int rc = 0;
@@ -279,23 +191,19 @@ Error: cannot read interval argument, must be positive.");
 		intv *= MSECS;
 	}
 
-	/* reset candles */
-	crst();
 	{
-		char *line = NULL;
-		size_t llen = 0UL;
 		ssize_t nrd;
+		char *lbuf = NULL;
+		size_t lbsz = 0ULL;
 
-		while ((nrd = getline(&line, &llen, stdin)) > 0 &&
-		       push_init(line, nrd) < 0);
-		while ((nrd = getline(&line, &llen, stdin)) > 0) {
-			push_beef(line, nrd);
+		while ((nrd = getline(&lbuf, &lbsz, stdin)) > 0) {
+			push_beef(lbuf, nrd);
 		}
 		/* produce the final candle */
-		snap();
+		push_beef(NULL, 0ULL);
 
 		/* finalise our findings */
-		free(line);
+		free(lbuf);
 	}
 
 out:
