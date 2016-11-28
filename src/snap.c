@@ -14,9 +14,6 @@
 #include <sys/time.h>
 #include <time.h>
 #include <assert.h>
-#if defined HAVE_DFP754_H
-# include <dfp754.h>
-#endif	/* HAVE_DFP754_H */
 #include "nifty.h"
 
 #define NSECS	(1000000000)
@@ -26,7 +23,7 @@ typedef long unsigned int tv_t;
 #define NOT_A_TIME	((tv_t)-1ULL)
 
 /* command line params */
-static tv_t intv = 60U * MSECS;
+static tv_t intv = 1U * MSECS;
 
 
 static __attribute__((format(printf, 1, 2))) void
