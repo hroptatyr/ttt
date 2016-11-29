@@ -47,7 +47,10 @@ TESTS += snap_03.clit
 TESTS += snap_04.clit
 TESTS += snap_05.clit
 TESTS += snap_06.clit
+TESTS += snap_07.clit
+TESTS += snap_08.clit
 EXTRA_DIST += EURUSD
+EXTRA_DIST += stmp
 
 TESTS += mid_01.clit
 TESTS += mid_02.clit
