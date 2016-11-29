@@ -25,6 +25,7 @@ typedef long unsigned int tv_t;
 /* command line params */
 static tv_t intv = 1U * MSECS;
 static tv_t offs = 0U * MSECS;
+static FILE *sfil;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -109,7 +110,33 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 }
 
 
-static tv_t metr = NOT_A_TIME;
+static tv_t metr;
+
+static tv_t
+next_stamp(tv_t newm)
+{
+	static char *line;
+	static size_t llen;
+
+	if (!sfil) {
+		return newm;
+	}
+
+	if (LIKELY(newm < NOT_A_TIME)) {
+		while (getline(&line, &llen, sfil) > 0) {
+			tv_t xmtr = strtotv(line, NULL);
+
+			if (LIKELY(xmtr >= newm)) {
+				return xmtr - 1ULL;
+			}
+		}
+	}
+	/* otherwise it's the end of the road */
+	free(line);
+	line = NULL;
+	llen = 0UL;
+	return NOT_A_TIME;
+}
 
 static int
 push_beef(char *ln, size_t UNUSED(lz))
@@ -120,9 +147,38 @@ push_beef(char *ln, size_t UNUSED(lz))
 	tv_t nmtr;
 	char *on;
 
+	auto inline void snap(void)
+	{
+		char sbuf[24U];
+		size_t slen;
+
+		if (UNLIKELY(!metr || metr == NOT_A_TIME)) {
+			return;
+		} else if (UNLIKELY(lbuf == NULL)) {
+			return;
+		}
+
+		slen = tvtostr(sbuf, sizeof(sbuf), (metr + 1ULL) * intv + offs);
+		/* copy over (lbuf has space for the metronome) */
+		memcpy(lbuf + (24UL - slen), sbuf, slen);
+		/* and out */
+		fwrite(lbuf + (24UL - slen), 1, llen + slen, stdout);
+		return;
+	}
+
 	/* metronome is up first */
 	if (UNLIKELY(ln == NULL)) {
-		goto snap;
+		/* last snapshot of the day */
+		snap();
+
+		/* free our buffers */
+		if (LIKELY(lbuf != NULL)) {
+			free(lbuf);
+			lbsz = 0ULL;
+		}
+		/* drain stamp buffers */
+		next_stamp(NOT_A_TIME);
+		return 0;
 	} else if (UNLIKELY((nmtr = strtotv(ln, &on)) == NOT_A_TIME)) {
 		return -1;
 	}
@@ -133,26 +189,12 @@ push_beef(char *ln, size_t UNUSED(lz))
 
 	/* do we need to draw another candle? */
 	if (UNLIKELY(nmtr > metr)) {
-		char sbuf[24U];
-		size_t slen;
-
-	snap:
 		/* materialise snapshot */
-		slen = tvtostr(sbuf, sizeof(sbuf), (metr + 1ULL) * intv + offs);
-		/* copy over (lbuf has space for the metronome) */
-		memcpy(lbuf + (24UL - slen), sbuf, slen);
-		/* and out */
-		fwrite(lbuf + (24UL - slen), 1, llen + slen, stdout);
-
-		if (UNLIKELY(ln == NULL && lbuf != NULL)) {
-			free(lbuf);
-			lbsz = 0ULL;
-			return 0;
-		}
+		snap();
+		/* assign new metr */
+		metr = next_stamp(nmtr);
 	}
 
-	/* assign new metr */
-	metr = nmtr;
 	/* and keep copy of line */
 	llen = lz - (on - ln);
 	if (UNLIKELY(llen + 24U > lbsz)) {
@@ -269,11 +311,25 @@ Error: invalid suffix in offset, use `ms', `s', `m', or `h'");
 		}
 
 		/* canonicalise */
-		if (o >= 0) {
+		if (argi->stamps_arg) {
+			/* offset has a special meaning in stamps mode */
+			offs = o;
+		} else if (o > 0) {
 			offs = o % intv;
-		} else {
+		} else if (o < 0) {
 			offs = intv - (-o % intv);
 		}
+	}
+
+	if (argi->stamps_arg) {
+		if (UNLIKELY((sfil = fopen(argi->stamps_arg, "r")) == NULL)) {
+			serror("\
+Error: cannot open stamps file");
+			rc = 1;
+			goto out;
+		}
+		/* reset intv to unit interval */
+		intv = 1ULL;
 	}
 
 	{
@@ -289,6 +345,10 @@ Error: invalid suffix in offset, use `ms', `s', `m', or `h'");
 
 		/* finalise our findings */
 		free(lbuf);
+	}
+
+	if (argi->stamps_arg) {
+		fclose(sfil);
 	}
 
 out:

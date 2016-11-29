@@ -11,3 +11,4 @@ This regularises a timeseries.
                         suffixed with 'ms', 's', 'm', 'h' to denote
                         milliseconds, seconds, minutes, or hours.
                         Default: 0
+  -S, --stamps=FILE     Shoot snaps at times taken from FILE.
