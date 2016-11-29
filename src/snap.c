@@ -111,25 +111,23 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 
 
 static tv_t metr;
+static tv_t(*next)(tv_t);
 
 static tv_t
-next_stamp(tv_t newm)
+_next_intv(tv_t newm)
+{
+	return newm;
+}
+
+static tv_t
+_next_stmp(tv_t newm)
 {
 	static char *line;
 	static size_t llen;
 
-	if (!sfil) {
-		return newm;
-	}
-
-	if (LIKELY(newm < NOT_A_TIME)) {
-		while (getline(&line, &llen, sfil) > 0) {
-			tv_t xmtr = strtotv(line, NULL);
-
-			if (LIKELY(xmtr >= newm)) {
-				return xmtr - 1ULL;
-			}
-		}
+	if (getline(&line, &llen, sfil) > 0 &&
+	    (newm = strtotv(line, NULL)) != NOT_A_TIME) {
+		return newm - 1ULL;
 	}
 	/* otherwise it's the end of the road */
 	free(line);
@@ -152,7 +150,7 @@ push_beef(char *ln, size_t UNUSED(lz))
 		char sbuf[24U];
 		size_t slen;
 
-		if (UNLIKELY(!metr || metr == NOT_A_TIME)) {
+		if (UNLIKELY(!metr)) {
 			return;
 		} else if (UNLIKELY(lbuf == NULL)) {
 			return;
@@ -169,15 +167,16 @@ push_beef(char *ln, size_t UNUSED(lz))
 	/* metronome is up first */
 	if (UNLIKELY(ln == NULL)) {
 		/* last snapshot of the day */
-		snap();
+		for (; metr != NOT_A_TIME; metr = next(NOT_A_TIME)) {
+			/* materialise snapshots */
+			snap();
+		}
 
 		/* free our buffers */
 		if (LIKELY(lbuf != NULL)) {
 			free(lbuf);
 			lbsz = 0ULL;
 		}
-		/* drain stamp buffers */
-		next_stamp(NOT_A_TIME);
 		return 0;
 	} else if (UNLIKELY((nmtr = strtotv(ln, &on)) == NOT_A_TIME)) {
 		return -1;
@@ -188,11 +187,9 @@ push_beef(char *ln, size_t UNUSED(lz))
 	nmtr /= intv;
 
 	/* do we need to draw another candle? */
-	if (UNLIKELY(nmtr > metr)) {
+	for (; UNLIKELY(nmtr > metr); metr = next(nmtr)) {
 		/* materialise snapshot */
 		snap();
-		/* assign new metr */
-		metr = next_stamp(nmtr);
 	}
 
 	/* and keep copy of line */
@@ -331,6 +328,9 @@ Error: cannot open stamps file");
 		/* reset intv to unit interval */
 		intv = 1ULL;
 	}
+
+	/* use a next routine du jour */
+	next = !argi->stamps_arg ? _next_intv : _next_stmp;
 
 	{
 		ssize_t nrd;
