@@ -470,13 +470,13 @@ offline(FILE *qfp)
 				continue;
 			}
 			/* massage execution */
-			x.q = !maxq || acc.base != x.q ? x.q : 0.dd;
 			x.q -= !absq ||
 				(oq[i].r & RGM_CANCEL) == RGM_CANCEL ||
 				x.q > 0.dd && acc.base > 0.dd ||
 				x.q < 0.dd && acc.base < 0.dd
 				? 0.dd
 				: acc.base;
+			x.q = !maxq || acc.base != x.q ? x.q : 0.dd;
 			/* otherwise send post-trade details */
 			send_exe(x);
 			acc = alloc(acc, x, comb, comt);
