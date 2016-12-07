@@ -114,6 +114,7 @@ serror(const char *fmt, ...)
 
 static const char *cont;
 static size_t conz;
+static hx_t conx;
 
 static hx_t
 strtohx(const char *x, char **on)
@@ -336,7 +337,7 @@ retry:
 		o = (ord_t){t, RGM_CANCEL, .q = 0.dd};
 		break;
 	default:
-		return (ord_t){NOT_A_TIME};
+		goto retry;
 
 	ord:
 		if (UNLIKELY(*on++ != '\t')) {
@@ -345,6 +346,9 @@ retry:
 		if (UNLIKELY(!(hx = strtohx(on, &on)))) {
 			/* no currency indicator */
 			break;
+		} else if (UNLIKELY(hx != conx && conx)) {
+			/* not for us this one isn't */
+			goto retry;
 		}
 		/* otherwise snarf the limit price */
 		if ((p = strtopx(++on, &on))) {
@@ -378,6 +382,7 @@ yield_quo(FILE *qfp)
 	static size_t llen;
 	char *on;
 	quo_t q;
+	hx_t h;
 
 retry:
 	if (UNLIKELY(getline(&line, &llen, qfp) <= 0)) {
@@ -391,7 +396,11 @@ retry:
 		goto retry;
 	}
 	/* instrument next */
-	on = strchr(on, '\t');
+	if (UNLIKELY(!(h = strtohx(on, &on)) || *on != '\t')) {
+		goto retry;
+	} else if (UNLIKELY(h != conx && conx)) {
+		goto retry;
+	}
 	q.b = strtopx(++on, &on);
 	q.a = strtopx(++on, &on);
 	return q;
@@ -539,6 +548,7 @@ Error: QUOTES file is mandatory.");
 	if (argi->pair_arg) {
 		cont = argi->pair_arg;
 		conz = strlen(cont);
+		conx = hash(cont, conz);
 	}
 
 	if (argi->exe_delay_arg) {
