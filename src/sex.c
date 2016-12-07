@@ -116,15 +116,21 @@ static const char *cont;
 static size_t conz;
 static hx_t conx;
 
+static inline char*
+strcws(const char *x)
+{
+	const unsigned char *y;
+	for (y = (const unsigned char*)x; *y >= ' '; y++);
+	return deconst(y);
+}
+
 static hx_t
 strtohx(const char *x, char **on)
 {
 	char *ep;
 	hx_t res;
 
-	if (UNLIKELY((ep = strchr(x, '\t')) == NULL)) {
-		return 0;
-	}
+	ep = strcws(x);
 	res = hash(x, ep - x);
 	if (LIKELY(on != NULL)) {
 		*on = ep;
@@ -334,6 +340,14 @@ retry:
 		goto ord;
 	case 'C'/*ANCEL*/:
 	case 'E'/*MERG*/:
+		on = strcws(on);
+		if (LIKELY(*on++ == '\t' && (hx = strtohx(on, &on)))) {
+			/* got a tab and a currency indicator */
+			if (UNLIKELY(hx != conx && conx)) {
+				/* but it's not for us */
+				goto retry;
+			}
+		}
 		o = (ord_t){t, RGM_CANCEL, .q = 0.dd};
 		break;
 	default:
