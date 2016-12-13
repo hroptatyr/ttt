@@ -78,8 +78,8 @@ typedef enum {
 
 /* orders */
 typedef struct {
-	rgm_t r;
 	tv_t t;
+	rgm_t r;
 	tv_t gtd;
 	qx_t q;
 	px_t lp;
@@ -112,10 +112,17 @@ serror(const char *fmt, ...)
 }
 
 
-static tv_t metr;
-static tv_t omtr;
 static const char *cont;
 static size_t conz;
+static hx_t conx;
+
+static inline char*
+strcws(const char *x)
+{
+	const unsigned char *y;
+	for (y = (const unsigned char*)x; *y >= ' '; y++);
+	return deconst(y);
+}
 
 static hx_t
 strtohx(const char *x, char **on)
@@ -123,9 +130,7 @@ strtohx(const char *x, char **on)
 	char *ep;
 	hx_t res;
 
-	if (UNLIKELY((ep = strchr(x, '\t')) == NULL)) {
-		return 0;
-	}
+	ep = strcws(x);
 	res = hash(x, ep - x);
 	if (LIKELY(on != NULL)) {
 		*on = ep;
@@ -141,7 +146,7 @@ strtotv(const char *ln, char **endptr)
 
 	/* time value up first */
 	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
+		if (UNLIKELY((s = strtoul(ln, &on, 10), on == ln))) {
 			r = NOT_A_TIME;
 			goto out;
 		} else if (*on == '.') {
@@ -248,7 +253,7 @@ static exe_t
 try_exec(ord_t o, quo_t q)
 {
 /* this takes an order + quotes and executes it at market price */
-	const tv_t t = max_tv(o.t, metr);
+	const tv_t t = max_tv(o.t, q.t);
 	px_t p = 0.df;
 	px_t s = q.a - q.b;
 	tv_t age = t - q.t;
@@ -300,6 +305,121 @@ alloc(acc_t a, exe_t x, px_t cb/*base comm*/, px_t ct/*terms coommission*/)
 }
 
 
+static ord_t
+yield_ord(FILE *ofp)
+{
+	static char *line;
+	static size_t llen;
+	char *on;
+	ord_t o;
+	tv_t t;
+
+retry:
+	if (UNLIKELY(getline(&line, &llen, ofp) <= 0)) {
+		free(line);
+		line = NULL;
+		llen = 0UL;
+		return (ord_t){NOT_A_TIME};
+	}
+	/* otherwise snarf the order line */
+	if (UNLIKELY((t = strtotv(line, &on)) == NOT_A_TIME || on == line)) {
+		goto retry;
+	}
+	/* read the order */
+	switch (*on) {
+		px_t p;
+		hx_t hx;
+
+	case 'L'/*ONG*/:
+		o = (ord_t){t, RGM_LONG, .q = qty, .lp = INFD32};
+		on += 4U;
+		goto ord;
+	case 'S'/*HORT*/:
+		o = (ord_t){t, RGM_SHORT, .q = -qty, .lp = MINFD32};
+		on += 5U;
+		goto ord;
+	case 'C'/*ANCEL*/:
+	case 'E'/*MERG*/:
+		on = strcws(on);
+		if (LIKELY(*on++ == '\t' && (hx = strtohx(on, &on)))) {
+			/* got a tab and a currency indicator */
+			if (UNLIKELY(hx != conx && conx)) {
+				/* but it's not for us */
+				goto retry;
+			}
+		}
+		o = (ord_t){t, RGM_CANCEL, .q = 0.dd};
+		break;
+	default:
+		goto retry;
+
+	ord:
+		if (UNLIKELY(*on++ != '\t')) {
+			break;
+		}
+		if (UNLIKELY(!(hx = strtohx(on, &on)))) {
+			/* no currency indicator */
+			break;
+		} else if (UNLIKELY(hx != conx && conx)) {
+			/* not for us this one isn't */
+			goto retry;
+		}
+		/* otherwise snarf the limit price */
+		if ((p = strtopx(++on, &on))) {
+			o.gtd = NOT_A_TIME;
+			o.lp = p;
+		}
+		if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
+			break;
+		}
+		/* oh and a target price */
+		o.tp = strtopx(++on, &on);
+		if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
+			break;
+		}
+		/* and finally a stop/loss */
+		o.sl = strtopx(++on, &on);
+		if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
+			break;
+		}
+	}
+	/* tune to exe delay */
+	o.t += exe_age;
+	o.gtd = o.gtd ?: o.t;
+	return o;
+}
+
+static quo_t
+yield_quo(FILE *qfp)
+{
+	static char *line;
+	static size_t llen;
+	char *on;
+	quo_t q;
+	hx_t h;
+
+retry:
+	if (UNLIKELY(getline(&line, &llen, qfp) <= 0)) {
+		free(line);
+		line = NULL;
+		llen = 0UL;
+		return (quo_t){NOT_A_TIME};
+	}
+	/* otherwise snarf the quote line */
+	if (UNLIKELY((q.t = strtotv(line, &on)) == NOT_A_TIME || on == line)) {
+		goto retry;
+	}
+	/* instrument next */
+	if (UNLIKELY(!(h = strtohx(on, &on)) || *on != '\t')) {
+		goto retry;
+	} else if (UNLIKELY(h != conx && conx)) {
+		goto retry;
+	}
+	q.b = strtopx(++on, &on);
+	q.a = strtopx(++on, &on);
+	return q;
+}
+
 static int
 offline(FILE *qfp)
 {
@@ -308,95 +428,29 @@ offline(FILE *qfp)
 	};
 	ord_t oq[256U];
 	size_t ioq = 0U, noq = 0U;
-	char *line = NULL;
-	size_t llen = 0UL;
-	quo_t q = {0.df, 0.df};
+	quo_t q = {NOT_A_TIME};
 
-yield_ord:
-	for (; getline(&line, &llen, stdin) > 0;) {
-		ord_t o;
-		char *on;
-
-		if (UNLIKELY((omtr = strtotv(line, &on)) < metr || !on)) {
-			continue;
+	/* we can't do nothing before the first quote, so read that one
+	 * as a reference and fast forward orders beyond that point */
+	for (quo_t newq; (newq = yield_quo(qfp)).t < NOT_A_TIME; q = newq) {
+	ord:
+		if (UNLIKELY(stdin == NULL)) {
+			/* order file is eof'd, skip fetching more */
+			goto exe;
 		}
-		/* read the order */
-		switch (*on) {
-			px_t p;
-			qx_t adq;
-			hx_t hx;
-
-		case 'L'/*ONG*/:
-			adq = !maxq ? qty : acc.base <= 0.dd ? qty : 0.dd;
-			adq += absq && acc.base < 0.dd ? qty : 0.dd;
-			o = (ord_t){RGM_LONG, .q = adq, .lp = INFD32};
-			on += 4U;
-			goto ord;
-		case 'S'/*HORT*/:
-			adq = !maxq ? qty : acc.base >= 0.dd ? qty : 0.dd;
-			adq += absq && acc.base > 0.dd ? qty : 0.dd;
-			o = (ord_t){RGM_SHORT, .q = -adq, .lp = MINFD32};
-			on += 5U;
-			goto ord;
-		case 'C'/*ANCEL*/:
-		case 'E'/*MERG*/:
-			o = (ord_t){RGM_CANCEL, .q = acc.base};
-			break;
-		default:
-			continue;
-
-		ord:
-			if (UNLIKELY(*on++ != '\t')) {
-				break;
-			}
-			if (UNLIKELY(!(hx = strtohx(on, &on)))) {
-				/* no currency indicator */
-				break;
-			}
-			/* otherwise snarf the limit price */
-			if ((p = strtopx(++on, &on))) {
-				o.gtd = NOT_A_TIME;
-				o.lp = p;
-			}
-			if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
-				break;
-			}
-			/* oh and a target price */
-			o.tp = strtopx(++on, &on);
-			if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
-				break;
-			}
-			/* and finally a stop/loss */
-			o.sl = strtopx(++on, &on);
-			if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
-				break;
-			}
+		for (ord_t newo;
+		     noq < countof(oq) / 2U &&
+			     (newo = yield_ord(stdin)).t < NOT_A_TIME;
+		     oq[noq++] = newo);
+		if (UNLIKELY(noq < countof(oq) / 2U)) {
+			/* out of orders we are */
+			fclose(stdin);
+			stdin = NULL;
 		}
-		/* throw away non-sense orders */
-		omtr += exe_age;
-		o.t = omtr;
-		o.gtd = o.gtd ?: omtr;
-		/* enqueue the order */
-		oq[noq++] = o;
-		goto yield_quo;
-	}
-	/* no more orders coming, set omtr to NOT_A_TIME so we loop
-	 * through quote reception eternally */
-	omtr = NOT_A_TIME;
 
-yield_quo:
-	while (getline(&line, &llen, qfp) > 0) {
-		char *on;
-		quo_t newq;
-
-		newq.t = strtotv(line, &on);
-		/* instrument next */
-		on = strchr(on, '\t');
-		newq.b = strtopx(++on, &on);
-		newq.a = strtopx(++on, &on);
-
-		/* process limit order queue */
-		for (size_t i = ioq, n = noq; i < n && oq[i].t < newq.t; i++) {
+	exe:
+		/* go through order queue and try exec'ing @q */
+		for (size_t i = ioq; i < noq && oq[i].t < newq.t; i++) {
 			exe_t x;
 
 			switch (oq[i].r) {
@@ -420,11 +474,23 @@ yield_quo:
 			default:
 				break;
 			}
+			/* adapt cancellations to current accounts */
+			oq[i].q = (oq[i].r & RGM_CANCEL) == RGM_CANCEL
+				? acc.base
+				: oq[i].q;
 			/* try executing him */
 			x = try_exec(oq[i], q);
-			if (!x.q && oq[i].gtd > metr) {
+			if (!x.q && oq[i].gtd > x.t) {
 				continue;
 			}
+			/* massage execution */
+			x.q -= !absq ||
+				(oq[i].r & RGM_CANCEL) == RGM_CANCEL ||
+				x.q > 0.dd && acc.base > 0.dd ||
+				x.q < 0.dd && acc.base < 0.dd
+				? 0.dd
+				: acc.base;
+			x.q = !maxq || acc.base != x.q ? x.q : 0.dd;
 			/* otherwise send post-trade details */
 			send_exe(x);
 			acc = alloc(acc, x, comb, comt);
@@ -433,8 +499,8 @@ yield_quo:
 			/* check for brackets */
 			if (oq[i].tp) {
 				oq[noq++] = (ord_t){
-					(rgm_t)(oq[i].r ^ RGM_CANCEL),
-					.t = omtr = x.t,
+					x.t,
+					.r = (rgm_t)(oq[i].r ^ RGM_CANCEL),
 					.gtd = NOT_A_TIME,
 					.q = -x.q,
 					.lp = oq[i].tp,
@@ -453,26 +519,23 @@ yield_quo:
 			noq -= ioq;
 			ioq = 0U;
 		}
-
-		/* shift quotes */
-		q = newq;
-		metr = newq.t;
-
-		if (metr >= omtr) {
-			goto yield_ord;
+		if (UNLIKELY(stdin == NULL)) {
+			/* order file is eof'd, skip fetching more */
+			;
+		} else if (UNLIKELY(!noq || ioq < noq && oq[ioq].t < newq.t)) {
+			/* fill up the queue some more and do more exec'ing */
+			goto ord;
 		}
 	}
 
 	/* finalise with the last known quote */
 	if (acc.base) {
-		ord_t o = {RGM_CANCEL, .t = metr, .q = acc.base};
+		ord_t o = {q.t, RGM_CANCEL, .q = acc.base};
 		exe_t x = try_exec(o, q);
 		send_exe(x);
 		acc = alloc(acc, x, comb, comt);
-		send_acc(metr, acc);
+		send_acc(x.t, acc);
 	}
-
-	free(line);
 	return 0;
 }
 
@@ -499,6 +562,7 @@ Error: QUOTES file is mandatory.");
 	if (argi->pair_arg) {
 		cont = argi->pair_arg;
 		conz = strlen(cont);
+		conx = hash(cont, conz);
 	}
 
 	if (argi->exe_delay_arg) {
