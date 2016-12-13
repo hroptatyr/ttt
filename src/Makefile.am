@@ -203,6 +203,15 @@ spread_LDFLAGS += $(dfp754_LIBS)
 spread_LDADD = libmydfp.a
 BUILT_SOURCES += spread.yucc
 
+## doesn't really fit in, but what the heck
+bin_PROGRAMS += cdiff
+cdiff_SOURCES = cdiff.c cdiff.yuck
+cdiff_SOURCES += version.c version.h
+cdiff_CPPFLAGS = $(AM_CPPFLAGS)
+cdiff_CPPFLAGS += -DHAVE_VERSION_H
+cdiff_LDFLAGS = $(AM_LDFLAGS)
+BUILT_SOURCES += cdiff.yucc
+
 
 ## version rules
 version.c: version.c.in $(top_builddir)/.version
