@@ -60,6 +60,14 @@ quodist_LDFLAGS += $(dfp754_LIBS)
 quodist_LDADD = libmydfp.a
 BUILT_SOURCES += quodist.yucc
 
+bin_PROGRAMS += evtdist
+evtdist_SOURCES = evtdist.c evtdist.yuck
+evtdist_SOURCES += version.c version.h
+evtdist_CPPFLAGS = $(AM_CPPFLAGS)
+evtdist_CPPFLAGS += -DHAVE_VERSION_H
+evtdist_LDFLAGS = $(AM_LDFLAGS)
+BUILT_SOURCES += evtdist.yucc
+
 bin_PROGRAMS += sex
 sex_SOURCES = sex.c sex.yuck
 sex_SOURCES += hash.c hash.h
