@@ -1,4 +1,4 @@
-Usage: candle [< FILE]
+Usage: snap [< FILE]
 
 Produce minute by minute snapshots.
 This regularises a timeseries.
