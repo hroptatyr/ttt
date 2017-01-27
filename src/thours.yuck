@@ -1,3 +1,10 @@
 Usage: thours < FILE
 
-Return summary of when trades occur in week hour resolution.
+Return summary of when events occur.
+
+  -i, --interval=S      Window length S seconds, can also be
+                        suffixed with m for minutes, h for hours,
+                        d for days, mo for months and y for years.
+  -r, --round=S         Round timestamps down to multiple of S.
+                        Can be suffixed with m for minutes, h for
+                        hours, d for days.
