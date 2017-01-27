@@ -1,6 +1,9 @@
 Usage: evtdist < EVENTS
 
-Analyse events in fixed size windows and print counts..
+Analyse events in fixed size windows and print counts.
+
+An event is indicated by a unix timestamp on stdin.  The difference
+between the current timestamp and the last will be binned and counted.
 
   -i, --interval=S      Draw candles every S seconds, can also be
                         suffixed with m for minutes, h for hours,
