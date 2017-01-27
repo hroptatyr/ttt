@@ -24,17 +24,22 @@
 typedef long unsigned int tv_t;
 #define NOT_A_TIME	((tv_t)-1ULL)
 
-static tv_t intv;
-static enum {
-	UNIT_NONE,
-	UNIT_SECS,
-	UNIT_DAYS,
-	UNIT_MONTHS,
-	UNIT_YEARS,
-} unit;
+typedef struct {
+	tv_t t;
+	enum {
+		UNIT_NONE,
+		UNIT_MSECS,
+		UNIT_DAYS,
+		UNIT_MONTHS,
+		UNIT_YEARS,
+	} u;
+} tvu_t;
+
+static tvu_t intv;
 
 static unsigned int highbits = 1U;
 static unsigned int elapsp;
+static tv_t pbase = MSECS;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -108,18 +113,84 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 		: 0U;
 }
 
+static tvu_t
+strtotvu(const char *str, char **endptr)
+{
+	char *on;
+	tvu_t r;
+
+	if (!(r.t = strtoul(str, &on, 10))) {
+		return (tvu_t){};
+	}
+	switch (*on++) {
+	secs:
+	case '\0':
+	case 'S':
+	case 's':
+		/* seconds, don't fiddle */
+		r.t *= MSECS;
+	msecs:
+		r.u = UNIT_MSECS;
+		break;
+
+	case 'm':
+	case 'M':
+		switch (*on) {
+		case '\0':
+			/* they want minutes, oh oh */
+			r.t *= 60UL;
+			goto secs;
+		case 's':
+		case 'S':
+			/* milliseconds it is then */
+			goto msecs;
+		case 'o':
+		case 'O':
+			r.u = UNIT_MONTHS;
+			break;
+		default:
+			goto invalid;
+		}
+		break;
+
+	case 'y':
+	case 'Y':
+		r.u = UNIT_YEARS;
+		break;
+
+	case 'h':
+	case 'H':
+		r.t *= 60U * 60U;
+		goto secs;
+	case 'd':
+	case 'D':
+		r.u = UNIT_DAYS;
+		break;
+
+	default:
+	invalid:
+		errno = 0, serror("\
+Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
+		return (tvu_t){};
+	}
+	if (endptr != NULL) {
+		*endptr = on;
+	}
+	return r;
+}
+
 static ssize_t
 cttostr(char *restrict buf, size_t bsz, tv_t t)
 {
 	struct tm *tm;
 	time_t u;
 
-	switch (unit) {
+	switch (intv.u) {
 	default:
 	case UNIT_NONE:
 		memcpy(buf, "ALL", 3U);
 		return 3U;
-	case UNIT_SECS:
+	case UNIT_MSECS:
 		return tvtostr(buf, bsz, t);
 	case UNIT_DAYS:
 	case UNIT_MONTHS:
@@ -131,7 +202,7 @@ cttostr(char *restrict buf, size_t bsz, tv_t t)
 	u--;
 	tm = gmtime(&u);
 
-	switch (unit) {
+	switch (intv.u) {
 	case UNIT_DAYS:
 		return strftime(buf, bsz, "%F", tm);
 	case UNIT_MONTHS:
@@ -200,8 +271,7 @@ ilog2(const uint32_t x)
 static tv_t nxct;
 
 static tv_t last;
-static tv_t _pevt[32U], *pevt = _pevt;
-static size_t ip, np = 1U;
+static size_t ip, np;
 
 /* stats */
 static union {
@@ -237,12 +307,12 @@ next_cndl(tv_t t)
 	struct tm *tm;
 	time_t u;
 
-	switch (unit) {
+	switch (intv.u) {
 	default:
 	case UNIT_NONE:
 		return NOT_A_TIME;
-	case UNIT_SECS:
-		return (t / intv + 1U) * intv;
+	case UNIT_MSECS:
+		return (t / intv.t + 1U) * intv.t;
 	case UNIT_DAYS:
 		t /= 24U * 60U * 60U * MSECS;
 		t++;
@@ -261,7 +331,7 @@ next_cndl(tv_t t)
 	tm->tm_min = 0;
 	tm->tm_sec = 0;
 
-	switch (unit) {
+	switch (intv.u) {
 	case UNIT_MONTHS:
 		*tm = (struct tm){
 			.tm_year = tm->tm_year,
@@ -280,36 +350,46 @@ next_cndl(tv_t t)
 	return mktime(tm) * MSECS;
 }
 
-static void
+static inline void
 rset_cndl(void)
 {
 	/* just reset all stats pages */
 	memset(cnt.start, 0, cntz);
+	return;
+}
+
+static inline void
+rset_rngs(void)
+{
 	memset(tlo, -1, (1U << highbits) * sizeof(*tlo));
 	return;
 }
 
 static int
-push_beef(char *ln, size_t UNUSED(lz))
+push_erlng(char *ln, size_t UNUSED(lz))
 {
 	char *on;
 	tv_t t;
-	int rc = 0;
 
 	/* metronome is up first */
 	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
 		return -1;
-	} else if (t < last) {
+	} else if (UNLIKELY(t < last)) {
 		fputs("Warning: non-chronological\n", stderr);
-		rc = -1;
+		return -1;
 	} else if (UNLIKELY(t > nxct)) {
-		prnt_cndl();
+		if (LIKELY(nxct)) {
+			prnt_cndl();
+		}
 		rset_cndl();
+		rset_rngs();
 		nxct = next_cndl(t);
-	} else if (LIKELY(pevt[ip])) {
+	} else if (LIKELY(ip++ < np)) {
+		return 0;
+	} else {
 		/* measure time */
-		size_t acc = !elapsp ? 1ULL : (t - last);
-		tv_t dt = t - pevt[ip];
+		const tv_t dt = t - last;
+		size_t acc = !elapsp ? 1ULL : dt;
 		unsigned int slot = ilog2(dt / MSECS + 1U);
 		/* determine sub slot, if applicable */
 		unsigned int width = (1U << slot), base = width - 1U;
@@ -333,8 +413,52 @@ push_beef(char *ln, size_t UNUSED(lz))
 	}
 	/* and store state */
 	last = t;
-	pevt[ip] = t;
-	ip = (ip + 1U) % np;
+	ip = 0U;
+	return 0;
+}
+
+static int
+push_poiss(char *ln, size_t UNUSED(lz))
+{
+	static size_t this = 1U;
+	char *on;
+	tv_t t;
+	int rc = 0;
+
+	/* metronome is up first */
+	if (UNLIKELY(ln == NULL)) {
+		goto final;
+	} else if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
+		return -1;
+	} else if (UNLIKELY(t > nxct)) {
+		if (LIKELY(nxct)) {
+			prnt_cndl();
+		}
+		rset_cndl();
+		nxct = next_cndl(t);
+		/* make sure we use the trimmed t value */
+		t /= pbase;
+	} else if (UNLIKELY((t /= pbase) < last)) {
+		errno = 0, serror("\
+Warning: non-chronological");
+		rc = -1;
+	} else if (UNLIKELY(t == last)) {
+		this++;
+	} else {
+		dlt[0U] += t - last - 1U;
+	final:
+		if (LIKELY(this < cntz)) {
+			dlt[this]++;
+		} else {
+			errno = 0, serror("\
+Warning: base interval too big, consider setting --base to a smaller value.\n\
+Got %zu events but can only track %zu.", this, cntz);
+			rc = -1;
+		}
+		this = 1U;
+	}
+	/* and store state */
+	last = t;
 	return rc;
 }
 
@@ -345,13 +469,13 @@ prnt_cndl_mtrx(void)
 	size_t len = 0U;
 
 	if (!ncndl++) {
-		static const char hdr[] = "cndl\tdimen\tmetric";
+		static const char hdr[] = "cndl\tmetric";
 
 		len = (memcpy(buf, hdr, strlenof(hdr)), strlenof(hdr));
 		for (size_t i = 0U; i < (1U << highbits); i++) {
 			buf[len++] = '\t';
 			buf[len++] = 'v';
-			len += snprintf(buf + len, sizeof(buf) - len, "%zu", i);
+			len += ztostr(buf + len, sizeof(buf) - len, i);
 		}
 		buf[len++] = '\n';
 		fwrite(buf, sizeof(*buf), len, stdout);
@@ -362,8 +486,6 @@ prnt_cndl_mtrx(void)
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
 	/* type t */
 	buf[len++] = '\t';
-	buf[len++] = 't';
-	buf[len++] = '\t';
 	buf[len++] = 'n';
 	len += zztostr(buf + len, sizeof(buf) - len, dlt, 1U << highbits);
 	buf[len++] = '\n';
@@ -371,16 +493,12 @@ prnt_cndl_mtrx(void)
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
 	/* type t */
 	buf[len++] = '\t';
-	buf[len++] = 't';
-	buf[len++] = '\t';
 	buf[len++] = 'L';
 	len += tztostr(buf + len, sizeof(buf) - len, tlo, 1U << highbits);
 	buf[len++] = '\n';
 
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
 	/* type t */
-	buf[len++] = '\t';
-	buf[len++] = 't';
 	buf[len++] = '\t';
 	buf[len++] = 'H';
 	len += tztostr(buf + len, sizeof(buf) - len, thi, 1U << highbits);
@@ -397,7 +515,7 @@ prnt_cndl_molt(void)
 	size_t len = 0U;
 
 	if (!ncndl++) {
-		static const char hdr[] = "cndl\tdimen\tlo\thi\tcnt\n";
+		static const char hdr[] = "cndl\tlo\thi\tcnt\n";
 		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
 	}
 
@@ -411,8 +529,6 @@ prnt_cndl_molt(void)
 		len += cttostr(buf + len, sizeof(buf) - len, nxct);
 		/* type t */
 		buf[len++] = '\t';
-		buf[len++] = 't';
-		buf[len++] = '\t';
 		len += tvtostr(buf + len, sizeof(buf) - len, tlo[i]);
 		buf[len++] = '\t';
 		len += tvtostr(buf + len, sizeof(buf) - len, thi[i]);
@@ -424,88 +540,88 @@ prnt_cndl_molt(void)
 	return;
 }
 
+static void
+prnt_cndl_mtrx_poiss(void)
+{
+	static size_t ncndl;
+	size_t len = 0U;
+
+	if (!ncndl++) {
+		static const char hdr[] = "cndl";
+
+		len = (memcpy(buf, hdr, strlenof(hdr)), strlenof(hdr));
+		for (size_t i = 0U; i < cntz; i++) {
+			if (!dlt[i]) {
+				continue;
+			}
+			buf[len++] = '\t';
+			len += ztostr(buf + len, sizeof(buf) - len, i);
+		}
+		buf[len++] = '\n';
+		fwrite(buf, sizeof(*buf), len, stdout);
+		len = 0U;
+	}
+
+	/* delta t */
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	for (size_t i = 0U; i < cntz; i++) {
+		if (!dlt[i]) {
+			continue;
+		}
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
+	}
+	buf[len++] = '\n';
+
+	fwrite(buf, sizeof(*buf), len, stdout);
+	return;
+}
+
+static void
+prnt_cndl_molt_poiss(void)
+{
+	static size_t ncndl;
+	size_t len = 0U;
+
+	if (!ncndl++) {
+		static const char hdr[] = "cndl\tk\tcnt\n";
+		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
+	}
+
+	/* delta t */
+	len = 0U;
+	for (size_t i = 0U; i < cntz; i++) {
+		if (!dlt[i]) {
+			continue;
+		}
+		/* otherwise */
+		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		/* type t */
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, i);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
+		buf[len++] = '\n';
+	}
+	fwrite(buf, sizeof(*buf), len, stdout);
+	return;
+}
+
 
 #include "evtdist.yucc"
 
-int
-main(int argc, char *argv[])
+static int
+setup_erlang(struct yuck_cmd_erlang_s argi[static 1U])
 {
-	static yuck_t argi[1U];
-	int rc = EXIT_SUCCESS;
-
-	if (yuck_parse(argi, argc, argv) < 0) {
-		rc = EXIT_FAILURE;
-		goto out;
-	}
-
-	if (argi->interval_arg) {
-		char *on;
-
-		if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
-			errno = 0, serror("\
-Error: cannot read interval argument, must be positive.");
-			rc = EXIT_FAILURE;
-			goto out;
-		}
-		switch (*on++) {
-		secs:
-		case '\0':
-		case 'S':
-		case 's':
-			/* seconds, don't fiddle */
-			intv *= MSECS;
-			unit = UNIT_SECS;
-			break;
-		case 'm':
-		case 'M':
-			if (*on == 'o' || *on == 'O') {
-				goto months;
-			}
-			intv *= 60U;
-			goto secs;
-
-		months:
-			unit = UNIT_MONTHS;
-			break;
-
-		case 'y':
-		case 'Y':
-			unit = UNIT_YEARS;
-			break;
-
-		case 'h':
-		case 'H':
-			intv *= 60U * 60U;
-			goto secs;
-		case 'd':
-		case 'D':
-			unit = UNIT_DAYS;
-			break;
-
-		default:
-			errno = 0, serror("\
-Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
-			rc = EXIT_FAILURE;
-			goto out;
-		}
-	}
-
 	if (argi->occurrences_arg) {
 		if (!(np = strtoul(argi->occurrences_arg, NULL, 10))) {
 			errno = 0, serror("\
 Error: occurrences must be positive.");
-			rc = EXIT_FAILURE;
-			goto out;
-		} else if (np <= countof(_pevt)) {
-			;
-		} else if ((pevt = malloc(np * sizeof(*pevt))) == NULL) {
-			serror("\
-Error: cannot allocate memory for %zu lags", np);
-			rc = EXIT_FAILURE;
-			goto out;
+			return -1;
 		}
+		/* we need it off-by-one */
+		np--;
 	}
-
 	/* set candle printer */
 	prnt_cndl = !argi->table_flag ? prnt_cndl_molt : prnt_cndl_mtrx;
 
@@ -547,33 +663,98 @@ Error: cannot allocate memory for %zu lags", np);
 
 	default:
 		errno = 0, serror("\
-Error: verbose flag can only be used one to five times..");
-		rc = EXIT_FAILURE;
-		goto out;
+Error: verbose flag can only be used one to five times.");
+		return -1;
 	}
 
 	/* count events or elapsed times */
 	elapsp = argi->time_flag;
 	ztostr = !elapsp ? zutostr : tvtostr;
+	return 0;
+}
+
+static int
+setup_poisson(struct yuck_cmd_poisson_s argi[static 1U])
+{
+	if (!argi->base_arg) {
+		errno = 0, serror("\
+Error: --base argument is mandatory.");
+		return -1;
+	} else if (!(pbase = strtotvu(argi->base_arg, NULL).t)) {
+		return -1;
+	}
+
+	/* set candle printer */
+	prnt_cndl = !argi->table_flag
+		? prnt_cndl_molt_poiss : prnt_cndl_mtrx_poiss;
+
+	/* just reuse erlang's memory */
+	dlt = cnt.start;
+	cntz = sizeof(cnt) / sizeof(dlt);
+	ztostr = zutostr;
+	return 0;
+}
+
+int
+main(int argc, char *argv[])
+{
+	static yuck_t argi[1U];
+	int rc = EXIT_SUCCESS;
+
+	if (yuck_parse(argi, argc, argv) < 0) {
+		rc = EXIT_FAILURE;
+		goto out;
+	}
+
+	if (argi->interval_arg &&
+	    !(intv = strtotvu(argi->interval_arg, NULL)).t) {
+		errno = 0, serror("\
+Error: cannot read interval argument, must be positive.");
+		rc = EXIT_FAILURE;
+		goto out;
+	}
+
+	switch (argi->cmd) {
+	default:
+	case EVTDIST_CMD_ERLANG:
+		if (setup_erlang((void*)argi) < 0) {
+			rc = EXIT_FAILURE;
+			goto out;
+		}
+		break;
+	case EVTDIST_CMD_POISSON:
+		if (setup_poisson((void*)argi) < 0) {
+			rc = EXIT_FAILURE;
+			goto out;
+		}
+		break;
+	}
 
 	{
 		char *line = NULL;
 		size_t llen = 0UL;
 		ssize_t nrd;
 
-		while ((nrd = getline(&line, &llen, stdin)) > 0) {
-			(void)push_beef(line, nrd);
+		switch (argi->cmd) {
+		default:
+		case EVTDIST_CMD_ERLANG:
+			while ((nrd = getline(&line, &llen, stdin)) > 0) {
+				(void)push_erlng(line, nrd);
+			}
+			break;
+		case EVTDIST_CMD_POISSON:
+			while ((nrd = getline(&line, &llen, stdin)) > 0) {
+				(void)push_poiss(line, nrd);
+			}
+			/* finalise poisson pusher */
+			(void)push_poiss(NULL, 0U);
+			break;
 		}
-
 		/* finalise our findings */
 		free(line);
 
 		/* print the final candle */
 		prnt_cndl();
-	}
-
-	if (pevt != _pevt) {
-		free(pevt);
 	}
 
 out:
