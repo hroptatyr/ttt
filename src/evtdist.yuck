@@ -1,9 +1,7 @@
 Usage: evtdist < EVENTS
 
 Analyse events in fixed size windows and print counts.
-
-An event is indicated by a unix timestamp on stdin.  The difference
-between the current timestamp and the last will be binned and counted.
+An event is indicated by a unix timestamp on stdin.
 
   -i, --interval=S      Draw candles every S seconds, can also be
                         suffixed with m for minutes, h for hours,
@@ -12,6 +10,22 @@ between the current timestamp and the last will be binned and counted.
                         Use twice for more bins.
   -t, --table           Print counts and ranges as table, 
                         default: print as molten data.
+
+
+Usage: evtdist erlang < EVENTS
+
+The difference between the current timestamp and the last will be
+binned and counted.
+
   -T, --time            Add up elapsed times between events,
                         default: count events.
   -k, --occurrences=K   Measure times between K occurrences, default 1.
+
+
+Usage: evtdist poisson < EVENTS
+
+Events are binned into BASE wide windows and counted.
+
+  -I, --base=S          Poisson base interval in seconds.  Can be
+                        suffixed with m for minutes, h for hours,
+                        d for days.
