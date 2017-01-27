@@ -199,8 +199,9 @@ ilog2(const uint32_t x)
 /* next candle time */
 static tv_t nxct;
 
-static tv_t _1st = NOT_A_TIME;
 static tv_t last;
+static tv_t _pevt[32U], *pevt = _pevt;
+static size_t ip, np = 1U;
 
 /* stats */
 static union {
@@ -291,7 +292,6 @@ rset_cndl(void)
 static int
 push_beef(char *ln, size_t UNUSED(lz))
 {
-	size_t acc;
 	char *on;
 	tv_t t;
 	int rc = 0;
@@ -302,24 +302,20 @@ push_beef(char *ln, size_t UNUSED(lz))
 	} else if (t < last) {
 		fputs("Warning: non-chronological\n", stderr);
 		rc = -1;
-		goto out;
 	} else if (UNLIKELY(t > nxct)) {
 		prnt_cndl();
 		rset_cndl();
 		nxct = next_cndl(t);
-		_1st = last = t;
-	}
-
-	/* measure time */
-	acc = !elapsp ? 1ULL : (t - last);
-
-	with (tv_t dt = t - last) {
+	} else if (LIKELY(pevt[ip])) {
+		/* measure time */
+		size_t acc = !elapsp ? 1ULL : (t - last);
+		tv_t dt = t - pevt[ip];
 		unsigned int slot = ilog2(dt / MSECS + 1U);
-
 		/* determine sub slot, if applicable */
-		with (unsigned int width = (1U << slot), base = width - 1U) {
-			unsigned int subs;
+		unsigned int width = (1U << slot), base = width - 1U;
+		unsigned int subs;
 
+		{
 			/* translate in terms of base */
 			subs = (dt - base * MSECS) << (highbits - 5U);
 			/* divide by width */
@@ -335,10 +331,10 @@ push_beef(char *ln, size_t UNUSED(lz))
 		tlo[slot] = min_tv(tlo[slot], dt);
 		thi[slot] = max_tv(thi[slot], dt);
 	}
-
-out:
 	/* and store state */
 	last = t;
+	pevt[ip] = t;
+	ip = (ip + 1U) % np;
 	return rc;
 }
 
@@ -348,15 +344,9 @@ prnt_cndl_mtrx(void)
 	static size_t ncndl;
 	size_t len = 0U;
 
-	if (UNLIKELY(_1st == NOT_A_TIME)) {
-		return;
-	}
-
-	switch (ncndl++) {
+	if (!ncndl++) {
 		static const char hdr[] = "cndl\tdimen\tmetric";
-	default:
-		break;
-	case 0U:
+
 		len = (memcpy(buf, hdr, strlenof(hdr)), strlenof(hdr));
 		for (size_t i = 0U; i < (1U << highbits); i++) {
 			buf[len++] = '\t';
@@ -366,7 +356,6 @@ prnt_cndl_mtrx(void)
 		buf[len++] = '\n';
 		fwrite(buf, sizeof(*buf), len, stdout);
 		len = 0U;
-		break;
 	}
 
 	/* delta t */
@@ -407,17 +396,9 @@ prnt_cndl_molt(void)
 	static size_t ncndl;
 	size_t len = 0U;
 
-	if (UNLIKELY(_1st == NOT_A_TIME)) {
-		return;
-	}
-
-	switch (ncndl++) {
+	if (!ncndl++) {
 		static const char hdr[] = "cndl\tdimen\tlo\thi\tcnt\n";
-	default:
-		break;
-	case 0U:
 		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
-		break;
 	}
 
 	/* delta t */
@@ -450,11 +431,10 @@ int
 main(int argc, char *argv[])
 {
 	static yuck_t argi[1U];
-
-	int rc = 0;
+	int rc = EXIT_SUCCESS;
 
 	if (yuck_parse(argi, argc, argv) < 0) {
-		rc = 1;
+		rc = EXIT_FAILURE;
 		goto out;
 	}
 
@@ -464,7 +444,7 @@ main(int argc, char *argv[])
 		if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
 			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
-			rc = 1;
+			rc = EXIT_FAILURE;
 			goto out;
 		}
 		switch (*on++) {
@@ -505,7 +485,23 @@ Error: cannot read interval argument, must be positive.");
 		default:
 			errno = 0, serror("\
 Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
-			rc = 1;
+			rc = EXIT_FAILURE;
+			goto out;
+		}
+	}
+
+	if (argi->occurrences_arg) {
+		if (!(np = strtoul(argi->occurrences_arg, NULL, 10))) {
+			errno = 0, serror("\
+Error: occurrences must be positive.");
+			rc = EXIT_FAILURE;
+			goto out;
+		} else if (np <= countof(_pevt)) {
+			;
+		} else if ((pevt = malloc(np * sizeof(*pevt))) == NULL) {
+			serror("\
+Error: cannot allocate memory for %zu lags", np);
+			rc = EXIT_FAILURE;
 			goto out;
 		}
 	}
@@ -552,7 +548,7 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 	default:
 		errno = 0, serror("\
 Error: verbose flag can only be used one to five times..");
-		rc = 1;
+		rc = EXIT_FAILURE;
 		goto out;
 	}
 
@@ -574,6 +570,10 @@ Error: verbose flag can only be used one to five times..");
 
 		/* print the final candle */
 		prnt_cndl();
+	}
+
+	if (pevt != _pevt) {
+		free(pevt);
 	}
 
 out:

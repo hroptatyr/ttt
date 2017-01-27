@@ -11,3 +11,4 @@ Analyse events in fixed size windows and print counts..
                         default: print as molten data.
   -T, --time            Add up elapsed times between events,
                         default: count events.
+  -k, --occurrences=K   Measure times between K occurrences, default 1.
