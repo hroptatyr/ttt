@@ -271,8 +271,7 @@ ilog2(const uint32_t x)
 static tv_t nxct;
 
 static tv_t last;
-static tv_t _pevt[32U], *pevt = _pevt;
-static size_t ip, np = 1U;
+static size_t ip, np;
 
 /* stats */
 static union {
@@ -371,14 +370,13 @@ push_erlng(char *ln, size_t UNUSED(lz))
 {
 	char *on;
 	tv_t t;
-	int rc = 0;
 
 	/* metronome is up first */
 	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
 		return -1;
 	} else if (UNLIKELY(t < last)) {
 		fputs("Warning: non-chronological\n", stderr);
-		rc = -1;
+		return -1;
 	} else if (UNLIKELY(t > nxct)) {
 		if (LIKELY(nxct)) {
 			prnt_cndl();
@@ -386,10 +384,12 @@ push_erlng(char *ln, size_t UNUSED(lz))
 		rset_cndl();
 		rset_rngs();
 		nxct = next_cndl(t);
-	} else if (LIKELY(pevt[ip])) {
+	} else if (LIKELY(ip++ < np)) {
+		return 0;
+	} else {
 		/* measure time */
-		size_t acc = !elapsp ? 1ULL : (t - last);
-		tv_t dt = t - pevt[ip];
+		const tv_t dt = t - last;
+		size_t acc = !elapsp ? 1ULL : dt;
 		unsigned int slot = ilog2(dt / MSECS + 1U);
 		/* determine sub slot, if applicable */
 		unsigned int width = (1U << slot), base = width - 1U;
@@ -413,9 +413,8 @@ push_erlng(char *ln, size_t UNUSED(lz))
 	}
 	/* and store state */
 	last = t;
-	pevt[ip] = t;
-	ip = (ip + 1U) % np;
-	return rc;
+	ip = 0U;
+	return 0;
 }
 
 static int
@@ -619,13 +618,9 @@ setup_erlang(struct yuck_cmd_erlang_s argi[static 1U])
 			errno = 0, serror("\
 Error: occurrences must be positive.");
 			return -1;
-		} else if (np <= countof(_pevt)) {
-			;
-		} else if ((pevt = malloc(np * sizeof(*pevt))) == NULL) {
-			serror("\
-Error: cannot allocate memory for %zu lags", np);
-			return -1;
 		}
+		/* we need it off-by-one */
+		np--;
 	}
 	/* set candle printer */
 	prnt_cndl = !argi->table_flag ? prnt_cndl_molt : prnt_cndl_mtrx;
@@ -760,10 +755,6 @@ Error: cannot read interval argument, must be positive.");
 
 		/* print the final candle */
 		prnt_cndl();
-	}
-
-	if (pevt != _pevt) {
-		free(pevt);
 	}
 
 out:
