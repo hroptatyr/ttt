@@ -25,6 +25,12 @@ typedef long unsigned int tv_t;
 #define NOT_A_TIME	((tv_t)-1ULL)
 
 typedef struct {
+	size_t n;
+	float lambda;
+	float pi;
+} zip_t;
+
+typedef struct {
 	tv_t t;
 	enum {
 		UNIT_NONE,
@@ -41,6 +47,10 @@ static unsigned int highbits = 1U;
 static unsigned int elapsp;
 static tv_t pbase = MSECS;
 
+#if defined __INTEL_COMPILER
+# pragma warning (disable:981)
+#endif	/* __INTEL_COMPILER */
+
 
 static __attribute__((format(printf, 1, 2))) void
 serror(const char *fmt, ...)
@@ -56,6 +66,13 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
+}
+
+static inline size_t
+memncpy(void *restrict tgt, const void *src, size_t zrc)
+{
+	(void)memcpy(tgt, src, zrc);
+	return zrc;
 }
 
 static tv_t
@@ -471,7 +488,7 @@ prnt_cndl_mtrx(void)
 	if (!ncndl++) {
 		static const char hdr[] = "cndl\tmetric";
 
-		len = (memcpy(buf, hdr, strlenof(hdr)), strlenof(hdr));
+		len = memncpy(buf, hdr, strlenof(hdr));
 		for (size_t i = 0U; i < (1U << highbits); i++) {
 			buf[len++] = '\t';
 			buf[len++] = 'v';
@@ -540,16 +557,55 @@ prnt_cndl_molt(void)
 	return;
 }
 
+static zip_t
+fit_zip(void)
+{
+	size_t d = 0U, w = 0U;
+
+	for (size_t i = 0U; i < cntz; i++) {
+		d += dlt[i];
+	}
+	for (size_t i = 1U; i < cntz; i++) {
+		w += dlt[i] * i;
+	}
+
+	/* run 10 iterations of the MLE estimator */
+	double lambda = 2;
+	const double mu = (double)w / (double)d;
+	const double z = (double)dlt[0U] / (double)d;
+	for (size_t i = 0U; i < 10U; i++) {
+		lambda = mu * (1 - exp(-lambda)) / (1 - z);
+	}
+	return (zip_t){d, (float)lambda, (float)(1 - mu / lambda)};
+}
+
+static inline size_t
+dzip(const zip_t m, unsigned int k)
+{
+	float v;
+
+	if (UNLIKELY(!k)) {
+		v = m.pi + (1 - m.pi) * expf(-m.lambda);
+	} else {
+		const float dk = (float)k;
+		v = logf(1 - m.pi) - m.lambda +
+			dk * logf(m.lambda) - lgammaf(dk + 1);
+		v = expf(v);
+	}
+	return lrintf(m.n * v);
+}
+
 static void
 prnt_cndl_mtrx_poiss(void)
 {
 	static size_t ncndl;
 	size_t len = 0U;
+	const zip_t m = fit_zip();
 
 	if (!ncndl++) {
-		static const char hdr[] = "cndl";
+		static const char hdr[] = "cndl\tmetric";
 
-		len = (memcpy(buf, hdr, strlenof(hdr)), strlenof(hdr));
+		len = memncpy(buf, hdr, strlenof(hdr));
 		for (size_t i = 0U; i < cntz; i++) {
 			if (!dlt[i]) {
 				continue;
@@ -564,12 +620,24 @@ prnt_cndl_mtrx_poiss(void)
 
 	/* delta t */
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += memncpy(buf + len, "\tcnt", strlenof("\tcnt"));
 	for (size_t i = 0U; i < cntz; i++) {
 		if (!dlt[i]) {
 			continue;
 		}
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
+	}
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += memncpy(buf + len, "\ttheo", strlenof("\ttheo"));
+	for (size_t i = 0U; i < cntz; i++) {
+		if (!dlt[i]) {
+			continue;
+		}
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, dzip(m, i));
 	}
 	buf[len++] = '\n';
 
@@ -582,9 +650,10 @@ prnt_cndl_molt_poiss(void)
 {
 	static size_t ncndl;
 	size_t len = 0U;
+	const zip_t m = fit_zip();
 
 	if (!ncndl++) {
-		static const char hdr[] = "cndl\tk\tcnt\n";
+		static const char hdr[] = "cndl\tk\tcnt\ttheo\n";
 		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
 	}
 
@@ -601,6 +670,8 @@ prnt_cndl_molt_poiss(void)
 		len += ztostr(buf + len, sizeof(buf) - len, i);
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, dzip(m, i));
 		buf[len++] = '\n';
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
