@@ -31,6 +31,18 @@ typedef struct {
 } zip_t;
 
 typedef struct {
+	size_t n;
+	float shape;
+	float rate;
+} zie_t;
+
+typedef struct {
+	size_t n;
+	float shape;
+	float logmin;
+} pareto_t;
+
+typedef struct {
 	tv_t t;
 	enum {
 		UNIT_NONE,
@@ -479,6 +491,139 @@ Got %zu events but can only track %zu.", this, cntz);
 	return rc;
 }
 
+
+/* fitters */
+static zie_t
+fit_zie(void)
+{
+	size_t td = 0U;
+	double ls = 0, ld = 0;
+
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		td += dlt[i];
+	}
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (UNLIKELY(!dlt[i])) {
+			continue;
+		}
+		ld += log((double)dlt[i]);
+		ls += log((double)dlt[i]) * (double)((tlo[i] + thi[i]) / 2);
+	}
+	return (zie_t){td, (float)(np + 1U), (float)(ld / ls * MSECS)};
+}
+
+static zip_t
+fit_zip(void)
+{
+	size_t d = 0U, w = 0U;
+
+	for (size_t i = 0U; i < cntz; i++) {
+		d += dlt[i];
+	}
+	for (size_t i = 1U; i < cntz; i++) {
+		w += dlt[i] * i;
+	}
+
+	/* run 10 iterations of the MLE estimator */
+	double lambda = 2;
+	const double mu = (double)w / (double)d;
+	const double z = (double)dlt[0U] / (double)d;
+	for (size_t i = 0U; i < 10U; i++) {
+		lambda = mu * (1 - exp(-lambda)) / (1 - z);
+	}
+	return (zip_t){d, (float)lambda, (float)(1 - mu / lambda)};
+}
+
+static pareto_t
+fit_pareto(void)
+{
+	size_t d = 0U;
+	size_t m = 1U;
+	double lm;
+
+	for (size_t i = 1U, n = 1U << highbits; i < n; i++) {
+		if (!dlt[i]) {
+			m = i;
+			break;
+		} else if (dlt[i] > dlt[i - 1U]) {
+			m = i - 1U;
+			break;
+		}
+	}
+	lm = log((double)tlo[m]);
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		d += dlt[i];
+	}
+
+	double sh = 0;
+	for (size_t i = m, n = 1U << highbits; i < n; i++) {
+		if (UNLIKELY(!dlt[i])) {
+			continue;
+		}
+		sh += dlt[i] * (log((double)tlo[i]) - lm);
+	}
+	return (pareto_t){d, (float)((double)d / sh), (float)lm};
+}
+
+static inline size_t
+dzip(const zip_t m, size_t k)
+{
+	float v;
+
+	if (UNLIKELY(!k)) {
+		v = m.pi + (1 - m.pi) * expf(-m.lambda);
+	} else {
+		const float dk = (float)k;
+		v = logf(1 - m.pi) - m.lambda +
+			dk * logf(m.lambda) - lgammaf(dk + 1);
+		v = expf(v);
+	}
+	return lrintf(m.n * v);
+}
+
+static inline size_t
+dpois(const zip_t m, float k)
+{
+	float v;
+
+	if (k < __FLT_EPSILON__) {
+		v = -m.lambda;
+	} else if (m.lambda < __FLT_EPSILON__) {
+		v = -m.lambda + k * logf(m.lambda) - lgammaf(k + 1);
+	}
+	return lrintf(m.n * expf(v));
+}
+
+static inline size_t
+dzie(const zie_t m, size_t k)
+{
+	const float v = (float)((tlo[k] + thi[k]) / 2U) / MSECS;
+
+	if (UNLIKELY(v < __FLT_EPSILON__)) {
+		return m.shape < 1 ? -1ULL : m.shape > 1 ? 0ULL
+			: lrintf(m.n * m.rate);
+	}
+	if (m.shape < 1) {
+		return dpois((zip_t){m.n, v * m.rate}, m.shape) * m.shape / v;
+	}
+	return dpois((zip_t){m.n, v * m.rate}, m.shape - 1) * m.rate;
+}
+
+static inline size_t
+dpareto(const pareto_t m, size_t k)
+{
+	const float lv = logf((float)tlo[k]);
+	float r;
+
+	if (UNLIKELY(lv < m.logmin)) {
+		return 0;
+	}
+	r = logf(m.shape) + m.shape * m.logmin - (m.shape + 1) * lv;
+	return lrintf(m.n * expf(r));
+}
+
+
+/* printers */
 static void
 prnt_cndl_mtrx(void)
 {
@@ -530,9 +675,11 @@ prnt_cndl_molt(void)
 {
 	static size_t ncndl;
 	size_t len = 0U;
+	const zie_t mg = fit_zie();
+	const pareto_t mp = fit_pareto();
 
 	if (!ncndl++) {
-		static const char hdr[] = "cndl\tlo\thi\tcnt\n";
+		static const char hdr[] = "cndl\tlo\thi\tcnt\ttheo_gamma\ttheo_pareto\n";
 		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
 	}
 
@@ -551,48 +698,14 @@ prnt_cndl_molt(void)
 		len += tvtostr(buf + len, sizeof(buf) - len, thi[i]);
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, dzie(mg, i));
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, dpareto(mp, i));
 		buf[len++] = '\n';
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
 	return;
-}
-
-static zip_t
-fit_zip(void)
-{
-	size_t d = 0U, w = 0U;
-
-	for (size_t i = 0U; i < cntz; i++) {
-		d += dlt[i];
-	}
-	for (size_t i = 1U; i < cntz; i++) {
-		w += dlt[i] * i;
-	}
-
-	/* run 10 iterations of the MLE estimator */
-	double lambda = 2;
-	const double mu = (double)w / (double)d;
-	const double z = (double)dlt[0U] / (double)d;
-	for (size_t i = 0U; i < 10U; i++) {
-		lambda = mu * (1 - exp(-lambda)) / (1 - z);
-	}
-	return (zip_t){d, (float)lambda, (float)(1 - mu / lambda)};
-}
-
-static inline size_t
-dzip(const zip_t m, unsigned int k)
-{
-	float v;
-
-	if (UNLIKELY(!k)) {
-		v = m.pi + (1 - m.pi) * expf(-m.lambda);
-	} else {
-		const float dk = (float)k;
-		v = logf(1 - m.pi) - m.lambda +
-			dk * logf(m.lambda) - lgammaf(dk + 1);
-		v = expf(v);
-	}
-	return lrintf(m.n * v);
 }
 
 static void
