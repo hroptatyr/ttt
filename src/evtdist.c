@@ -39,7 +39,8 @@ typedef struct {
 typedef struct {
 	size_t n;
 	float shape;
-	float logmin;
+	/* log(1/scale) == -log(scale) */
+	float rate;
 } pareto_t;
 
 typedef struct {
@@ -295,6 +296,17 @@ ilog2(const uint32_t x)
 	return 31U - __builtin_clz(x);
 }
 
+static inline float
+log1pexpf(float x)
+{
+	if (x <= 18) {
+		return logf(1 + expf(x));
+	} else if (x > 33.3) {
+		return x;
+	}
+	return x + expf(-x);
+}
+
 
 /* next candle time */
 static tv_t nxct;
@@ -493,78 +505,6 @@ Got %zu events but can only track %zu.", this, cntz);
 
 
 /* fitters */
-static zie_t
-fit_zie(void)
-{
-	size_t td = 0U;
-	double ls = 0, ld = 0;
-
-	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
-		td += dlt[i];
-	}
-	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
-		if (UNLIKELY(!dlt[i])) {
-			continue;
-		}
-		ld += log((double)dlt[i]);
-		ls += log((double)dlt[i]) * (double)((tlo[i] + thi[i]) / 2);
-	}
-	return (zie_t){td, (float)(np + 1U), (float)(ld / ls * MSECS)};
-}
-
-static zip_t
-fit_zip(void)
-{
-	size_t d = 0U, w = 0U;
-
-	for (size_t i = 0U; i < cntz; i++) {
-		d += dlt[i];
-	}
-	for (size_t i = 1U; i < cntz; i++) {
-		w += dlt[i] * i;
-	}
-
-	/* run 10 iterations of the MLE estimator */
-	double lambda = 2;
-	const double mu = (double)w / (double)d;
-	const double z = (double)dlt[0U] / (double)d;
-	for (size_t i = 0U; i < 10U; i++) {
-		lambda = mu * (1 - exp(-lambda)) / (1 - z);
-	}
-	return (zip_t){d, (float)lambda, (float)(1 - mu / lambda)};
-}
-
-static pareto_t
-fit_pareto(void)
-{
-	size_t d = 0U;
-	size_t m = 1U;
-	double lm;
-
-	for (size_t i = 1U, n = 1U << highbits; i < n; i++) {
-		if (!dlt[i]) {
-			m = i;
-			break;
-		} else if (dlt[i] > dlt[i - 1U]) {
-			m = i - 1U;
-			break;
-		}
-	}
-	lm = log((double)tlo[m]);
-	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
-		d += dlt[i];
-	}
-
-	double sh = 0;
-	for (size_t i = m, n = 1U << highbits; i < n; i++) {
-		if (UNLIKELY(!dlt[i])) {
-			continue;
-		}
-		sh += dlt[i] * (log((double)tlo[i]) - lm);
-	}
-	return (pareto_t){d, (float)((double)d / sh), (float)lm};
-}
-
 static inline size_t
 dzip(const zip_t m, size_t k)
 {
@@ -612,14 +552,91 @@ dzie(const zie_t m, size_t k)
 static inline size_t
 dpareto(const pareto_t m, size_t k)
 {
-	const float lv = logf((float)tlo[k]);
-	float r;
+	const float v = (float)thi[k];
+	float lv, r;
 
-	if (UNLIKELY(lv < m.logmin)) {
-		return 0;
+	if (UNLIKELY(v < __FLT_EPSILON__)) {
+		return lrintf(m.n * m.shape * expf(m.rate));
 	}
-	r = logf(m.shape) + m.shape * m.logmin - (m.shape + 1) * lv;
+
+	lv = logf(v);
+	with (float tmp = lv + m.rate) {
+		r = logf(m.shape) - m.shape * log1pexpf(tmp)
+			- log1pexpf(-tmp) - lv;
+	}
 	return lrintf(m.n * expf(r));
+}
+
+static zie_t
+fit_zie(void)
+{
+	size_t td = 0U;
+	double ls = 0, ld = 0;
+
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		td += dlt[i];
+	}
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (UNLIKELY(!dlt[i])) {
+			continue;
+		}
+		ld += log((double)dlt[i]);
+		ls += log((double)dlt[i]) * (double)((tlo[i] + thi[i]) / 2);
+	}
+	return (zie_t){td, (float)(np + 1U), (float)(ld / ls * MSECS)};
+}
+
+static zip_t
+fit_zip(void)
+{
+	size_t d = 0U, w = 0U;
+
+	for (size_t i = 0U; i < cntz; i++) {
+		d += dlt[i];
+	}
+	for (size_t i = 1U; i < cntz; i++) {
+		w += dlt[i] * i;
+	}
+
+	/* run 10 iterations of the MLE estimator */
+	double lambda = 2;
+	const double mu = (double)w / (double)d;
+	const double z = (double)dlt[0U] / (double)d;
+	for (size_t i = 0U; i < 10U; i++) {
+		lambda = mu * (1 - exp(-lambda)) / (1 - z);
+	}
+	return (zip_t){d, (float)lambda, (float)(1 - mu / lambda)};
+}
+
+static pareto_t
+fit_pareto(void)
+{
+	size_t d = 0U, subd = 0U;
+	size_t m = 1U;
+
+	for (size_t i = 1U, n = 1U << highbits; i < n; i++) {
+		if (dlt[i] >= dlt[i - 1U]) {
+			m = i - 1U;
+			break;
+		}
+	}
+
+	for (size_t i = 0U; i < m; i++) {
+		subd += dlt[i];
+	}
+	for (size_t i = m, n = 1U << highbits; i < n; i++) {
+		d += dlt[i];
+	}
+
+	double lm = log((double)thi[m]);
+	double sh = 0;
+	for (size_t i = m, n = 1U << highbits; i < n; i++) {
+		if (UNLIKELY(!dlt[i])) {
+			continue;
+		}
+		sh += dlt[i] * (log((double)thi[i]) - lm);
+	}
+	return (pareto_t){subd + d, (float)((double)d / sh), -(float)lm};
 }
 
 
