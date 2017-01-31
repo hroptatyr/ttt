@@ -9,13 +9,13 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <errno.h>
-#include <sys/socket.h>
-#include <fcntl.h>
+#include <values.h>
 #include <sys/time.h>
 #include <time.h>
 #include <assert.h>
 #include <ieee754.h>
 #include <math.h>
+#include <tgmath.h>
 #include "nifty.h"
 
 #define NSECS	(1000000000)
@@ -25,22 +25,22 @@ typedef long unsigned int tv_t;
 #define NOT_A_TIME	((tv_t)-1ULL)
 
 typedef struct {
-	float logn;
-	float lambda;
-	float pi;
+	double logn;
+	double lambda;
+	double pi;
 } zip_t;
 
 typedef struct {
-	float logn;
-	float shape;
-	float rate;
+	double logn;
+	double shape;
+	double rate;
 } gamma_t;
 
 typedef struct {
-	float logn;
-	float shape;
+	double logn;
+	double shape;
 	/* log(1/scale) == -log(scale) */
-	float rate;
+	double rate;
 } pareto_t;
 
 typedef struct {
@@ -296,15 +296,110 @@ ilog2(const uint32_t x)
 	return 31U - __builtin_clz(x);
 }
 
-static inline float
-log1pexpf(float x)
+static inline double
+log1pexpf(double x)
 {
 	if (x <= 18) {
-		return logf(1 + expf(x));
+		return log(1 + exp(x));
 	} else if (x > 33.3) {
 		return x;
 	}
-	return x + expf(-x);
+	return x + exp(-x);
+}
+
+static double
+stirlerr(double n)
+{
+	static const double S0 = 0.083333333333333333333/* 1/12 */;
+	static const double S1 = 0.00277777777777777777778/* 1/360 */;
+	static const double S2 = 0.00079365079365079365079365/* 1/1260 */;
+	static const double S3 = 0.000595238095238095238095238/* 1/1680 */;
+	static const double S4 = 0.0008417508417508417508417508/* 1/1188 */;
+	/* error for 0, 0.5, 1.0, 1.5, ..., 14.5, 15.0. */
+	static const double sferr_halves[31] = {
+		0.0, /* n=0 - wrong, place holder only */
+		0.1534264097200273452913848, /* 0.5 */
+		0.0810614667953272582196702, /* 1.0 */
+		0.0548141210519176538961390, /* 1.5 */
+		0.0413406959554092940938221, /* 2.0 */
+		0.03316287351993628748511048, /* 2.5 */
+		0.02767792568499833914878929, /* 3.0 */
+		0.02374616365629749597132920, /* 3.5 */
+		0.02079067210376509311152277, /* 4.0 */
+		0.01848845053267318523077934, /* 4.5 */
+		0.01664469118982119216319487, /* 5.0 */
+		0.01513497322191737887351255, /* 5.5 */
+		0.01387612882307074799874573, /* 6.0 */
+		0.01281046524292022692424986, /* 6.5 */
+		0.01189670994589177009505572, /* 7.0 */
+		0.01110455975820691732662991, /* 7.5 */
+		0.010411265261972096497478567, /* 8.0 */
+		0.009799416126158803298389475, /* 8.5 */
+		0.009255462182712732917728637, /* 9.0 */
+		0.008768700134139385462952823, /* 9.5 */
+		0.008330563433362871256469318, /* 10.0 */
+		0.007934114564314020547248100, /* 10.5 */
+		0.007573675487951840794972024, /* 11.0 */
+		0.007244554301320383179543912, /* 11.5 */
+		0.006942840107209529865664152, /* 12.0 */
+		0.006665247032707682442354394, /* 12.5 */
+		0.006408994188004207068439631, /* 13.0 */
+		0.006171712263039457647532867, /* 13.5 */
+		0.005951370112758847735624416, /* 14.0 */
+		0.005746216513010115682023589, /* 14.5 */
+		0.005554733551962801371038690 /* 15.0 */
+	};
+	/* log(sqrt(2*pi)) */
+	static const double LN_SQRT_2PI = 0.918938533204672741780329736406;
+	double nn;
+
+	if (n <= 15) {
+		nn = n + n;
+		if (fabs(nn - rint(nn)) < __DBL_EPSILON__) {
+			return sferr_halves[lrint(nn)];
+		}
+		return lgamma(n + 1) - (n + 0.5) * log(n) + n - LN_SQRT_2PI;
+	}
+	nn = n * n;
+	if (n > 500) {
+		return (S0 - S1 / nn) / n;
+	} else if (n > 80) {
+		return (S0 - (S1 - S2 / nn) / nn) / n;
+	} else if (n > 35) {
+		return (S0 - (S1 - (S2 - S3 / nn) / nn) / nn) / n;
+	}
+	/* otherwise 15 < n <= 35 : */
+	return (S0 - (S1 - (S2 - (S3 - S4 / nn) / nn) / nn) / nn) / n;
+}
+
+static double
+bd0(double x, double q)
+{
+	if (fabs(x - q) < 0.1*(x + q)) {
+		double ej, s, s1, v;
+
+		v = (x - q) / (x + q);
+		s = (x - q) * v;
+
+		if (fabs(s) < __DBL_EPSILON__) {
+			return s;
+		}
+		ej = 2 * x * v;
+		v = v * v;
+
+		/* Taylor series; 1000: no infinite loop
+		 * as |v| < .1, v^2000 is "zero" */
+		for (size_t j = 1; j < 1000U; j++) {
+			ej *= v;
+			s1 = s + ej / ((j << 1U) + 1U);
+			if (fabs(s1 - s) < __DBL_EPSILON__) {
+				return s1;
+			}
+			s = s1;
+		}
+	}
+	/* else: | x - np | is not too small */
+	return x * log(x / q) + q - x;
 }
 
 
@@ -505,67 +600,68 @@ Got %zu events but can only track %zu.", this, cntz);
 
 
 /* fitters */
-static inline size_t
-dzip(const zip_t m, size_t k)
+static inline double
+dzip(const zip_t m, double x)
 {
-	float v;
+	double v;
 
-	if (UNLIKELY(!k)) {
-		v = logf(m.pi + (1 - m.pi) * expf(-m.lambda));
+	if (UNLIKELY(!x)) {
+		v = log(m.pi + (1 - m.pi) * exp(-m.lambda));
 	} else {
-		const float dk = (float)k;
-		v = logf(1 - m.pi) - m.lambda +
-			dk * logf(m.lambda) - lgammaf(dk + 1);
+		v = log(1 - m.pi) - m.lambda + x * log(m.lambda) - lgamma(x + 1);
 	}
-	return expf(m.logn + v);
+	return v;
 }
 
-static inline size_t
-dpois(const zip_t m, float k)
+static inline double
+dpois(const zip_t m, double x)
 {
-	float v;
+	double v;
 
-	if (k < __FLT_EPSILON__) {
+	if (UNLIKELY(x < __DBL_EPSILON__)) {
 		v = -m.lambda;
-	} else if (m.lambda < __FLT_EPSILON__) {
-		v = -m.lambda + k * logf(m.lambda) - lgammaf(k + 1);
+	} else if (UNLIKELY(m.lambda < __DBL_EPSILON__)) {
+		v = -m.lambda + x * log(m.lambda) - lgamma(x + 1);
+	} else {
+		/* fexp(M_2PI*x, -stirlerr(x)-bd0(x,lambda))
+		 * with fexp(f,x) <- -0.5*log(f)+(x) */
+		static const double l2pi = 1.837877066409345;
+
+		v = -0.5 * (l2pi + log(x)) - stirlerr(x) - bd0(x, m.lambda);
 	}
-	return expf(m.logn + v);
+	return v;
 }
 
-static inline size_t
-dgamma(const gamma_t m, size_t k)
+static inline double
+dgamma(const gamma_t m, double x)
 {
-	const float v = (float)((tlo[k] + thi[k]) / 2U) / MSECS;
-	size_t p;
+	double p;
 
-	if (UNLIKELY(v < __FLT_EPSILON__)) {
-		return m.shape < 1 ? -1ULL : m.shape > 1 ? 0ULL
-			: expf(m.logn) * m.rate;
+	if (UNLIKELY(x < __DBL_EPSILON__)) {
+		return m.shape < 1 ? INFINITY : m.shape > 1 ? 0 : log(m.rate);
 	}
-	p = dpois((zip_t){m.logn, v * m.rate}, m.shape - (m.shape >= 1));
+	p = dpois((zip_t){0, x * m.rate}, m.shape - (m.shape >= 1));
 	if (m.shape < 1) {
-		return p * m.shape / v;
+		return p + log(m.shape / x);
 	}
-	return p * m.rate;
+	return p + log(m.rate);
 }
 
-static inline size_t
-dpareto(const pareto_t m, size_t k)
+static inline double
+dpareto(const pareto_t m, double x)
 {
-	const float v = (float)thi[k];
-	float lv, r;
+	double lx, r;
 
-	if (UNLIKELY(v < __FLT_EPSILON__)) {
-		return m.shape * expf(m.rate + m.logn);
+	if (UNLIKELY(x < __DBL_EPSILON__)) {
+		return log(m.shape) + m.rate;
 	}
 
-	lv = logf(v);
-	with (float tmp = lv + m.rate) {
-		r = logf(m.shape) - m.shape * log1pexpf(tmp)
-			- log1pexpf(-tmp) - lv;
+	lx = log(x);
+	with (double tmp = lx + m.rate) {
+		r = log(m.shape) - m.shape * log1pexpf(tmp)
+			- log1pexpf(-tmp) - lx;
 	}
-	return expf(m.logn + r);
+	return r;
 }
 
 static gamma_t
@@ -584,9 +680,39 @@ fit_erlang(void)
 		ld += log((double)dlt[i]);
 		ls += log((double)dlt[i]) * (double)((tlo[i] + thi[i]) / 2);
 	}
-	return (gamma_t){logf((float)td),
-			(float)(np + 1U),
-			(float)(ld / ls * MSECS)};
+	return (gamma_t){log((double)td),
+			(double)(np + 1U),
+			(double)(ld / ls * MSECS)};
+}
+
+static gamma_t
+fit_gamma(void)
+{
+	size_t td = 0U;
+	double ls = 0, su = 0;
+	const double lms = log((double)MSECS);
+
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		td += dlt[i];
+	}
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (UNLIKELY(!dlt[i])) {
+			continue;
+		}
+		ls += (double)dlt[i] * (log((double)thi[i]) - lms);
+		su += (double)dlt[i] * (double)thi[i];
+	}
+
+	double s = log(su / (double)td) - lms - ls / (double)td;
+	double k = (3 - s + sqrt((s - 3)*(s - 3) + 24*s)) / (12 * s);
+	double r = (double)td * k / su;
+
+	/* assimilate k and r */
+	with (double tmp = sqrt(k / r)) {
+		k /= tmp;
+		r *= tmp;
+	}
+	return (gamma_t){log((double)td), k, r};
 }
 
 static zip_t
@@ -608,7 +734,7 @@ fit_zip(void)
 	for (size_t i = 0U; i < 10U; i++) {
 		lambda = mu * (1 - exp(-lambda)) / (1 - z);
 	}
-	return (zip_t){logf((float)d), (float)lambda, (float)(1 - mu / lambda)};
+	return (zip_t){log((double)d), (double)lambda, (double)(1 - mu / lambda)};
 }
 
 static pareto_t
@@ -627,17 +753,17 @@ fit_lomax(void)
 		sh += dlt[i] * log((double)tlo[i]);
 	}
 
-	pareto_t r = {logf((float)d), (float)((double)d / sh), 0};
+	pareto_t r = {log((double)d), (double)((double)d / sh), 0};
 	/* correction for zero inflation, reproduce */
 	with (size_t tmp = 0U) {
 		for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
 			if (!dlt[i]) {
 				continue;
 			}
-			tmp += dpareto(r, i);
+			tmp += exp(r.logn + dpareto(r, (double)thi[i]));
 		}
 		/* get at least the same count in the count */
-		r.logn += logf((float)d) - logf((float)tmp);
+		r.logn += log((double)d) - log((double)tmp);
 	}
 	return r;
 }
@@ -695,11 +821,12 @@ prnt_cndl_molt(void)
 {
 	static size_t ncndl;
 	size_t len = 0U;
-	const gamma_t mg = fit_erlang();
-	const pareto_t mp = fit_lomax();
+	const gamma_t me = fit_erlang();
+	const gamma_t mg = fit_gamma();
+	const pareto_t ml = fit_lomax();
 
 	if (!ncndl++) {
-		static const char hdr[] = "cndl\tlo\thi\tcnt\ttheo_erlang\ttheo_lomax\n";
+		static const char hdr[] = "cndl\tlo\thi\tcnt\ttheo_erlang\ttheo_gamma\ttheo_lomax\n";
 		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
 	}
 
@@ -719,9 +846,11 @@ prnt_cndl_molt(void)
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, dgamma(mg, i));
+		len += ztostr(buf + len, sizeof(buf) - len, lrint(exp(me.logn + dgamma(me, (double)thi[i] / MSECS))));
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, dpareto(mp, i));
+		len += ztostr(buf + len, sizeof(buf) - len, lrint(exp(mg.logn + dgamma(mg, (double)thi[i] / MSECS))));
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, lrint(exp(ml.logn + dpareto(ml, (double)thi[i]))));
 		buf[len++] = '\n';
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
@@ -770,7 +899,7 @@ prnt_cndl_mtrx_poiss(void)
 			continue;
 		}
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, dzip(m, i));
+		len += ztostr(buf + len, sizeof(buf) - len, lrint(exp(m.logn + dzip(m, (double)i))));
 	}
 	buf[len++] = '\n';
 
@@ -804,7 +933,7 @@ prnt_cndl_molt_poiss(void)
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, dzip(m, i));
+		len += ztostr(buf + len, sizeof(buf) - len, lrint(exp(m.logn + dzip(m, (double)i))));
 		buf[len++] = '\n';
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
