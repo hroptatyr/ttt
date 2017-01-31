@@ -624,7 +624,20 @@ fit_lomax(void)
 		}
 		sh += dlt[i] * log((double)tlo[i]);
 	}
-	return (pareto_t){logf((float)d), (float)((double)d / sh), 0};
+
+	pareto_t r = {logf((float)d), (float)((double)d / sh), 0};
+	/* correction for zero inflation, reproduce */
+	with (size_t tmp = 0U) {
+		for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+			if (!dlt[i]) {
+				continue;
+			}
+			tmp += dpareto(r, i);
+		}
+		/* get at least the same count in the count */
+		r.logn += logf((float)d) - logf((float)tmp);
+	}
+	return r;
 }
 
 
