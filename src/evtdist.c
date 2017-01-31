@@ -668,7 +668,7 @@ static gamma_t
 fit_erlang(void)
 {
 	size_t td = 0U;
-	double ls = 0, ld = 0;
+	double su = 0;
 
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
 		td += dlt[i];
@@ -677,12 +677,11 @@ fit_erlang(void)
 		if (UNLIKELY(!dlt[i])) {
 			continue;
 		}
-		ld += log((double)dlt[i]);
-		ls += log((double)dlt[i]) * (double)((tlo[i] + thi[i]) / 2);
+		su += (double)dlt[i] * (double)thi[i];
 	}
 	return (gamma_t){log((double)td),
 			(double)(np + 1U),
-			(double)(ld / ls * MSECS)};
+			(double)(td * (np + 1U) * MSECS) / su};
 }
 
 static gamma_t
@@ -745,12 +744,13 @@ fit_lomax(void)
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
 		d += dlt[i];
 	}
+
 	double sh = 0;
 	for (size_t i = 1U, n = 1U << highbits; i < n; i++) {
 		if (UNLIKELY(!dlt[i])) {
 			continue;
 		}
-		sh += dlt[i] * log((double)tlo[i]);
+		sh += dlt[i] * log((double)thi[i]);
 	}
 
 	pareto_t r = {log((double)d), (double)((double)d / sh), 0};
