@@ -25,19 +25,19 @@ typedef long unsigned int tv_t;
 #define NOT_A_TIME	((tv_t)-1ULL)
 
 typedef struct {
-	size_t n;
+	float logn;
 	float lambda;
 	float pi;
 } zip_t;
 
 typedef struct {
-	size_t n;
+	float logn;
 	float shape;
 	float rate;
 } zie_t;
 
 typedef struct {
-	size_t n;
+	float logn;
 	float shape;
 	/* log(1/scale) == -log(scale) */
 	float rate;
@@ -511,14 +511,13 @@ dzip(const zip_t m, size_t k)
 	float v;
 
 	if (UNLIKELY(!k)) {
-		v = m.pi + (1 - m.pi) * expf(-m.lambda);
+		v = logf(m.pi + (1 - m.pi) * expf(-m.lambda));
 	} else {
 		const float dk = (float)k;
 		v = logf(1 - m.pi) - m.lambda +
 			dk * logf(m.lambda) - lgammaf(dk + 1);
-		v = expf(v);
 	}
-	return lrintf(m.n * v);
+	return expf(m.logn + v);
 }
 
 static inline size_t
@@ -531,22 +530,24 @@ dpois(const zip_t m, float k)
 	} else if (m.lambda < __FLT_EPSILON__) {
 		v = -m.lambda + k * logf(m.lambda) - lgammaf(k + 1);
 	}
-	return lrintf(m.n * expf(v));
+	return expf(m.logn + v);
 }
 
 static inline size_t
 dzie(const zie_t m, size_t k)
 {
 	const float v = (float)((tlo[k] + thi[k]) / 2U) / MSECS;
+	size_t p;
 
 	if (UNLIKELY(v < __FLT_EPSILON__)) {
 		return m.shape < 1 ? -1ULL : m.shape > 1 ? 0ULL
-			: lrintf(m.n * m.rate);
+			: expf(m.logn) * m.rate;
 	}
+	p = dpois((zip_t){m.logn, v * m.rate}, m.shape - (m.shape >= 1));
 	if (m.shape < 1) {
-		return dpois((zip_t){m.n, v * m.rate}, m.shape) * m.shape / v;
+		return p * m.shape / v;
 	}
-	return dpois((zip_t){m.n, v * m.rate}, m.shape - 1) * m.rate;
+	return p * m.rate;
 }
 
 static inline size_t
@@ -556,7 +557,7 @@ dpareto(const pareto_t m, size_t k)
 	float lv, r;
 
 	if (UNLIKELY(v < __FLT_EPSILON__)) {
-		return lrintf(m.n * m.shape * expf(m.rate));
+		return m.shape * expf(m.rate + m.logn);
 	}
 
 	lv = logf(v);
@@ -564,7 +565,7 @@ dpareto(const pareto_t m, size_t k)
 		r = logf(m.shape) - m.shape * log1pexpf(tmp)
 			- log1pexpf(-tmp) - lv;
 	}
-	return lrintf(m.n * expf(r));
+	return expf(m.logn + r);
 }
 
 static zie_t
@@ -583,7 +584,7 @@ fit_zie(void)
 		ld += log((double)dlt[i]);
 		ls += log((double)dlt[i]) * (double)((tlo[i] + thi[i]) / 2);
 	}
-	return (zie_t){td, (float)(np + 1U), (float)(ld / ls * MSECS)};
+	return (zie_t){logf((float)td), (float)(np + 1U), (float)(ld / ls * MSECS)};
 }
 
 static zip_t
@@ -605,38 +606,25 @@ fit_zip(void)
 	for (size_t i = 0U; i < 10U; i++) {
 		lambda = mu * (1 - exp(-lambda)) / (1 - z);
 	}
-	return (zip_t){d, (float)lambda, (float)(1 - mu / lambda)};
+	return (zip_t){logf((float)d), (float)lambda, (float)(1 - mu / lambda)};
 }
 
 static pareto_t
-fit_pareto(void)
+fit_lomax(void)
 {
-	size_t d = 0U, subd = 0U;
-	size_t m = 1U;
+	size_t d = 0U;
 
-	for (size_t i = 1U, n = 1U << highbits; i < n; i++) {
-		if (dlt[i] >= dlt[i - 1U]) {
-			m = i - 1U;
-			break;
-		}
-	}
-
-	for (size_t i = 0U; i < m; i++) {
-		subd += dlt[i];
-	}
-	for (size_t i = m, n = 1U << highbits; i < n; i++) {
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
 		d += dlt[i];
 	}
-
-	double lm = log((double)thi[m]);
 	double sh = 0;
-	for (size_t i = m, n = 1U << highbits; i < n; i++) {
+	for (size_t i = 1U, n = 1U << highbits; i < n; i++) {
 		if (UNLIKELY(!dlt[i])) {
 			continue;
 		}
-		sh += dlt[i] * (log((double)thi[i]) - lm);
+		sh += dlt[i] * log((double)tlo[i]);
 	}
-	return (pareto_t){subd + d, (float)((double)d / sh), -(float)lm};
+	return (pareto_t){logf((float)d), (float)((double)d / sh), 0};
 }
 
 
@@ -693,10 +681,10 @@ prnt_cndl_molt(void)
 	static size_t ncndl;
 	size_t len = 0U;
 	const zie_t mg = fit_zie();
-	const pareto_t mp = fit_pareto();
+	const pareto_t mp = fit_lomax();
 
 	if (!ncndl++) {
-		static const char hdr[] = "cndl\tlo\thi\tcnt\ttheo_gamma\ttheo_pareto\n";
+		static const char hdr[] = "cndl\tlo\thi\tcnt\ttheo_erlang\ttheo_lomax\n";
 		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
 	}
 
