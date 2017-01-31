@@ -248,6 +248,9 @@ cttostr(char *restrict buf, size_t bsz, tv_t t)
 static ssize_t
 zutostr(char *restrict buf, size_t bsz, size_t n)
 {
+	if (UNLIKELY(n == -1ULL)) {
+		return memncpy(buf, "inf", 3U);
+	}
 	return snprintf(buf, bsz, "%zu", n);
 }
 
@@ -679,9 +682,24 @@ fit_erlang(void)
 		}
 		su += (double)dlt[i] * (double)thi[i];
 	}
-	return (gamma_t){log((double)td),
-			(double)(np + 1U),
-			(double)(td * (np + 1U) * MSECS) / su};
+
+	const double ltd = log((double)td);
+	gamma_t m = {
+		ltd, (double)(np + 1U), (double)(td * (np + 1U) * MSECS) / su,
+	};
+	/* reconstruct
+	 * so that fitted model and empirical model have same support */
+	with (size_t tmp = 0U) {
+		for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+			if (!dlt[i]) {
+				continue;
+			}
+			tmp += exp(m.logn + dgamma(m, (double)thi[i] / MSECS));
+		}
+		/* get at least the same count in the count */
+		m.logn += ltd - log((double)tmp);
+	}
+	return m;
 }
 
 static gamma_t
@@ -694,7 +712,7 @@ fit_gamma(void)
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
 		td += dlt[i];
 	}
-	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+	for (size_t i = 1U, n = 1U << highbits; i < n; i++) {
 		if (UNLIKELY(!dlt[i])) {
 			continue;
 		}
@@ -702,7 +720,8 @@ fit_gamma(void)
 		su += (double)dlt[i] * (double)thi[i];
 	}
 
-	double s = log(su / (double)td) - lms - ls / (double)td;
+	const double ltd = log((double)td);
+	double s = log(su) - ltd - lms - ls / (double)td;
 	double k = (3 - s + sqrt((s - 3)*(s - 3) + 24*s)) / (12 * s);
 	double r = (double)td * k / su;
 
@@ -711,7 +730,21 @@ fit_gamma(void)
 		k /= tmp;
 		r *= tmp;
 	}
-	return (gamma_t){log((double)td), k, r};
+
+	gamma_t m = {ltd, k, r};
+	/* reconstruct
+	 * so that fitted model and empirical model have same support */
+	with (size_t tmp = 0U) {
+		for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+			if (!dlt[i]) {
+				continue;
+			}
+			tmp += exp(m.logn + dgamma(m, (double)thi[i] / MSECS));
+		}
+		/* get at least the same count in the count */
+		m.logn += ltd - log((double)tmp);
+	}
+	return m;
 }
 
 static zip_t
@@ -766,6 +799,13 @@ fit_lomax(void)
 		r.logn += log((double)d) - log((double)tmp);
 	}
 	return r;
+}
+
+static size_t
+mtozu(double logn, double x)
+{
+	x = exp(logn + x);
+	return isfinite(x) ? lrint(x) : -1ULL;
 }
 
 
@@ -846,11 +886,11 @@ prnt_cndl_molt(void)
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, lrint(exp(me.logn + dgamma(me, (double)thi[i] / MSECS))));
+		len += ztostr(buf + len, sizeof(buf) - len, mtozu(me.logn, dgamma(me, (double)thi[i] / MSECS)));
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, lrint(exp(mg.logn + dgamma(mg, (double)thi[i] / MSECS))));
+		len += ztostr(buf + len, sizeof(buf) - len, mtozu(mg.logn, dgamma(mg, (double)thi[i] / MSECS)));
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, lrint(exp(ml.logn + dpareto(ml, (double)thi[i]))));
+		len += ztostr(buf + len, sizeof(buf) - len, mtozu(ml.logn, dpareto(ml, (double)thi[i])));
 		buf[len++] = '\n';
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
