@@ -34,7 +34,7 @@ typedef struct {
 	float logn;
 	float shape;
 	float rate;
-} zie_t;
+} gamma_t;
 
 typedef struct {
 	float logn;
@@ -534,7 +534,7 @@ dpois(const zip_t m, float k)
 }
 
 static inline size_t
-dzie(const zie_t m, size_t k)
+dgamma(const gamma_t m, size_t k)
 {
 	const float v = (float)((tlo[k] + thi[k]) / 2U) / MSECS;
 	size_t p;
@@ -568,8 +568,8 @@ dpareto(const pareto_t m, size_t k)
 	return expf(m.logn + r);
 }
 
-static zie_t
-fit_zie(void)
+static gamma_t
+fit_erlang(void)
 {
 	size_t td = 0U;
 	double ls = 0, ld = 0;
@@ -584,7 +584,9 @@ fit_zie(void)
 		ld += log((double)dlt[i]);
 		ls += log((double)dlt[i]) * (double)((tlo[i] + thi[i]) / 2);
 	}
-	return (zie_t){logf((float)td), (float)(np + 1U), (float)(ld / ls * MSECS)};
+	return (gamma_t){logf((float)td),
+			(float)(np + 1U),
+			(float)(ld / ls * MSECS)};
 }
 
 static zip_t
@@ -693,7 +695,7 @@ prnt_cndl_molt(void)
 {
 	static size_t ncndl;
 	size_t len = 0U;
-	const zie_t mg = fit_zie();
+	const gamma_t mg = fit_erlang();
 	const pareto_t mp = fit_lomax();
 
 	if (!ncndl++) {
@@ -717,7 +719,7 @@ prnt_cndl_molt(void)
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, dzie(mg, i));
+		len += ztostr(buf + len, sizeof(buf) - len, dgamma(mg, i));
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, dpareto(mp, i));
 		buf[len++] = '\n';
