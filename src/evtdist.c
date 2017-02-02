@@ -644,7 +644,7 @@ dgamma(const gamma_t m, double x)
 	double p;
 
 	if (UNLIKELY(x < __DBL_EPSILON__)) {
-		return m.shape < 1 ? INFINITY : m.shape > 1 ? 0 : log(m.rate);
+		return m.shape < 1 ? INFINITY : m.shape > 1 ? -INFINITY : log(m.rate);
 	}
 	p = dpois((zip_t){0, x * m.rate}, m.shape - (m.shape >= 1));
 	if (m.shape < 1) {
