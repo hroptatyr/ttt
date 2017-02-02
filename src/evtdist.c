@@ -819,12 +819,15 @@ prnt_cndl_mtrx(void)
 {
 	static size_t ncndl;
 	size_t len = 0U;
+	const gamma_t me = fit_erlang();
+	const gamma_t mg = fit_gamma();
+	const pareto_t ml = fit_lomax();
 
 	if (!ncndl++) {
 		static const char hdr[] = "cndl\tmetric";
 
 		len = memncpy(buf, hdr, strlenof(hdr));
-		for (size_t i = 0U; i < (1U << highbits); i++) {
+		for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
 			buf[len++] = '\t';
 			buf[len++] = 'v';
 			len += ztostr(buf + len, sizeof(buf) - len, i);
@@ -838,13 +841,6 @@ prnt_cndl_mtrx(void)
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
 	/* type t */
 	buf[len++] = '\t';
-	buf[len++] = 'n';
-	len += zztostr(buf + len, sizeof(buf) - len, dlt, 1U << highbits);
-	buf[len++] = '\n';
-
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
-	/* type t */
-	buf[len++] = '\t';
 	buf[len++] = 'L';
 	len += tztostr(buf + len, sizeof(buf) - len, tlo, 1U << highbits);
 	buf[len++] = '\n';
@@ -854,6 +850,51 @@ prnt_cndl_mtrx(void)
 	buf[len++] = '\t';
 	buf[len++] = 'H';
 	len += tztostr(buf + len, sizeof(buf) - len, thi, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	/* type t */
+	len += memncpy(buf + len, "\tcnt", strlenof("\tcnt"));
+	len += zztostr(buf + len, sizeof(buf) - len, dlt, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	/* type t */
+	len += memncpy(buf + len, "\ttheo_erlang", strlenof("\ttheo_erlang"));
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!dlt[i]) {
+			continue;
+		}
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len,
+			      mtozu(me.logn, dgamma(me, (double)thi[i] / MSECS)));
+	}
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	/* type t */
+	len += memncpy(buf + len, "\ttheo_gamma", strlenof("\ttheo_gamma"));
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!dlt[i]) {
+			continue;
+		}
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len,
+			      mtozu(mg.logn, dgamma(mg, (double)thi[i] / MSECS)));
+	}
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	/* type t */
+	len += memncpy(buf + len, "\ttheo_lomax", strlenof("\ttheo_lomax"));
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!dlt[i]) {
+			continue;
+		}
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len,
+			      mtozu(ml.logn, dpareto(ml, (double)thi[i])));
+	}
 	buf[len++] = '\n';
 
 	fwrite(buf, sizeof(*buf), len, stdout);
@@ -890,11 +931,14 @@ prnt_cndl_molt(void)
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, mtozu(me.logn, dgamma(me, (double)thi[i] / MSECS)));
+		len += ztostr(buf + len, sizeof(buf) - len,
+			      mtozu(me.logn, dgamma(me, (double)thi[i] / MSECS)));
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, mtozu(mg.logn, dgamma(mg, (double)thi[i] / MSECS)));
+		len += ztostr(buf + len, sizeof(buf) - len,
+			      mtozu(mg.logn, dgamma(mg, (double)thi[i] / MSECS)));
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, mtozu(ml.logn, dpareto(ml, (double)thi[i])));
+		len += ztostr(buf + len, sizeof(buf) - len,
+			      mtozu(ml.logn, dpareto(ml, (double)thi[i])));
 		buf[len++] = '\n';
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
@@ -943,7 +987,8 @@ prnt_cndl_mtrx_poiss(void)
 			continue;
 		}
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, lrint(exp(m.logn + dzip(m, (double)i))));
+		len += ztostr(buf + len, sizeof(buf) - len,
+			      mtozu(m.logn, dzip(m, (double)i)));
 	}
 	buf[len++] = '\n';
 
@@ -977,7 +1022,8 @@ prnt_cndl_molt_poiss(void)
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
 		buf[len++] = '\t';
-		len += ztostr(buf + len, sizeof(buf) - len, lrint(exp(m.logn + dzip(m, (double)i))));
+		len += ztostr(buf + len, sizeof(buf) - len,
+			      mtozu(m.logn, dzip(m, (double)i)));
 		buf[len++] = '\n';
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
