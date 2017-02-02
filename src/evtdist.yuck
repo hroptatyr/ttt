@@ -17,6 +17,9 @@ Usage: evtdist erlang < EVENTS
 The difference between the current timestamp and the last will be
 binned and counted.
 
+  -I, --base=S          Consider events only if they survived at least
+                        S seconds.  Can be suffixed with m for minutes,
+                        h for hours, d for days.  Default: 0
   -T, --time            Add up elapsed times between events,
                         default: count events.
   -k, --occurrences=K   Measure times between K occurrences, default 1.

@@ -58,7 +58,7 @@ static tvu_t intv;
 
 static unsigned int highbits = 1U;
 static unsigned int elapsp;
-static tv_t pbase = MSECS;
+static tv_t pbase;
 
 #if defined __INTEL_COMPILER
 # pragma warning (disable:981)
@@ -525,6 +525,9 @@ push_erlng(char *ln, size_t UNUSED(lz))
 		nxct = next_cndl(t);
 	} else if (LIKELY(ip++ < np)) {
 		return 0;
+	} else if (t - last < pbase) {
+		/* hasn't survived long enough */
+		;
 	} else {
 		/* measure time */
 		const tv_t dt = t - last;
@@ -994,6 +997,11 @@ Error: occurrences must be positive.");
 		}
 		/* we need it off-by-one */
 		np--;
+	}
+	if (!(pbase = strtotvu(argi->base_arg, NULL).t)) {
+		errno = 0, serror("\
+Error: cannot read base argument.");
+		return -1;
 	}
 	/* set candle printer */
 	prnt_cndl = !argi->table_flag ? prnt_cndl_molt : prnt_cndl_mtrx;
