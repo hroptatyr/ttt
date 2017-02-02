@@ -999,7 +999,9 @@ Error: occurrences must be positive.");
 		/* we need it off-by-one */
 		np--;
 	}
-	if (!(pbase = strtotvu(argi->base_arg, NULL).t)) {
+	if (!argi->base_arg) {
+		;
+	} else if (!(pbase = strtotvu(argi->base_arg, NULL).t)) {
 		errno = 0, serror("\
 Error: cannot read base argument.");
 		return -1;
