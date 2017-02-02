@@ -716,7 +716,7 @@ fit_gamma(void)
 		td += dlt[i];
 	}
 	for (size_t i = 1U, n = 1U << highbits; i < n; i++) {
-		if (UNLIKELY(!dlt[i])) {
+		if (!dlt[i]) {
 			continue;
 		}
 		ls += (double)dlt[i] * (log((double)thi[i]) - lms);
@@ -781,6 +781,7 @@ fit_lomax(void)
 		d += dlt[i];
 	}
 
+	const double ld = log((double)d);
 	double sh = 0;
 	for (size_t i = 1U, n = 1U << highbits; i < n; i++) {
 		if (UNLIKELY(!dlt[i])) {
@@ -789,7 +790,7 @@ fit_lomax(void)
 		sh += dlt[i] * log((double)thi[i]);
 	}
 
-	pareto_t r = {log((double)d), (double)((double)d / sh), 0};
+	pareto_t r = {ld, (double)((double)d / sh), 0};
 	/* correction for zero inflation, reproduce */
 	with (size_t tmp = 0U) {
 		for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
@@ -799,7 +800,7 @@ fit_lomax(void)
 			tmp += exp(r.logn + dpareto(r, (double)thi[i]));
 		}
 		/* get at least the same count in the count */
-		r.logn += log((double)d) - log((double)tmp);
+		r.logn += ld - log((double)tmp);
 	}
 	return r;
 }
