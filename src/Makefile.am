@@ -211,6 +211,14 @@ spread_LDFLAGS += $(dfp754_LIBS)
 spread_LDADD = libmydfp.a
 BUILT_SOURCES += spread.yucc
 
+bin_PROGRAMS += gentrades
+gentrades_SOURCES = gentrades.c gentrades.yuck
+gentrades_SOURCES += version.c version.h
+gentrades_CPPFLAGS = $(AM_CPPFLAGS)
+gentrades_CPPFLAGS += -DHAVE_VERSION_H
+gentrades_LDFLAGS = $(AM_LDFLAGS)
+BUILT_SOURCES += gentrades.yucc
+
 ## doesn't really fit in, but what the heck
 bin_PROGRAMS += cdiff
 cdiff_SOURCES = cdiff.c cdiff.yuck

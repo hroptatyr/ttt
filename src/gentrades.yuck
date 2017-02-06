@@ -1,0 +1,16 @@
+Usage: gentrades
+
+Generate random trade signals.
+
+  -r, --rate=N/unit     Generate trades with intensity N per UNIT,
+                        unit can be ms for milliseconds, s for seconds,
+                        m for minutes, h for hours, d for days.
+  --rf=N/T              Empirical holding time for N flats.
+  --rl=N/T              Empirical holding time for N longs.
+  --rs=N/T              Empirical holding time for N shorts.
+  --fl=N                Empirical transitions from flat to long.
+  --fs=N                Empirical transitions from flat to short.
+  --lf=N                Empirical transitions from long to flat
+  --ls=N                Empirical transitions from long to short.
+  --sf=N                Empirical transitions from short to flat.
+  --sl=N                Empirical transitions from short to long.
