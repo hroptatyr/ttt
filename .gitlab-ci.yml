@@ -6,7 +6,7 @@ build:
     - apt update && apt -y install make autoconf automake
   script:
     - autoreconf -vfi
-    - ./configure
+    - ./configure LIBS=-lm
     - make
     - make check
     - make distcheck
