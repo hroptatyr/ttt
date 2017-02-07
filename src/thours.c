@@ -147,6 +147,9 @@ strtotvu(const char *str, char **endptr)
 	case 'H':
 		r.t *= 60U * 60U;
 		goto secs;
+	case 'w':
+	case 'W':
+		r.t *= 7U;
 	case 'd':
 	case 'D':
 		r.u = UNIT_DAYS;
@@ -176,10 +179,21 @@ offline(void)
 	size_t nm;
 
 	/* estimate */
-	if (intv.u != UNIT_MSECS || trnd.u != UNIT_MSECS) {
+	if (trnd.u != UNIT_MSECS) {
+	nimpl:
 		errno = 0, serror("not implemented");
 		return -1;
+	} else if (intv.u == UNIT_MSECS) {
+		/* yea alright then */
+		;
+	} else if (intv.u == UNIT_DAYS) {
+		/* convert to msecs */
+		intv.u = UNIT_MSECS;
+		intv.t *= 7U * 24U * 60U * 60U * MSECS;
+	} else {
+		goto nimpl;
 	}
+
 	nm = intv.t / trnd.t;
 	if (UNLIKELY((m = calloc(nm, sizeof(*m))) == NULL)) {
 		return -1;
