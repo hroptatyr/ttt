@@ -286,7 +286,8 @@ push_data(char *ln, size_t UNUSED(lz))
 			/* translate in terms of base */
 			subs = lrint((v - base) * 1000) << (highbits - 5U);
 			/* divide by width */
-			subs /= width * 1000;
+			subs /= width;
+			subs /= 1000U;
 
 			slot <<= highbits;
 			slot >>= 5U;
