@@ -1,0 +1,8 @@
+Usage: loghist < DATA
+
+Bin data and print counts.
+
+  -t, --table           Print counts and ranges as table, 
+                        default: print as molten data.
+  -k, --occurrences=K   Sum up K consecutive data points and bin the sums.
+  -v, --verbose         Use more bins, can be used up to 5 times.

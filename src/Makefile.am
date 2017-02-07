@@ -68,6 +68,14 @@ evtdist_CPPFLAGS += -DHAVE_VERSION_H
 evtdist_LDFLAGS = $(AM_LDFLAGS)
 BUILT_SOURCES += evtdist.yucc
 
+bin_PROGRAMS += loghist
+loghist_SOURCES = loghist.c loghist.yuck
+loghist_SOURCES += version.c version.h
+loghist_CPPFLAGS = $(AM_CPPFLAGS)
+loghist_CPPFLAGS += -DHAVE_VERSION_H
+loghist_LDFLAGS = $(AM_LDFLAGS)
+BUILT_SOURCES += loghist.yucc
+
 bin_PROGRAMS += sex
 sex_SOURCES = sex.c sex.yuck
 sex_SOURCES += hash.c hash.h
