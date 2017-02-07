@@ -981,7 +981,7 @@ prnt_cndl_mtrx_poiss(void)
 	buf[len++] = '\n';
 
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
-	len += memncpy(buf + len, "\ttheo", strlenof("\ttheo"));
+	len += memncpy(buf + len, "\ttheo_zip", strlenof("\ttheo_zip"));
 	for (size_t i = 0U; i < cntz; i++) {
 		if (!dlt[i]) {
 			continue;
