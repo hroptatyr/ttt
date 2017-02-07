@@ -183,14 +183,15 @@ offline(void)
 	nimpl:
 		errno = 0, serror("not implemented");
 		return -1;
-	} else if (intv.u == UNIT_MSECS) {
-		/* yea alright then */
-		;
-	} else if (intv.u == UNIT_DAYS) {
-		/* convert to msecs */
+	}
+
+	switch (intv.u) {
+	case UNIT_DAYS:
+		intv.t *= 24U * 60U * 60U * MSECS;
 		intv.u = UNIT_MSECS;
-		intv.t *= 7U * 24U * 60U * 60U * MSECS;
-	} else {
+	case UNIT_MSECS:
+		break;
+	default:
 		goto nimpl;
 	}
 
