@@ -420,6 +420,48 @@ push_init(char *ln, size_t UNUSED(lz))
 	return 0;
 }
 
+static inline __attribute__((const, pure)) size_t
+pxtoslot(const px_t x)
+{
+	uint32_t xm = decompd32(x).mant;
+	xm <<= __builtin_clz(xm);
+	xm >>= 32U - highbits;
+	xm &= (1U << highbits) - 1U;
+	return xm;
+}
+
+static inline __attribute__((const, pure)) size_t
+qxtoslot(const qx_t x)
+{
+	uint64_t xm = decompd64(x).mant;
+	/* we're only interested in highbits, so shift to fit */
+	xm = xm >> 32U ?: xm;
+	xm <<= __builtin_clz(xm);
+	xm >>= 32U - highbits;
+	xm &= (1U << highbits) - 1U;
+	return xm;
+}
+
+static inline __attribute__((const, pure)) size_t
+tvtoslot(const tv_t t)
+{
+	unsigned int slot = ilog2(t / MSECS + 1U);
+	/* determine sub slot, if applicable */
+	unsigned int width = (1U << slot);
+	unsigned int base = width - 1U;
+	unsigned int subs;
+
+	/* translate in terms of base */
+	subs = (t - base * MSECS) << (highbits - 5U);
+	/* divide by width */
+	subs /= width * MSECS;
+
+	slot <<= highbits;
+	slot >>= 5U;
+	slot ^= subs;
+	return slot;
+}
+
 static int
 push_beef(char *ln, size_t lz)
 {
@@ -466,25 +508,8 @@ push_beef(char *ln, size_t lz)
 	if (*on == '\t' &&
 	    ((Q.b = strtoqx(++on, &on)) || *on == '\t') &&
 	    ((Q.a = strtoqx(++on, &on)) || *on == '\n')) {
-		unsigned int bm, am;
-
-		with (uint64_t bm64, am64) {
-			bm64 = decompd64(Q.b).mant;
-			am64 = decompd64(Q.a).mant;
-
-			/* we're only interested in highbits, so shift to fit */
-			bm = bm64 >> 32U ?: bm64;
-			am = am64 >> 32U ?: am64;
-		}
-
-		bm <<= __builtin_clz(bm);
-		am <<= __builtin_clz(am);
-
-		bm >>= 32U - highbits;
-		am >>= 32U - highbits;
-
-		bm &= (1U << highbits) - 1U;
-		am &= (1U << highbits) - 1U;
+		size_t bm = qxtoslot(Q.b);
+		size_t am = qxtoslot(Q.a);
 
 		bsz[bm] += acc;
 		asz[am] += acc;
@@ -495,18 +520,9 @@ push_beef(char *ln, size_t lz)
 		Ahi[am] = max_qx(Ahi[am], Q.a);
 	}
 
-	with (unsigned int bm, am) {
-		bm = decompd32(q.b).mant;
-		am = decompd32(q.a).mant;
-
-		bm <<= __builtin_clz(bm);
-		am <<= __builtin_clz(am);
-
-		bm >>= 32U - highbits;
-		am >>= 32U - highbits;
-
-		bm &= (1U << highbits) - 1U;
-		am &= (1U << highbits) - 1U;
+	{
+		size_t bm = pxtoslot(q.b);
+		size_t am = pxtoslot(q.a);
 
 		bid[bm] += acc;
 		ask[am] += acc;
@@ -518,22 +534,8 @@ push_beef(char *ln, size_t lz)
 	}
 
 	with (tv_t dt = t - last) {
-		unsigned int slot = ilog2(dt / MSECS + 1U);
+		size_t slot = tvtoslot(dt);
 
-		/* determine sub slot, if applicable */
-		with (unsigned int width = (1U << slot), base = width - 1U) {
-			unsigned int subs;
-
-			/* translate in terms of base */
-			subs = (dt - base * MSECS) << (highbits - 5U);
-			/* divide by width */
-			subs /= width * MSECS;
-
-			slot <<= highbits;
-			slot >>= 5U;
-			slot ^= subs;
-		}
-		/* poisson fit */
 		dlt[slot] += acc;
 
 		tlo[slot] = min_tv(tlo[slot], dt);
