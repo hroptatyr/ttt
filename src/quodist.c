@@ -29,6 +29,7 @@
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
 typedef long unsigned int tv_t;
+typedef size_t cnt_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
@@ -177,15 +178,15 @@ cttostr(char *restrict buf, size_t bsz, tv_t t)
 }
 
 static ssize_t
-zutostr(char *restrict buf, size_t bsz, size_t n)
+zutostr(char *restrict buf, size_t bsz, cnt_t n)
 {
 	return snprintf(buf, bsz, "%zu", n);
 }
 
-static ssize_t(*ztostr)(char *restrict buf, size_t bsz, size_t n) = zutostr;
+static ssize_t(*ztostr)(char *restrict buf, size_t bsz, cnt_t n) = zutostr;
 
 static size_t
-zztostr(char *restrict buf, size_t bsz, const size_t *zv, size_t nz)
+zztostr(char *restrict buf, size_t bsz, const cnt_t *zv, size_t nz)
 {
 	size_t len = 0U;
 
@@ -287,15 +288,15 @@ static size_t conz;
 
 /* stats */
 static union {
-	size_t start[0U];
+	cnt_t start[0U];
 
 #define MAKE_SLOTS(n)				\
 	struct {				\
-		size_t dlt[1U << (n)];		\
-		size_t bid[1U << (n)];		\
-		size_t ask[1U << (n)];		\
-		size_t bsz[1U << (n)];		\
-		size_t asz[1U << (n)];		\
+		cnt_t dlt[1U << (n)];		\
+		cnt_t bid[1U << (n)];		\
+		cnt_t ask[1U << (n)];		\
+		cnt_t bsz[1U << (n)];		\
+		cnt_t asz[1U << (n)];		\
 						\
 		tv_t tlo[1U << (n)];		\
 		tv_t thi[1U << (n)];		\
@@ -319,11 +320,11 @@ static union {
 	MAKE_SLOTS(21);
 } cnt;
 
-static size_t *dlt;
-static size_t *bid;
-static size_t *ask;
-static size_t *bsz;
-static size_t *asz;
+static cnt_t *dlt;
+static cnt_t *bid;
+static cnt_t *ask;
+static cnt_t *bsz;
+static cnt_t *asz;
 static tv_t *tlo;
 static tv_t *thi;
 static px_t *blo;
