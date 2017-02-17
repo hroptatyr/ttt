@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <errno.h>
-#include <sys/socket.h>
+#include <limits.h>
 #include <fcntl.h>
 #include <sys/time.h>
 #include <time.h>
@@ -234,6 +234,12 @@ tztostr(char *restrict buf, size_t bsz, const tv_t *rv, size_t nv)
 }
 
 
+static inline __attribute__((pure, const)) int
+min_d(int i1, int i2)
+{
+	return i1 <= i2 ? i1 : i2;
+}
+
 static inline __attribute__((pure, const)) tv_t
 min_tv(tv_t t1, tv_t t2)
 {
@@ -276,6 +282,71 @@ ilog2(const uint32_t x)
 	return 31U - __builtin_clz(x);
 }
 
+static inline __attribute__((const, pure)) size_t
+pxtoslot(const px_t x)
+{
+	uint32_t xm = decompd32(x).mant;
+	xm <<= __builtin_clz(xm);
+	xm >>= 32U - highbits;
+	xm &= (1U << highbits) - 1U;
+	return xm;
+}
+
+static inline __attribute__((const, pure)) size_t
+qxtoslot(const qx_t x)
+{
+	uint64_t xm = decompd64(x).mant;
+	/* we're only interested in highbits, so shift to fit */
+	xm = xm >> 32U ?: xm;
+	xm <<= __builtin_clz(xm);
+	xm >>= 32U - highbits;
+	xm &= (1U << highbits) - 1U;
+	return xm;
+}
+
+static inline __attribute__((const, pure)) size_t
+tvtoslot(const tv_t t)
+{
+	unsigned int slot = ilog2(t / MSECS + 1U);
+	/* determine sub slot, if applicable */
+	unsigned int width = (1U << slot);
+	unsigned int base = width - 1U;
+	unsigned int subs;
+
+	/* translate in terms of base */
+	subs = (t - base * MSECS) << (highbits - 5U);
+	/* divide by width */
+	subs /= width * MSECS;
+
+	slot <<= highbits;
+	slot >>= 5U;
+	slot ^= subs;
+	return slot;
+}
+
+static inline size_t
+dpxtoslot(const px_t x)
+{
+/* specifically for price differences */
+	static unsigned int _pivs[] = {-1U, 10U, 100U, 1000U, 10000U, 100000U};
+	const unsigned int piv = _pivs[highbits >> 2U];
+	static int minx = INT_MAX;
+	bcd32_t dx = decompd32(x);
+	unsigned int slot;
+
+	minx = min_d(minx, dx.expo);
+	/* map negatives to 0 */
+	slot = (dx.mant & ~dx.sign);
+	with (size_t magn = (piv - 1U) * (dx.expo - minx)) {
+		for (; slot / piv; slot /= piv, magn += piv - 1U);
+		slot += magn;
+	}
+	/* clamp at 32U */
+	slot |= (slot < (1U << highbits)) - 1U;
+	slot &= (1U << highbits) - 1U;
+	return slot;
+}
+
 
 /* next candle time */
 static tv_t nxct;
@@ -297,6 +368,8 @@ static union {
 		cnt_t ask[1U << (n)];		\
 		cnt_t bsz[1U << (n)];		\
 		cnt_t asz[1U << (n)];		\
+		cnt_t spr[1U << (n)];		\
+		cnt_t imb[1U << (n)];		\
 						\
 		tv_t tlo[1U << (n)];		\
 		tv_t thi[1U << (n)];		\
@@ -305,11 +378,15 @@ static union {
 		px_t ahi[1U << (n)];		\
 		px_t blo[1U << (n)];		\
 		px_t alo[1U << (n)];		\
+		px_t shi[1U << (n)];		\
+		px_t slo[1U << (n)];		\
 						\
 		qx_t Bhi[1U << (n)];		\
 		qx_t Ahi[1U << (n)];		\
 		qx_t Blo[1U << (n)];		\
 		qx_t Alo[1U << (n)];		\
+		qx_t Ihi[1U << (n)];		\
+		qx_t Ilo[1U << (n)];		\
 	} _##n
 
 	MAKE_SLOTS(0);
@@ -325,6 +402,8 @@ static cnt_t *bid;
 static cnt_t *ask;
 static cnt_t *bsz;
 static cnt_t *asz;
+static cnt_t *spr;
+static cnt_t *imb;
 static tv_t *tlo;
 static tv_t *thi;
 static px_t *blo;
@@ -335,6 +414,10 @@ static qx_t *Blo;
 static qx_t *Bhi;
 static qx_t *Alo;
 static qx_t *Ahi;
+static px_t *slo;
+static px_t *shi;
+static qx_t *Ilo;
+static qx_t *Ihi;
 static size_t cntz;
 
 static void(*prnt_cndl)(void);
@@ -420,48 +503,6 @@ push_init(char *ln, size_t UNUSED(lz))
 	return 0;
 }
 
-static inline __attribute__((const, pure)) size_t
-pxtoslot(const px_t x)
-{
-	uint32_t xm = decompd32(x).mant;
-	xm <<= __builtin_clz(xm);
-	xm >>= 32U - highbits;
-	xm &= (1U << highbits) - 1U;
-	return xm;
-}
-
-static inline __attribute__((const, pure)) size_t
-qxtoslot(const qx_t x)
-{
-	uint64_t xm = decompd64(x).mant;
-	/* we're only interested in highbits, so shift to fit */
-	xm = xm >> 32U ?: xm;
-	xm <<= __builtin_clz(xm);
-	xm >>= 32U - highbits;
-	xm &= (1U << highbits) - 1U;
-	return xm;
-}
-
-static inline __attribute__((const, pure)) size_t
-tvtoslot(const tv_t t)
-{
-	unsigned int slot = ilog2(t / MSECS + 1U);
-	/* determine sub slot, if applicable */
-	unsigned int width = (1U << slot);
-	unsigned int base = width - 1U;
-	unsigned int subs;
-
-	/* translate in terms of base */
-	subs = (t - base * MSECS) << (highbits - 5U);
-	/* divide by width */
-	subs /= width * MSECS;
-
-	slot <<= highbits;
-	slot >>= 5U;
-	slot ^= subs;
-	return slot;
-}
-
 static int
 push_beef(char *ln, size_t lz)
 {
@@ -531,6 +572,15 @@ push_beef(char *ln, size_t lz)
 		bhi[bm] = max_px(bhi[bm], q.b);
 		alo[am] = min_px(alo[am] ?: __DEC32_MOST_POSITIVE__, q.a);
 		ahi[am] = max_px(ahi[am], q.a);
+	}
+
+	with (px_t s = q.a - q.b) {
+		size_t sm = dpxtoslot(s);
+
+		spr[sm] += acc;
+
+		slo[sm] = min_px(slo[sm] ?: __DEC32_MOST_POSITIVE__, s);
+		shi[sm] = max_px(shi[sm], s);
 	}
 
 	with (tv_t dt = t - last) {
@@ -672,6 +722,39 @@ prnt_cndl_mtrx(void)
 	buf[len++] = 'H';
 	len += pztostr(buf + len, sizeof(buf) - len, ahi, 1U << highbits);
 	buf[len++] = '\n';
+
+
+	/* spr */
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 's';
+	buf[len++] = '\t';
+	buf[len++] = 'n';
+	len += zztostr(buf + len, sizeof(buf) - len, spr, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 's';
+	buf[len++] = '\t';
+	buf[len++] = 'L';
+	len += pztostr(buf + len, sizeof(buf) - len, slo, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 's';
+	buf[len++] = '\t';
+	buf[len++] = 'H';
+	len += pztostr(buf + len, sizeof(buf) - len, shi, 1U << highbits);
+	buf[len++] = '\n';
+
 
 	/* check if there's quantities */
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
@@ -844,6 +927,28 @@ prnt_cndl_molt(void)
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
 
+	/* spr */
+	len = 0U;
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!spr[i]) {
+			continue;
+		}
+		/* otherwise */
+		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		buf[len++] = '\t';
+		len += (memcpy(buf + len, cont, conz), conz);
+		buf[len++] = '\t';
+		buf[len++] = 's';
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, slo[i]);
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, shi[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, spr[i]);
+		buf[len++] = '\n';
+	}
+	fwrite(buf, sizeof(*buf), len, stdout);
+
 	/* bid quantities */
 	len = 0U;
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
@@ -970,6 +1075,8 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 		ask = cnt._##n.ask;		\
 		bsz = cnt._##n.bsz;		\
 		asz = cnt._##n.asz;		\
+		spr = cnt._##n.spr;		\
+		imb = cnt._##n.imb;		\
 						\
 		tlo = cnt._##n.tlo;		\
 		thi = cnt._##n.thi;		\
@@ -978,11 +1085,15 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 		bhi = cnt._##n.bhi;		\
 		alo = cnt._##n.alo;		\
 		ahi = cnt._##n.ahi;		\
+		shi = cnt._##n.shi;		\
+		slo = cnt._##n.slo;		\
 						\
 		Blo = cnt._##n.Blo;		\
 		Bhi = cnt._##n.Bhi;		\
 		Alo = cnt._##n.Alo;		\
 		Ahi = cnt._##n.Ahi;		\
+		Ihi = cnt._##n.Ihi;		\
+		Ilo = cnt._##n.Ilo;		\
 						\
 		cntz = sizeof(cnt._##n)
 
