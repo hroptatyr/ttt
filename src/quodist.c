@@ -347,6 +347,29 @@ dpxtoslot(const px_t x)
 	return slot;
 }
 
+static inline size_t
+dprtoslot(const px_t x)
+{
+/* specifically for price differences */
+	static unsigned int _pivs[] = {-1U, 10U, 100U, 1000U, 10000U, 100000U};
+	const unsigned int piv = _pivs[highbits >> 2U];
+	static int minx = INT_MAX;
+	bcd32_t dx = decompd32(x);
+	unsigned int slot;
+
+	minx = min_d(minx, dx.expo);
+	/* map negatives to 0 */
+	slot = (dx.mant & ~dx.sign);
+	with (size_t magn = (piv - 1U) * (dx.expo - minx)) {
+		for (; slot / piv; slot /= piv, magn += piv - 1U);
+		slot += magn;
+	}
+	/* clamp at 32U */
+	slot |= (slot < (1U << highbits)) - 1U;
+	slot &= (1U << highbits) - 1U;
+	return slot;
+}
+
 
 /* next candle time */
 static tv_t nxct;
@@ -369,7 +392,7 @@ static union {
 		cnt_t bsz[1U << (n)];		\
 		cnt_t asz[1U << (n)];		\
 		cnt_t spr[1U << (n)];		\
-		cnt_t imb[1U << (n)];		\
+		cnt_t rsp[1U << (n)];		\
 						\
 		tv_t tlo[1U << (n)];		\
 		tv_t thi[1U << (n)];		\
@@ -380,13 +403,13 @@ static union {
 		px_t alo[1U << (n)];		\
 		px_t shi[1U << (n)];		\
 		px_t slo[1U << (n)];		\
+		px_t rhi[1U << (n)];		\
+		px_t rlo[1U << (n)];		\
 						\
 		qx_t Bhi[1U << (n)];		\
 		qx_t Ahi[1U << (n)];		\
 		qx_t Blo[1U << (n)];		\
 		qx_t Alo[1U << (n)];		\
-		qx_t Ihi[1U << (n)];		\
-		qx_t Ilo[1U << (n)];		\
 	} _##n
 
 	MAKE_SLOTS(0);
@@ -403,7 +426,7 @@ static cnt_t *ask;
 static cnt_t *bsz;
 static cnt_t *asz;
 static cnt_t *spr;
-static cnt_t *imb;
+static cnt_t *rsp;
 static tv_t *tlo;
 static tv_t *thi;
 static px_t *blo;
@@ -416,8 +439,8 @@ static qx_t *Alo;
 static qx_t *Ahi;
 static px_t *slo;
 static px_t *shi;
-static qx_t *Ilo;
-static qx_t *Ihi;
+static px_t *rlo;
+static px_t *rhi;
 static size_t cntz;
 
 static void(*prnt_cndl)(void);
@@ -574,13 +597,17 @@ push_beef(char *ln, size_t lz)
 		ahi[am] = max_px(ahi[am], q.a);
 	}
 
-	with (px_t s = q.a - q.b) {
+	with (px_t s = q.a - q.b, r = quantized32(s / q.b, q.b)) {
 		size_t sm = dpxtoslot(s);
+		size_t rm = dprtoslot(r);
 
 		spr[sm] += acc;
+		rsp[rm] += acc;
 
 		slo[sm] = min_px(slo[sm] ?: __DEC32_MOST_POSITIVE__, s);
 		shi[sm] = max_px(shi[sm], s);
+		rlo[rm] = min_px(rlo[rm] ?: __DEC32_MOST_POSITIVE__, r);
+		rhi[rm] = max_px(rhi[rm], r);
 	}
 
 	with (tv_t dt = t - last) {
@@ -753,6 +780,37 @@ prnt_cndl_mtrx(void)
 	buf[len++] = '\t';
 	buf[len++] = 'H';
 	len += pztostr(buf + len, sizeof(buf) - len, shi, 1U << highbits);
+	buf[len++] = '\n';
+
+	/* relative spreads */
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'r';
+	buf[len++] = '\t';
+	buf[len++] = 'n';
+	len += zztostr(buf + len, sizeof(buf) - len, rsp, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'r';
+	buf[len++] = '\t';
+	buf[len++] = 'L';
+	len += pztostr(buf + len, sizeof(buf) - len, rlo, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'r';
+	buf[len++] = '\t';
+	buf[len++] = 'H';
+	len += pztostr(buf + len, sizeof(buf) - len, rhi, 1U << highbits);
 	buf[len++] = '\n';
 
 
@@ -949,6 +1007,28 @@ prnt_cndl_molt(void)
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
 
+	/* relative spread */
+	len = 0U;
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!rsp[i]) {
+			continue;
+		}
+		/* otherwise */
+		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		buf[len++] = '\t';
+		len += (memcpy(buf + len, cont, conz), conz);
+		buf[len++] = '\t';
+		buf[len++] = 'r';
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, rlo[i]);
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, rhi[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, rsp[i]);
+		buf[len++] = '\n';
+	}
+	fwrite(buf, sizeof(*buf), len, stdout);
+
 	/* bid quantities */
 	len = 0U;
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
@@ -1076,7 +1156,7 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 		bsz = cnt._##n.bsz;		\
 		asz = cnt._##n.asz;		\
 		spr = cnt._##n.spr;		\
-		imb = cnt._##n.imb;		\
+		rsp = cnt._##n.rsp;		\
 						\
 		tlo = cnt._##n.tlo;		\
 		thi = cnt._##n.thi;		\
@@ -1087,13 +1167,13 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 		ahi = cnt._##n.ahi;		\
 		shi = cnt._##n.shi;		\
 		slo = cnt._##n.slo;		\
+		rhi = cnt._##n.rhi;		\
+		rlo = cnt._##n.rlo;		\
 						\
 		Blo = cnt._##n.Blo;		\
 		Bhi = cnt._##n.Bhi;		\
 		Alo = cnt._##n.Alo;		\
 		Ahi = cnt._##n.Ahi;		\
-		Ihi = cnt._##n.Ihi;		\
-		Ilo = cnt._##n.Ilo;		\
 						\
 		cntz = sizeof(cnt._##n)
 
