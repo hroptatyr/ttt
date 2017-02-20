@@ -39,6 +39,7 @@
 #endif	/* HAVE_CONFIG_H */
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #elif defined HAVE_DFP_STDLIB_H
@@ -73,6 +74,12 @@ deconst(const void *cp)
 		void *p;
 	} tmp = {cp};
 	return tmp.p;
+}
+
+static inline __attribute__((const, pure)) size_t
+min_z(size_t z1, size_t z2)
+{
+	return z1 <= z2 ? z1 : z2;
 }
 
 
@@ -208,7 +215,7 @@ pack_declet(unsigned int x)
 static unsigned int
 unpack_declet(unsigned int x)
 {
-/* go from dpd to bcd, here's the dpd box again: 
+/* go from dpd to bcd, here's the dpd box again:
  * abc def 0ghi
  * abc def 100i
  * abc ghf 101i
@@ -425,33 +432,33 @@ strtobcd64(const char *src, char **on)
 }
 
 static size_t
-bcd64tostr(char *restrict buf, size_t bsz, uint_least64_t mant, int e, int s)
+bcd64tostr(char *restrict buf, size_t bsz, bcd64_t b)
 {
 	char *restrict bp = buf;
 	const char *const ep = buf + bsz;
 
 	/* write the right-of-point side first */
-	for (; e < 0 && bp < ep; e++, mant >>= 4U) {
-		*bp++ = C(mant & 0b1111U);
+	for (; b.expo < 0 && bp < ep; b.expo++, b.mant >>= 4U) {
+		*bp++ = C(b.mant & 0b1111U);
 	}
 	/* write point now */
 	if (bp > buf && bp < ep) {
 		*bp++ = '.';
 	}
 	/* write trailing 0s for left-of-point side */
-	for (; e > 0 && bp < ep; e--) {
+	for (; b.expo > 0 && bp < ep; b.expo--) {
 		*bp++ = '0';
 	}
 	/* now write the rest of the mantissa */
-	if (LIKELY(mant)) {
-		for (; mant && bp < ep; mant >>= 4U) {
-			*bp++ = C(mant & 0b1111U);
+	if (LIKELY(b.mant)) {
+		for (; b.mant && bp < ep; b.mant >>= 4U) {
+			*bp++ = C(b.mant & 0b1111U);
 		}
 	} else if (bp < ep) {
 		/* put a leading 0 */
 		*bp++ = '0';
 	}
-	if (s && bp < ep) {
+	if (b.sign && bp < ep) {
 		*bp++ = '-';
 	}
 	if (bp < ep) {
@@ -662,15 +669,16 @@ bid64tostr(char *restrict buf, size_t bsz, _Decimal64 x)
 
 	/* reencode m as bcd */
 	with (uint_least64_t bcdm = 0U) {
-		for (size_t i = 0; i < 15U; i++, bcdm >>= 4U) {
+		for (size_t i = 0; i < 16U; i++) {
 			uint_least64_t digit;
 
+			bcdm >>= 4U;
 			digit = m % 10U, m /= 10U;
 			bcdm ^= digit << 60U;
 		}
 		m = bcdm;
 	}
-	return (int)bcd64tostr(buf, bsz, m, e, s);
+	return (int)bcd64tostr(buf, bsz, (bcd64_t){m, e, s});
 }
 #elif defined HAVE_DFP754_DPD_LITERALS
 static int
@@ -690,29 +698,39 @@ dpd64tostr(char *restrict buf, size_t bsz, _Decimal64 x)
 
 		s = sign_dpd64(x);
 		/* get us a proper bcd version of M */
-		b = (m & 0x003c0000000000000ULL);
-		b >>= 10U;
-		b |= unpack_declet((m >> 40U) & 0x3ffU);
+		b = (m >> 50U);
 		b <<= 12U;
-		b |= unpack_declet((m >> 30U) & 0x3ffU);
+		b ^= unpack_declet((m >> 40U) & 0x3ffU);
 		b <<= 12U;
-		b |= unpack_declet((m >> 20U) & 0x3ffU);
+		b ^= unpack_declet((m >> 30U) & 0x3ffU);
 		b <<= 12U;
-		b |= unpack_declet((m >> 10U) & 0x3ffU);
+		b ^= unpack_declet((m >> 20U) & 0x3ffU);
 		b <<= 12U;
-		b |= unpack_declet((m >> 0U) & 0x3ffU);
+		b ^= unpack_declet((m >> 10U) & 0x3ffU);
+		b <<= 12U;
+		b ^= unpack_declet((m >> 0U) & 0x3ffU);
 		m = b;
 	} else {
 		/* no stinking signed 0s and m is in bcd form already */
 		s = 0;
 	}
-	return bcd64tostr(buf, bsz, m, e, s);
+	return bcd64tostr(buf, bsz, (bcd64_t){m, e, s});
 }
 #endif	/* HAVE_DFP754_BID_LITERALS || HAVE_DFP754_DPD_LITERALS */
 
 int
 d64tostr(char *restrict buf, size_t bsz, _Decimal64 x)
 {
+	if (UNLIKELY(isnand64(x))) {
+		const size_t z = min_z(3U, bsz);
+		memcpy(buf, "nan", z);
+		return z;
+	} else if (UNLIKELY(isinfd64(x))) {
+		const size_t z = min_z(3U + (x < 0.df), bsz);
+		buf[0U] = '-';
+		memcpy(buf + (x < 0.df), "inf", z);
+		return z;
+	}
 #if defined HAVE_DFP754_BID_LITERALS
 	return bid64tostr(buf, bsz, x);
 #elif defined HAVE_DFP754_DPD_LITERALS
