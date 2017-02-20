@@ -1,6 +1,9 @@
 Usage: quodist < QUOTES
 
 Analyse quotes in fixed size windows and print counts..
+Counted metrics are t for survival times, b for bids, a for asks,
+s for relative spreads, B for bid quantities, A for ask quantities
+I for relative imbalances.
 
   -i, --interval=S      Draw candles every S seconds, can also be
                         suffixed with m for minutes, h for hours,
