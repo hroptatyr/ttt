@@ -698,6 +698,11 @@ d32tostr(char *restrict buf, size_t bsz, _Decimal32 x)
 		const size_t z = min_z(3U, bsz);
 		memcpy(buf, "nan", z);
 		return z;
+	} else if (UNLIKELY(isinfd32(x))) {
+		const size_t z = min_z(3U + (x < 0.df), bsz);
+		buf[0U] = '-';
+		memcpy(buf + (x < 0.df), "inf", z);
+		return z;
 	}
 #if defined HAVE_DFP754_BID_LITERALS
 	return bid32tostr(buf, bsz, x);
