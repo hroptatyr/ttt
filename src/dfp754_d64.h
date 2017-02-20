@@ -164,10 +164,10 @@ nand64(char *__tagp __attribute__((unused)))
 #endif	/* !HAVE_NAND64 */
 
 #if !defined INFD64
-# define INFD64		((union {uint64_t u, _Decimal64 x;}){INFD64_U}.x)
+# define INFD64		(((union {uint64_t u; _Decimal64 x;}){INFD64_U}).x)
 #endif	/* !INFD32 */
 #if !defined MINFD64
-# define MINFD64	((union {uint64_t u, _Decimal64 x;}){MINFD64_U}.x)
+# define MINFD64	(((union {uint64_t u; _Decimal64 x;}){MINFD64_U}).x)
 #endif	/* !MINFD64 */
 
 #endif	/* INCLUDED_dfp754_d64_h_ */

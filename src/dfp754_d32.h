@@ -164,10 +164,10 @@ nand32(char *__tagp __attribute__((unused)))
 #endif	/* !HAVE_NAND32 */
 
 #if !defined INFD32
-# define INFD32		((union {uint32_t u; _Decimal32 x;}){INFD32_U}.x)
+# define INFD32		(((union {uint32_t u; _Decimal32 x;}){INFD32_U}).x)
 #endif	/* !INFD32 */
 #if !defined MINFD32
-# define MINFD32	((union {uint32_t u; _Decimal32 x;}){MINFD32_U}.x)
+# define MINFD32	(((union {uint32_t u; _Decimal32 x;}){MINFD32_U}).x)
 #endif	/* !INFD32 */
 
 #endif	/* INCLUDED_dfp754_d32_h_ */
