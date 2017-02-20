@@ -578,7 +578,8 @@ push_beef(char *ln, size_t lz)
 		Ahi[am] = max_qx(Ahi[am], Q.a);
 
 		/* imbalance */
-		with (qx_t I = quantized64((Q.a - Q.b) / Q.b, 0.00000dd)) {
+		with (qx_t Qm = (Q.b + Q.a) / 2.dd,
+		      I = quantized64((Q.a - Q.b) / Qm, 0.00000dd)) {
 			size_t Im = dqrtoslot(I);
 
 			imb[Im] += acc;
@@ -601,7 +602,8 @@ push_beef(char *ln, size_t lz)
 		ahi[am] = max_px(ahi[am], q.a);
 	}
 
-	with (px_t s = quantized32((q.a - q.b) / q.b, 0.00000df)) {
+	with (px_t m = (q.b + q.a) / 2.df,
+	      s = quantized32((q.a - q.b) / m, 0.00000df)) {
 		size_t sm = dprtoslot(s);
 
 		spr[sm] += acc;
