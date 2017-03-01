@@ -386,7 +386,9 @@ static union {
 		cnt_t bsz[1U << (n)];		\
 		cnt_t asz[1U << (n)];		\
 		cnt_t spr[1U << (n)];		\
+		cnt_t rsp[1U << (n)];		\
 		cnt_t imb[1U << (n)];		\
+		cnt_t rim[1U << (n)];		\
 						\
 		tv_t tlo[1U << (n)];		\
 		tv_t thi[1U << (n)];		\
@@ -397,6 +399,8 @@ static union {
 		px_t alo[1U << (n)];		\
 		px_t shi[1U << (n)];		\
 		px_t slo[1U << (n)];		\
+		px_t rhi[1U << (n)];		\
+		px_t rlo[1U << (n)];		\
 						\
 		qx_t Bhi[1U << (n)];		\
 		qx_t Ahi[1U << (n)];		\
@@ -404,6 +408,8 @@ static union {
 		qx_t Alo[1U << (n)];		\
 		qx_t Ihi[1U << (n)];		\
 		qx_t Ilo[1U << (n)];		\
+		qx_t Rhi[1U << (n)];		\
+		qx_t Rlo[1U << (n)];		\
 	} _##n
 
 	MAKE_SLOTS(0);
@@ -420,7 +426,9 @@ static cnt_t *ask;
 static cnt_t *bsz;
 static cnt_t *asz;
 static cnt_t *spr;
+static cnt_t *rsp;
 static cnt_t *imb;
+static cnt_t *rim;
 static tv_t *tlo;
 static tv_t *thi;
 static px_t *blo;
@@ -433,8 +441,12 @@ static qx_t *Alo;
 static qx_t *Ahi;
 static px_t *slo;
 static px_t *shi;
+static px_t *rlo;
+static px_t *rhi;
 static qx_t *Ilo;
 static qx_t *Ihi;
+static qx_t *Rlo;
+static qx_t *Rhi;
 static size_t cntz;
 
 static void(*prnt_cndl)(void);
@@ -578,14 +590,21 @@ push_beef(char *ln, size_t lz)
 		Ahi[am] = max_qx(Ahi[am], Q.a);
 
 		/* imbalance */
-		with (qx_t Qm = (Q.b + Q.a) / 2.dd,
-		      I = quantized64((Q.a - Q.b) / Qm, 0.00000dd)) {
+		with (qx_t Qm = fabsd64(Q.b + Q.a), d = Q.a - Q.b,
+		      I = quantized64(2.dd * d / Qm, 0.00000dd),
+		      R = quantized64(d / (Qm + fabsd64(d)), 0.00000dd)) {
 			size_t Im = dqrtoslot(I);
+			size_t Rm = dqrtoslot(R);
 
 			imb[Im] += acc;
 
 			Ilo[Im] = min_qx(Ilo[Im] ?: __DEC64_MOST_POSITIVE__, I);
 			Ihi[Im] = max_qx(Ihi[Im] ?: __DEC64_MOST_NEGATIVE__, I);
+
+			rim[Rm] += acc;
+
+			Rlo[Rm] = min_qx(Rlo[Rm] ?: __DEC64_MOST_POSITIVE__, R);
+			Rhi[Rm] = max_qx(Rhi[Rm] ?: __DEC64_MOST_NEGATIVE__, R);
 		}
 	}
 
@@ -602,14 +621,21 @@ push_beef(char *ln, size_t lz)
 		ahi[am] = max_px(ahi[am], q.a);
 	}
 
-	with (px_t m = (q.b + q.a) / 2.df,
-	      s = quantized32((q.a - q.b) / m, 0.00000df)) {
+	with (px_t m = fabsd32(q.b + q.a), d = (q.a - q.b),
+	      s = quantized32(2.df * d / m, 0.00000df),
+	      r = quantized32(d / (m + fabsd32(d)), 0.00000df)) {
 		size_t sm = dprtoslot(s);
+		size_t rm = dprtoslot(r);
 
 		spr[sm] += acc;
 
 		slo[sm] = min_px(slo[sm] ?: __DEC32_MOST_POSITIVE__, s);
 		shi[sm] = max_px(shi[sm], s);
+
+		rsp[rm] += acc;
+
+		rlo[rm] = min_px(rlo[rm] ?: __DEC32_MOST_POSITIVE__, r);
+		rhi[rm] = max_px(rhi[rm], r);
 	}
 
 	with (tv_t dt = t - last) {
@@ -784,6 +810,37 @@ prnt_cndl_mtrx(void)
 	len += pztostr(buf + len, sizeof(buf) - len, shi, 1U << highbits);
 	buf[len++] = '\n';
 
+	/* renormalised spr */
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'r';
+	buf[len++] = '\t';
+	buf[len++] = 'n';
+	len += zztostr(buf + len, sizeof(buf) - len, rsp, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'r';
+	buf[len++] = '\t';
+	buf[len++] = 'L';
+	len += pztostr(buf + len, sizeof(buf) - len, rlo, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'r';
+	buf[len++] = '\t';
+	buf[len++] = 'H';
+	len += pztostr(buf + len, sizeof(buf) - len, rhi, 1U << highbits);
+	buf[len++] = '\n';
+
 	/* check if there's quantities */
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
 		if (bsz[i]) {
@@ -893,6 +950,37 @@ Asz:
 	buf[len++] = '\t';
 	buf[len++] = 'H';
 	len += qztostr(buf + len, sizeof(buf) - len, Ihi, 1U << highbits);
+	buf[len++] = '\n';
+
+	/* renormalised imbalance */
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'R';
+	buf[len++] = '\t';
+	buf[len++] = 'n';
+	len += zztostr(buf + len, sizeof(buf) - len, rim, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'R';
+	buf[len++] = '\t';
+	buf[len++] = 'L';
+	len += qztostr(buf + len, sizeof(buf) - len, Rlo, 1U << highbits);
+	buf[len++] = '\n';
+
+	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	buf[len++] = '\t';
+	len += (memcpy(buf + len, cont, conz), conz);
+	buf[len++] = '\t';
+	buf[len++] = 'R';
+	buf[len++] = '\t';
+	buf[len++] = 'H';
+	len += qztostr(buf + len, sizeof(buf) - len, Rhi, 1U << highbits);
 	buf[len++] = '\n';
 
 prnt:
@@ -1008,6 +1096,28 @@ prnt_cndl_molt(void)
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
 
+	/* rsp */
+	len = 0U;
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!rsp[i]) {
+			continue;
+		}
+		/* otherwise */
+		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		buf[len++] = '\t';
+		len += (memcpy(buf + len, cont, conz), conz);
+		buf[len++] = '\t';
+		buf[len++] = 'r';
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, rlo[i]);
+		buf[len++] = '\t';
+		len += pxtostr(buf + len, sizeof(buf) - len, rhi[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, rsp[i]);
+		buf[len++] = '\n';
+	}
+	fwrite(buf, sizeof(*buf), len, stdout);
+
 	/* bid quantities */
 	len = 0U;
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
@@ -1070,6 +1180,28 @@ prnt_cndl_molt(void)
 		len += qxtostr(buf + len, sizeof(buf) - len, Ihi[i]);
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, imb[i]);
+		buf[len++] = '\n';
+	}
+	fwrite(buf, sizeof(*buf), len, stdout);
+
+	/* renormalised imbalance */
+	len = 0U;
+	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
+		if (!rim[i]) {
+			continue;
+		}
+		/* otherwise */
+		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		buf[len++] = '\t';
+		len += (memcpy(buf + len, cont, conz), conz);
+		buf[len++] = '\t';
+		buf[len++] = 'R';
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, Rlo[i]);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, Rhi[i]);
+		buf[len++] = '\t';
+		len += ztostr(buf + len, sizeof(buf) - len, rim[i]);
 		buf[len++] = '\n';
 	}
 	fwrite(buf, sizeof(*buf), len, stdout);
@@ -1158,6 +1290,8 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 		asz = cnt._##n.asz;		\
 		spr = cnt._##n.spr;		\
 		imb = cnt._##n.imb;		\
+		rsp = cnt._##n.rsp;		\
+		rim = cnt._##n.rim;		\
 						\
 		tlo = cnt._##n.tlo;		\
 		thi = cnt._##n.thi;		\
@@ -1168,6 +1302,8 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 		ahi = cnt._##n.ahi;		\
 		shi = cnt._##n.shi;		\
 		slo = cnt._##n.slo;		\
+		rhi = cnt._##n.rhi;		\
+		rlo = cnt._##n.rlo;		\
 						\
 		Blo = cnt._##n.Blo;		\
 		Bhi = cnt._##n.Bhi;		\
@@ -1175,6 +1311,8 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 		Ahi = cnt._##n.Ahi;		\
 		Ihi = cnt._##n.Ihi;		\
 		Ilo = cnt._##n.Ilo;		\
+		Rhi = cnt._##n.Rhi;		\
+		Rlo = cnt._##n.Rlo;		\
 						\
 		cntz = sizeof(cnt._##n)
 
