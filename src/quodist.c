@@ -590,7 +590,7 @@ push_beef(char *ln, size_t lz)
 		Ahi[am] = max_qx(Ahi[am], Q.a);
 
 		/* imbalance */
-		with (qx_t Qm = fabsd64(Q.b + Q.a), d = Q.a - Q.b,
+		with (qx_t Qm = Q.b + Q.a, d = Q.a - Q.b,
 		      I = quantized64(2.dd * d / Qm, 0.00000dd),
 		      R = quantized64(d / (Qm + fabsd64(d)), 0.00000dd)) {
 			size_t Im = dqrtoslot(I);
