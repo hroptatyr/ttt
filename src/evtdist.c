@@ -58,6 +58,7 @@ static tvu_t intv;
 
 static unsigned int highbits = 1U;
 static unsigned int elapsp;
+static unsigned int allp;
 static tv_t pbase;
 
 #if defined __INTEL_COMPILER
@@ -492,15 +493,22 @@ next_cndl(tv_t t)
 static inline void
 rset_cndl(void)
 {
-	/* just reset all stats pages */
-	memset(cnt.start, 0, cntz);
+	if (!allp) {
+		/* just reset all stats pages */
+		memset(cnt.start, 0, cntz);
+	} else {
+		memset(cnt.start, 0, (1 << highbits) * sizeof(*dlt));
+	}
 	return;
 }
 
 static inline void
 rset_rngs(void)
 {
-	memset(tlo, -1, (1U << highbits) * sizeof(*tlo));
+	if (!allp) {
+		memset(tlo, -1, (1U << highbits) * sizeof(*tlo));
+		return;
+	}
 	return;
 }
 
@@ -862,7 +870,7 @@ prnt_cndl_mtrx(void)
 	/* type t */
 	len += memncpy(buf + len, "\ttheo_erlang", strlenof("\ttheo_erlang"));
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
-		if (!dlt[i]) {
+		if (!dlt[i] && !allp) {
 			continue;
 		}
 		buf[len++] = '\t';
@@ -875,7 +883,7 @@ prnt_cndl_mtrx(void)
 	/* type t */
 	len += memncpy(buf + len, "\ttheo_gamma", strlenof("\ttheo_gamma"));
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
-		if (!dlt[i]) {
+		if (!dlt[i] && !allp) {
 			continue;
 		}
 		buf[len++] = '\t';
@@ -888,7 +896,7 @@ prnt_cndl_mtrx(void)
 	/* type t */
 	len += memncpy(buf + len, "\ttheo_lomax", strlenof("\ttheo_lomax"));
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
-		if (!dlt[i]) {
+		if (!dlt[i] && !allp) {
 			continue;
 		}
 		buf[len++] = '\t';
@@ -918,7 +926,7 @@ prnt_cndl_molt(void)
 	/* delta t */
 	len = 0U;
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
-		if (!dlt[i]) {
+		if (!dlt[i] && !allp) {
 			continue;
 		}
 		/* otherwise */
@@ -957,7 +965,7 @@ prnt_cndl_mtrx_poiss(void)
 
 		len = memncpy(buf, hdr, strlenof(hdr));
 		for (size_t i = 0U; i < cntz; i++) {
-			if (!dlt[i]) {
+			if (!dlt[i] && !allp) {
 				continue;
 			}
 			buf[len++] = '\t';
@@ -972,7 +980,7 @@ prnt_cndl_mtrx_poiss(void)
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
 	len += memncpy(buf + len, "\tcnt", strlenof("\tcnt"));
 	for (size_t i = 0U; i < cntz; i++) {
-		if (!dlt[i]) {
+		if (!dlt[i] && !allp) {
 			continue;
 		}
 		buf[len++] = '\t';
@@ -983,7 +991,7 @@ prnt_cndl_mtrx_poiss(void)
 	len += cttostr(buf + len, sizeof(buf) - len, nxct);
 	len += memncpy(buf + len, "\ttheo_zip", strlenof("\ttheo_zip"));
 	for (size_t i = 0U; i < cntz; i++) {
-		if (!dlt[i]) {
+		if (!dlt[i] && !allp) {
 			continue;
 		}
 		buf[len++] = '\t';
@@ -1011,7 +1019,7 @@ prnt_cndl_molt_poiss(void)
 	/* delta t */
 	len = 0U;
 	for (size_t i = 0U; i < cntz; i++) {
-		if (!dlt[i]) {
+		if (!dlt[i] && !allp) {
 			continue;
 		}
 		/* otherwise */
@@ -1100,6 +1108,23 @@ Error: verbose flag can only be used one to five times.");
 	/* count events or elapsed times */
 	elapsp = argi->time_flag;
 	ztostr = !elapsp ? zutostr : tvtostr;
+
+	if (allp) {
+		/* set up lo and hi */
+		tlo[0U] = 0;
+		for (size_t i = 1U, n = (1U << highbits); i < n; i++) {
+			const size_t sh = highbits > 5U ? highbits - 5U : 0U;
+			const size_t w = (1ULL << sh) - 1ULL;
+			const size_t s = ((1ULL << (i >> sh)) - 1U);
+			const size_t l = (s + 1U);
+
+			tlo[i] = s * MSECS + (((i & w) * l * MSECS) >> sh);
+		}
+		for (size_t i = 0U, n = (1U << highbits) - 1U; i < n; i++) {
+			thi[i] = tlo[i + 1U];
+		}
+		thi[(1U << highbits) - 1U] = NOT_A_TIME;
+	}
 	return 0;
 }
 
@@ -1143,6 +1168,8 @@ Error: cannot read interval argument, must be positive.");
 		rc = EXIT_FAILURE;
 		goto out;
 	}
+
+	allp = argi->all_flag;
 
 	switch (argi->cmd) {
 	default:
