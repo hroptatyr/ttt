@@ -8,6 +8,7 @@ An event is indicated by a unix timestamp on stdin.
                         d for days, mo for months and y for years.
   -t, --table           Print counts and ranges as table, 
                         default: print as molten data.
+  --all                 Print all bins instead of non-zero ones.
 
 
 Usage: evtdist erlang < EVENTS
