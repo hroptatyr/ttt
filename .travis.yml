@@ -11,7 +11,7 @@ before_script:
   - autoreconf -vfi
 
 script:
-  - ./configure dfp754_LIBS=-ldfp || { cat config.log; false; }
+  - ./configure || { cat config.log; false; }
   - make clean
   - make all
   - make check || { cat test/test-suite.log; false; }
