@@ -72,19 +72,19 @@ typedef struct {
 
 /* modes, extend here */
 typedef enum {
-	MODE_DFLT,
-	MODE_SPRD = MODE_DFLT,
-	MODE_ADEV,
-	MODE_VELO,
-	MODE_TDLT,
-	NMODES
-} mode_t;
+	SMODE_DFLT,
+	SMODE_SPRD = SMODE_DFLT,
+	SMODE_ADEV,
+	SMODE_VELO,
+	SMODE_TDLT,
+	NSMODES
+} smode_t;
 
-static const char *const modes[] = {
-	[MODE_SPRD] = "sprd",
-	[MODE_ADEV] = "adev",
-	[MODE_VELO] = "velo",
-	[MODE_TDLT] = "tdlt",
+static const char *const smodes[] = {
+	[SMODE_SPRD] = "sprd",
+	[SMODE_ADEV] = "adev",
+	[SMODE_VELO] = "velo",
+	[SMODE_TDLT] = "tdlt",
 };
 
 /* parameters */
@@ -92,7 +92,7 @@ static tv_t modulus = 86400U * MSECS;
 static tv_t binwdth = 60U * MSECS;
 static size_t nbins;
 
-static mode_t mode;
+static smode_t smode;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -446,17 +446,17 @@ offline(void)
 	ssize_t nrd;
 	void(*bin)(sbin_t);
 
-	switch (mode) {
-	case MODE_SPRD:
+	switch (smode) {
+	case SMODE_SPRD:
 		bin = bin_sprd;
 		break;
-	case MODE_ADEV:
+	case SMODE_ADEV:
 		bin = bin_adev;
 		break;
-	case MODE_VELO:
+	case SMODE_VELO:
 		bin = bin_velo;
 		break;
-	case MODE_TDLT:
+	case SMODE_TDLT:
 		bin = bin_tdlt;
 		break;
 	default:
@@ -488,7 +488,7 @@ offline(void)
 	}
 
 	/* print seasonality curve */
-	printf("%s\t%lu\t%lu\n", modes[mode], modulus, binwdth);
+	printf("%s\t%lu\t%lu\n", smodes[smode], modulus, binwdth);
 	for (size_t i = 0U; i < nbins; i++) {
 		stat_t b = stat_eval(bins[i]);
 		printf("%f\t%g\t%g\n",
@@ -510,17 +510,17 @@ desea(bool deseap)
 	px_t(*des)(sbin_t);
 	px_t base;
 
-	switch (mode) {
-	case MODE_SPRD:
+	switch (smode) {
+	case SMODE_SPRD:
 		des = deseap ? des_sprd : ens_sprd;
 		break;
-	case MODE_ADEV:
+	case SMODE_ADEV:
 		des = deseap ? des_adev : ens_adev;
 		break;
-	case MODE_VELO:
+	case SMODE_VELO:
 		des = deseap ? des_velo : ens_velo;
 		break;
-	case MODE_TDLT:
+	case SMODE_TDLT:
 	default:
 		return -1;
 	}
@@ -558,13 +558,13 @@ deseaT(bool deseap)
 	tv_t(*des)(sbin_t);
 	tv_t amtr;
 
-	switch (mode) {
-	case MODE_TDLT:
+	switch (smode) {
+	case SMODE_TDLT:
 		des = deseap ? des_tdlt : ens_tdlt;
 		break;
-	case MODE_SPRD:
-	case MODE_ADEV:
-	case MODE_VELO:
+	case SMODE_SPRD:
+	case SMODE_ADEV:
+	case SMODE_VELO:
 	default:
 		return -1;
 	}
@@ -610,10 +610,10 @@ rdsea(const char *fn)
 		rc = -1;
 		goto out;
 	}
-	/* first line holds the mode and widths*/
-	for (mode_t m = MODE_DFLT; ++m < NMODES;) {
-		if (!memcmp(line, modes[m], 4U)) {
-			mode = m;
+	/* first line holds the smode and widths*/
+	for (smode_t m = SMODE_DFLT; ++m < NSMODES;) {
+		if (!memcmp(line, smodes[m], 4U)) {
+			smode = m;
 			break;
 		}
 	}
@@ -711,13 +711,13 @@ Error: window width parameter must be positive.");
 		if (0) {
 			;
 		} else if (!strcmp(argi->mode_arg, "sprd")) {
-			mode = MODE_SPRD;
+			smode = SMODE_SPRD;
 		} else if (!strcmp(argi->mode_arg, "adev")) {
-			mode = MODE_ADEV;
+			smode = SMODE_ADEV;
 		} else if (!strcmp(argi->mode_arg, "velo")) {
-			mode = MODE_VELO;
+			smode = SMODE_VELO;
 		} else if (!strcmp(argi->mode_arg, "tdlt")) {
-			mode = MODE_TDLT;
+			smode = SMODE_TDLT;
 		}
 	}
 
@@ -751,13 +751,13 @@ Error: modulus and window parameters result in 0 bins.");
 Error: cannot process seasonality file `%s'", *argi->args);
 		rc = 1;
 	} else {
-		switch (mode) {
-		case MODE_SPRD:
-		case MODE_ADEV:
-		case MODE_VELO:
+		switch (smode) {
+		case SMODE_SPRD:
+		case SMODE_ADEV:
+		case SMODE_VELO:
 			rc = desea(!argi->reverse_flag) < 0;
 			break;
-		case MODE_TDLT:
+		case SMODE_TDLT:
 			rc = deseaT(!argi->reverse_flag) < 0;
 			break;
 		default:
