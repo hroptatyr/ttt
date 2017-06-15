@@ -18,6 +18,11 @@
 #include <math.h>
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
+#elif defined HAVE_DFP_STDLIB_H
+# include <dfp/stdlib.h>
+#else  /* !HAVE_DFP754_H && !HAVE_DFP_STDLIB_H */
+extern _Decimal32 fabsd32(_Decimal32);
+extern _Decimal64 fabsd64(_Decimal64);
 #endif	/* HAVE_DFP754_H */
 #include "nifty.h"
 #include "dfp754_d32.h"
