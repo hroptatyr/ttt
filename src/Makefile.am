@@ -66,6 +66,7 @@ evtdist_SOURCES += version.c version.h
 evtdist_CPPFLAGS = $(AM_CPPFLAGS)
 evtdist_CPPFLAGS += -DHAVE_VERSION_H
 evtdist_LDFLAGS = $(AM_LDFLAGS)
+evtdist_LDFLAGS += -lm
 BUILT_SOURCES += evtdist.yucc
 
 bin_PROGRAMS += loghist
@@ -74,6 +75,7 @@ loghist_SOURCES += version.c version.h
 loghist_CPPFLAGS = $(AM_CPPFLAGS)
 loghist_CPPFLAGS += -DHAVE_VERSION_H
 loghist_LDFLAGS = $(AM_LDFLAGS)
+loghist_LDFLAGS += -lm
 BUILT_SOURCES += loghist.yucc
 
 bin_PROGRAMS += sex
@@ -109,6 +111,7 @@ imp_CPPFLAGS += $(dfp754_CFLAGS)
 imp_CPPFLAGS += -DHAVE_VERSION_H
 imp_LDFLAGS = $(AM_LDFLAGS)
 imp_LDFLAGS += $(dfp754_LIBS)
+imp_LDFLAGS += -lm
 imp_LDADD = libmydfp.a
 BUILT_SOURCES += imp.yucc
 
@@ -142,6 +145,7 @@ sea_CPPFLAGS += $(dfp754_CFLAGS)
 sea_CPPFLAGS += -DHAVE_VERSION_H
 sea_LDFLAGS = $(AM_LDFLAGS)
 sea_LDFLAGS += $(dfp754_LIBS)
+sea_LDFLAGS += -lm
 sea_LDADD = libmydfp.a
 BUILT_SOURCES += sea.yucc
 
@@ -225,6 +229,7 @@ gentrades_SOURCES += version.c version.h
 gentrades_CPPFLAGS = $(AM_CPPFLAGS)
 gentrades_CPPFLAGS += -DHAVE_VERSION_H
 gentrades_LDFLAGS = $(AM_LDFLAGS)
+gentrades_LDFLAGS += -lm
 BUILT_SOURCES += gentrades.yucc
 
 ## doesn't really fit in, but what the heck
