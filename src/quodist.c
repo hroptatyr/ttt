@@ -21,8 +21,16 @@
 #elif defined HAVE_DFP_STDLIB_H
 # include <dfp/stdlib.h>
 #else  /* !HAVE_DFP754_H && !HAVE_DFP_STDLIB_H */
-extern _Decimal32 fabsd32(_Decimal32);
-extern _Decimal64 fabsd64(_Decimal64);
+static inline __attribute__((pure, const)) _Decimal32
+fabsd32(_Decimal32 x)
+{
+	return x >= 0 ? x : -x;
+}
+static inline __attribute__((pure, const)) _Decimal64
+fabsd64(_Decimal64 x)
+{
+	return x >= 0 ? x : -x;
+}
 #endif	/* HAVE_DFP754_H */
 #include "nifty.h"
 #include "dfp754_d32.h"
