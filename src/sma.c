@@ -11,7 +11,13 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <time.h>
-#include <dfp754.h>
+#if defined HAVE_DFP754_H
+# include <dfp754.h>
+#elif defined HAVE_DFP_STDLIB_H
+# include <dfp/stdlib.h>
+#else  /* !HAVE_DFP754_H && !HAVE_DFP_STDLIB_H */
+
+#endif	/* HAVE_DFP754_H || HAVE_DFP_STDLIB_H */
 #include "dfp754_d32.h"
 #include "nifty.h"
 
