@@ -47,6 +47,9 @@ typedef long unsigned int tv_t;
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
+#define NANPX		NAND32
+#define isnanpx		isnand32
+
 #define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
@@ -274,10 +277,10 @@ try_exec(ord_t o, quo_t q)
 	switch (o.r) {
 	case RGM_LONG:
 	case RGM_SHORT:
-		if (o.q > 0.dd && (p = q.a) > o.lp) {
+		if (o.q > 0.dd && (isnanpx(p = q.a) || p > o.lp)) {
 			/* no can do exec */
 			break;
-		} else if (o.q < 0.dd && (p = q.b) < o.lp) {
+		} else if (o.q < 0.dd && (isnanpx(p = q.b) || p < o.lp)) {
 			/* no can do exec */
 			break;
 		}
@@ -428,8 +431,14 @@ retry:
 	} else if (UNLIKELY(h != conx && conx)) {
 		goto retry;
 	}
-	q.b = strtopx(++on, &on);
-	q.a = strtopx(++on, &on);
+	with (const char *str = ++on) {
+		q.b = strtopx(str, &on);
+		q.b = on > str ? q.b : NANPX;
+	}
+	with (const char *str = ++on) {
+		q.a = strtopx(str, &on);
+		q.a = on > str ? q.a : NANPX;
+	}
 	return q;
 }
 
