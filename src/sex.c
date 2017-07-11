@@ -270,7 +270,7 @@ try_exec(ord_t o, quo_t q)
 {
 /* this takes an order + quotes and executes it at market price */
 	const tv_t t = max_tv(o.t, q.t);
-	px_t p = 0.df;
+	px_t p;
 	px_t s = q.a - q.b;
 	tv_t age = t - q.t;
 
@@ -292,6 +292,12 @@ try_exec(ord_t o, quo_t q)
 			p = q.b;
 		} else if (o.q < 0.dd) {
 			p = q.a;
+		} else {
+			p = 0.df;
+		}
+		if (UNLIKELY(isnanpx(p))) {
+			/* reject */
+			break;
 		}
 		return (exe_t){t, p, -o.q, s, age};
 
