@@ -32,7 +32,9 @@ TESTS += sex_07.clit
 TESTS += sex_08.clit
 TESTS += sex_09.clit
 TESTS += sex_10.clit
+TESTS += sex_11.clit
 EXTRA_DIST += EURUSD
+EXTRA_DIST += PVC
 
 TESTS += opt_01.clit
 TESTS += opt_02.clit

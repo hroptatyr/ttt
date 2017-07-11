@@ -1,4 +1,4 @@
 /* -*- c -*- */
 #include "version.h"
 
-const char geo2t_version_string[] = "YUCK_SCMVER_VERSION";
+const char ttt_version_string[] = "YUCK_SCMVER_VERSION";
