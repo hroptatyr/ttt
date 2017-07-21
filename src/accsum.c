@@ -22,7 +22,6 @@
 #include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
-#include "hash.h"
 
 #define NSECS	(1000000000)
 #define MSECS	(1000)
@@ -94,22 +93,6 @@ serror(const char *fmt, ...)
 }
 
 
-static hx_t
-strtohx(const char *x, char **on)
-{
-	char *ep;
-	hx_t res;
-
-	if (UNLIKELY((ep = strchr(x, '\t')) == NULL)) {
-		return 0;
-	}
-	res = hash(x, ep - x);
-	if (LIKELY(on != NULL)) {
-		*on = ep;
-	}
-	return res;
-}
-
 static tv_t
 strtotv(const char *ln, char **endptr)
 {
@@ -206,7 +189,7 @@ next_acc(void)
 	static size_t llen;
 	static tv_t newm;
 	char *on;
-	hx_t UNUSED(hx);
+	ssize_t nrd;
 
 	/* assign previous next_quo as current quo */
 	a = newa;
@@ -219,12 +202,13 @@ next_acc(void)
 	}
 
 again:
-	if (UNLIKELY(getline(&line, &llen, afp) <= 0)) {
+	if (UNLIKELY((nrd = getline(&line, &llen, afp)) <= 0)) {
 		free(line);
 		line = NULL;
 		llen = 0UL;
 		return NOT_A_TIME;
 	}
+	const char *const eol = line + nrd;
 
 	/* snarf metronome */
 	newm = strtotv(line, &on);
@@ -235,7 +219,10 @@ again:
 	on += 4U;
 
 	/* get currency indicator */
-	hx = strtohx(on, &on);
+	on = memchr(on, '\t', eol - on);
+	if (UNLIKELY(on == NULL)) {
+		goto again;
+	}
 	/* snarf the base amount */
 	a.base = strtoqx(++on, &on);
 	a.term = strtoqx(++on, &on);

@@ -149,7 +149,6 @@ BUILT_SOURCES += sea.yucc
 
 bin_PROGRAMS += accsum
 accsum_SOURCES = accsum.c accsum.yuck
-accsum_SOURCES += hash.c hash.h
 accsum_SOURCES += version.c version.h
 accsum_CPPFLAGS = $(AM_CPPFLAGS)
 accsum_CPPFLAGS += $(dfp754_CFLAGS)
