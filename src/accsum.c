@@ -152,6 +152,7 @@ static tv_t nexv = NOT_A_TIME;
 static quo_t q;
 static acc_t a;
 static acc_t l;
+static qx_t S = 0.dd;
 
 static tv_t
 next_quo(void)
@@ -213,6 +214,27 @@ again:
 
 	/* snarf metronome */
 	newm = strtotv(line, &on);
+	if (grossp > 1U && UNLIKELY(!memcmp(on, "EXE\t", 4U))) {
+		on += 4U;
+		/* insturment name */
+		on = memchr(on, '\t', eol - on);
+		if (on++ == NULL) {
+			goto again;
+		}
+		/* base qty */
+		on = memchr(on, '\t', eol - on);
+		if (on++ == NULL) {
+			goto again;
+		}
+		/* terms qty */
+		on = memchr(on, '\t', eol - on);
+		if (on++ == NULL) {
+			goto again;
+		}
+		/* spread */
+		S += strtoqx(on, NULL) / 2.dd;
+		goto again;
+	}
 	/* make sure we're talking accounts */
 	if (UNLIKELY(memcmp(on, "ACC\t", 4U))) {
 		goto again;
@@ -302,6 +324,7 @@ offline(void)
 		/* check for winners */
 		with (qx_t r = calc_rpnl()) {
 			r += !grossp ? calc_rcom() : 0.dd;
+			r += grossp > 1U ? S : 0.dd;
 			rpnl[olsd] += r;
 			best[olsd] = best[olsd] >= r ? best[olsd] : r;
 			wrst[olsd] = wrst[olsd] <= r ? wrst[olsd] : r;

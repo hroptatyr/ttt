@@ -8,4 +8,5 @@ and the total amount invested within a regime.
   -e, --edge            Treat direction changes as regime switch,
                         default: levels.
   -g, --gross           Do not take commissions into account.
+                        Use twice to not take spreads into account.
   -v, --verbose         Print explanations.
