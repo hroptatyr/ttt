@@ -55,6 +55,7 @@ typedef struct {
 typedef struct {
 	qx_t base;
 	qx_t term;
+	qx_t comb;
 	qx_t comm;
 } acc_t;
 
@@ -225,8 +226,20 @@ again:
 	}
 	/* snarf the base amount */
 	a.base = strtoqx(++on, &on);
+	if (UNLIKELY(on >= eol)) {
+		goto again;
+	}
+	/* terms */
 	a.term = strtoqx(++on, &on);
-	(void)strtoqx(++on, &on);
+	if (UNLIKELY(on >= eol)) {
+		goto again;
+	}
+	/* base commissions */
+	a.comb = strtoqx(++on, &on);
+	if (UNLIKELY(on >= eol)) {
+		goto again;
+	}
+	/* terms commissions */
 	a.comm = strtoqx(++on, &on);
 	return newm;
 }
