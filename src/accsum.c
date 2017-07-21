@@ -22,7 +22,6 @@
 #include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
-#include "hash.h"
 
 #define NSECS	(1000000000)
 #define MSECS	(1000)
@@ -56,6 +55,7 @@ typedef struct {
 typedef struct {
 	qx_t base;
 	qx_t term;
+	qx_t comb;
 	qx_t comm;
 } acc_t;
 
@@ -94,22 +94,6 @@ serror(const char *fmt, ...)
 }
 
 
-static hx_t
-strtohx(const char *x, char **on)
-{
-	char *ep;
-	hx_t res;
-
-	if (UNLIKELY((ep = strchr(x, '\t')) == NULL)) {
-		return 0;
-	}
-	res = hash(x, ep - x);
-	if (LIKELY(on != NULL)) {
-		*on = ep;
-	}
-	return res;
-}
-
 static tv_t
 strtotv(const char *ln, char **endptr)
 {
@@ -168,6 +152,7 @@ static tv_t nexv = NOT_A_TIME;
 static quo_t q;
 static acc_t a;
 static acc_t l;
+static qx_t S = 0.dd;
 
 static tv_t
 next_quo(void)
@@ -206,7 +191,7 @@ next_acc(void)
 	static size_t llen;
 	static tv_t newm;
 	char *on;
-	hx_t UNUSED(hx);
+	ssize_t nrd;
 
 	/* assign previous next_quo as current quo */
 	a = newa;
@@ -219,15 +204,37 @@ next_acc(void)
 	}
 
 again:
-	if (UNLIKELY(getline(&line, &llen, afp) <= 0)) {
+	if (UNLIKELY((nrd = getline(&line, &llen, afp)) <= 0)) {
 		free(line);
 		line = NULL;
 		llen = 0UL;
 		return NOT_A_TIME;
 	}
+	const char *const eol = line + nrd;
 
 	/* snarf metronome */
 	newm = strtotv(line, &on);
+	if (grossp > 1U && UNLIKELY(!memcmp(on, "EXE\t", 4U))) {
+		on += 4U;
+		/* insturment name */
+		on = memchr(on, '\t', eol - on);
+		if (on++ == NULL) {
+			goto again;
+		}
+		/* base qty */
+		on = memchr(on, '\t', eol - on);
+		if (on++ == NULL) {
+			goto again;
+		}
+		/* terms qty */
+		on = memchr(on, '\t', eol - on);
+		if (on++ == NULL) {
+			goto again;
+		}
+		/* spread */
+		S += strtoqx(on, NULL) / 2.dd;
+		goto again;
+	}
 	/* make sure we're talking accounts */
 	if (UNLIKELY(memcmp(on, "ACC\t", 4U))) {
 		goto again;
@@ -235,11 +242,26 @@ again:
 	on += 4U;
 
 	/* get currency indicator */
-	hx = strtohx(on, &on);
+	on = memchr(on, '\t', eol - on);
+	if (UNLIKELY(on == NULL)) {
+		goto again;
+	}
 	/* snarf the base amount */
 	a.base = strtoqx(++on, &on);
+	if (UNLIKELY(on >= eol)) {
+		goto again;
+	}
+	/* terms */
 	a.term = strtoqx(++on, &on);
-	(void)strtoqx(++on, &on);
+	if (UNLIKELY(on >= eol)) {
+		goto again;
+	}
+	/* base commissions */
+	a.comb = strtoqx(++on, &on);
+	if (UNLIKELY(on >= eol)) {
+		goto again;
+	}
+	/* terms commissions */
 	a.comm = strtoqx(++on, &on);
 	return newm;
 }
@@ -302,6 +324,7 @@ offline(void)
 		/* check for winners */
 		with (qx_t r = calc_rpnl()) {
 			r += !grossp ? calc_rcom() : 0.dd;
+			r += grossp > 1U ? S : 0.dd;
 			rpnl[olsd] += r;
 			best[olsd] = best[olsd] >= r ? best[olsd] : r;
 			wrst[olsd] = wrst[olsd] <= r ? wrst[olsd] : r;
