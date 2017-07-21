@@ -357,7 +357,7 @@ retry:
 		on += 4U;
 		goto ord;
 	case 'S'/*HORT*/:
-		o = (ord_t){t, RGM_SHORT, .q = -qty, .lp = MINFD32};
+		o = (ord_t){t, RGM_SHORT, .q = -qty, .lp = -INFD32};
 		on += 5U;
 		goto ord;
 	case 'C'/*ANCEL*/:

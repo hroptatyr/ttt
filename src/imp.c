@@ -450,7 +450,7 @@ offline(FILE *qfp, bool sump)
 				pp = INFD32;
 				break;
 			case 'S'/*HORT*/:
-				pp = MINFD32;
+				pp = -INFD32;
 				break;
 			case 'C'/*ANCEL*/:
 			case 'E'/*MERG*/:
