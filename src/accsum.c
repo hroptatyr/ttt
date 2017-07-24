@@ -249,6 +249,9 @@ again:
 	a.base = strtoqx(++on, &on);
 	if (UNLIKELY(on >= eol)) {
 		goto again;
+	} else if (l.base == a.base) {
+		/* nothing changed */
+		goto again;
 	}
 	/* terms */
 	a.term = strtoqx(++on, &on);
