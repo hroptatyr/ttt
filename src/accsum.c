@@ -55,8 +55,8 @@ typedef struct {
 typedef struct {
 	qx_t base;
 	qx_t term;
-	qx_t comb;
 	qx_t comm;
+	qx_t sprd;
 } acc_t;
 
 typedef struct {
@@ -152,7 +152,6 @@ static tv_t nexv = NOT_A_TIME;
 static quo_t q;
 static acc_t a;
 static acc_t l;
-static qx_t S = 0.dd;
 
 static tv_t
 next_quo(void)
@@ -231,8 +230,8 @@ again:
 		if (on++ == NULL) {
 			goto again;
 		}
-		/* spread */
-		S += strtoqx(on, NULL) / 2.dd;
+		/* spread (cumulative) */
+		a.sprd += strtoqx(on, NULL) / 2.dd;
 		goto again;
 	}
 	/* make sure we're talking accounts */
@@ -257,12 +256,12 @@ again:
 		goto again;
 	}
 	/* base commissions */
-	a.comb = strtoqx(++on, &on);
+	a.comm = strtoqx(++on, &on);
 	if (UNLIKELY(on >= eol)) {
 		goto again;
 	}
 	/* terms commissions */
-	a.comm = strtoqx(++on, &on);
+	a.comm += strtoqx(++on, &on);
 	return newm;
 }
 
@@ -288,6 +287,18 @@ calc_rcom(void)
 	/* keep state */
 	acccom = this;
 	return com;
+}
+
+static inline qx_t
+calc_rspr(void)
+{
+	static qx_t acccom = 0.dd;
+	qx_t this = (a.sprd * l.base - a.base * l.sprd);
+	qx_t spr = this - acccom;
+
+	/* keep state */
+	acccom = this;
+	return spr;
 }
 
 static int
@@ -323,8 +334,8 @@ offline(void)
 		CNTS(olsd, side)++;
 		/* check for winners */
 		with (qx_t r = calc_rpnl()) {
-			r += !grossp ? calc_rcom() : 0.dd;
-			r += grossp > 1U ? S : 0.dd;
+			r += grossp > 0U ? 0.dd : calc_rcom();
+			r += grossp > 1U ? calc_rspr() : 0.dd;
 			rpnl[olsd] += r;
 			best[olsd] = best[olsd] >= r ? best[olsd] : r;
 			wrst[olsd] = wrst[olsd] <= r ? wrst[olsd] : r;
