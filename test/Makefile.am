@@ -44,8 +44,11 @@ TESTS += accsum_01.clit
 TESTS += accsum_02.clit
 TESTS += accsum_03.clit
 TESTS += accsum_04.clit
+TESTS += accsum_05.clit
+TESTS += accsum_06.clit
 EXTRA_DIST += test1.acc
 EXTRA_DIST += test2.acc
+EXTRA_DIST += test3.acc
 
 TESTS += snap_01.clit
 TESTS += snap_02.clit
