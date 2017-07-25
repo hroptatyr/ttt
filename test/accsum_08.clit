@@ -1,0 +1,33 @@
+#!/usr/bin/clitoris
+
+$ accsum < "${srcdir}/test4.acc"
+	hits	count	time
+F	0	2	1.700000000
+L	0	2	7.300000000
+S	0	0	0.000000000
+
+	avg	best	worst
+L	-409.50	0.00	-627.00
+S	0.00	0.00	0.00
+L+S	-409.50	0.00	-627.00
+
+	hit-r	hit-sk	loss-sk
+L	0.0000	0.00	-409.50
+S	0.0000	0.00	0.00
+L+S	0.0000	0.00	-409.50
+
+	rpnl	rp	rl
+L	-819.00	0.00	-819.00
+S	0.00	0.00	0.00
+L+S	-819.00	0.00	-819.00
+
+count	Fnew	Lnew	Snew
+Fold	0	2	0
+Lold	2	0	0
+Sold	0	0	0
+
+hits	Fnew	Lnew	Snew
+Fold	0	0	0
+Lold	0	0	0
+Sold	0	0	0
+$
