@@ -10,3 +10,6 @@ Produce a bid/ask time series with a constant spread.
                         widen or tighten the spread by Y.
   --despread            Assuming a midpoint+spread time series, return
                         the original time series.
+  --latent              Use latent midpoints, i.e. a midpoint changes
+                        only when the new quote is entirely above or
+                        below the old midpoint.
