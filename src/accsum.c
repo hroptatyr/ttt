@@ -9,12 +9,6 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <errno.h>
-#include <netinet/in.h>
-#include <net/if.h>
-#include <sys/socket.h>
-#include <fcntl.h>
-#include <arpa/inet.h>
-#include <sys/time.h>
 #include <time.h>
 #include <math.h>
 #if defined HAVE_DFP754_H
@@ -26,12 +20,6 @@
 
 #define NSECS	(1000000000)
 #define MSECS	(1000)
-#define UDP_MULTICAST_TTL	64
-#define MCAST_ADDR	"ff05::134"
-#define MCAST_PORT	7878
-
-#undef EV_P
-#define EV_P  struct ev_loop *loop __attribute__((unused))
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
