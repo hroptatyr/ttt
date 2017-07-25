@@ -275,7 +275,7 @@ static inline qx_t
 calc_rpnl(void)
 {
 	static qx_t accpnl = 0.dd;
-	qx_t this = (a.term * l.base - a.base * l.term)  / (l.base - a.base);
+	qx_t this = (a.term * l.base - a.base * l.term) / (l.base - a.base);
 	qx_t pnl = this - accpnl;
 
 	/* keep state */
@@ -287,7 +287,7 @@ static inline qx_t
 calc_rcom(void)
 {
 	static qx_t acccom = 0.dd;
-	qx_t this = (a.comm * l.base - a.base * l.comm)  / (l.base - a.base);
+	qx_t this = (a.comm * l.base - a.base * l.comm) / (l.base - a.base);
 	qx_t com = this - acccom;
 
 	/* keep state */
