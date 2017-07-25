@@ -68,7 +68,6 @@ typedef struct {
 	qx_t comm;
 } eva_t;
 
-static tv_t intv = 10 * MSECS;
 static unsigned int edgp;
 static unsigned int grossp;
 static unsigned int verbp;
@@ -148,37 +147,8 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 }
 
 
-static tv_t nexv = NOT_A_TIME;
-static quo_t q;
 static acc_t a;
 static acc_t l;
-
-static tv_t
-next_quo(void)
-{
-	static quo_t newq = {0.df, 0.df};
-	static char *line;
-	static size_t llen;
-	tv_t newm;
-	char *on;
-
-	/* assign previous next_quo as current quo */
-	q = newq;
-
-	if (UNLIKELY(qfp == NULL)) {
-		return NOT_A_TIME;
-	} else if (UNLIKELY(getline(&line, &llen, qfp) <= 0)) {
-		free(line);
-		return NOT_A_TIME;
-	}
-
-	newm = strtotv(line, &on);
-	/* instrument next */
-	on = strchr(on, '\t');
-	newq.b = strtopx(++on, &on);
-	newq.a = strtopx(++on, &on);
-	return newm;
-}
 
 static tv_t
 next_acc(void)
@@ -194,13 +164,6 @@ next_acc(void)
 
 	/* assign previous next_quo as current quo */
 	a = newa;
-
-	/* set next valuation timer */
-	if (a.base) {
-		nexv = (((newm - 1UL) / intv) + 1UL) * intv;
-	} else {
-		nexv = NOT_A_TIME;
-	}
 
 again:
 	if (UNLIKELY((nrd = getline(&line, &llen, afp)) <= 0)) {
@@ -321,7 +284,6 @@ offline(void)
 #define CNTS(i, j)	(_M(cnts, i, j))
 #define WINS(i, j)	(_M(wins, i, j))
 
-	(void)next_quo();
 	alst = amtr = next_acc();
 
 	do {
