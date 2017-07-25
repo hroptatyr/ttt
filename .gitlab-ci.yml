@@ -8,5 +8,5 @@ build:
     - autoreconf -vfi
     - ./configure
     - make
-    - make check
-    - make distcheck
+    - make check || { cat test/test-suite.log; false; }
+    - make distcheck || { cat _build/test/test-suite.log; false; }
