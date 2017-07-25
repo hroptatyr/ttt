@@ -32,6 +32,7 @@ typedef long unsigned int tv_t;
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
 #define NOT_A_TIME	((tv_t)-1ULL)
+#define NANPX		NAND32
 
 /* relevant tick dimensions */
 typedef union {
@@ -299,6 +300,143 @@ desprd(void)
 	return 0;
 }
 
+static int
+latent_ms(void)
+{
+	static px_t om = NANPX;
+	char *line = NULL;
+	size_t llen = 0UL;
+	ssize_t nrd;
+
+	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		qx_t bsz, asz;
+
+		if (UNLIKELY(push_beef(line, nrd) < 0)) {
+			continue;
+		}
+
+		/* get quantities too */
+		if (line[end] == '\t') {
+			char *on = line + end;
+			bsz = strtoqx(++on, &on);
+			asz = strtoqx(++on, &on);
+		}
+
+		/* otherwise calc new bid/ask pair */
+		with (px_t mp = (om >= q.b && om <= q.a)
+		      ? om : (q.a + q.b) / 2.df,
+		      sp = q.a - q.b) {
+			char buf[64U];
+			size_t len = 0U;
+
+			fwrite(line, 1, beg, stdout);
+			len += pxtostr(buf + len, sizeof(buf) - len, mp);
+			buf[len++] = '\t';
+			len += pxtostr(buf + len, sizeof(buf) - len, sp);
+
+			if (line[end] == '\t') {
+				qx_t mq = (bsz + asz) / 2.dd;
+				qx_t im = (asz - bsz);
+
+				buf[len++] = '\t';
+				len += qxtostr(buf + len, sizeof(buf) - len, mq);
+				buf[len++] = '\t';
+				len += qxtostr(buf + len, sizeof(buf) - len, im);
+			}
+			buf[len++] = '\n';
+			fwrite(buf, 1, len, stdout);
+
+			/* save midpoint for next round */
+			om = mp;
+		}
+	}
+
+	/* finalise our findings */
+	free(line);
+	return 0;
+}
+
+static int
+latent_ba(void)
+{
+	static px_t om = NANPX;
+	char *line = NULL;
+	size_t llen = 0UL;
+	ssize_t nrd;
+
+	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		if (UNLIKELY(push_beef(line, nrd) < 0)) {
+			continue;
+		}
+
+		/* otherwise calc new bid/ask pair */
+		with (px_t mid = (om >= q.b && om <= q.a)
+		      ? om : (q.a + q.b) / 2.df) {
+			char buf[64U];
+			size_t len = 0U;
+			const quo_t newq = {
+				quantized32(mid - spr, q.b),
+				quantized32(mid + spr, q.a)
+			};
+
+			fwrite(line, 1, beg, stdout);
+			len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
+			buf[len++] = '\t';
+			len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
+			fwrite(buf, 1, len, stdout);
+			fwrite(line + end, 1, nrd - end, stdout);
+
+			/* save midpoint for next round */
+			om = mid;
+		}
+	}
+
+	/* finalise our findings */
+	free(line);
+	return 0;
+}
+
+static int
+latent_wd(void)
+{
+	static px_t om = NANPX;
+	char *line = NULL;
+	size_t llen = 0UL;
+	ssize_t nrd;
+
+	while ((nrd = getline(&line, &llen, stdin)) > 0) {
+		if (UNLIKELY(push_beef(line, nrd) < 0)) {
+			continue;
+		}
+
+		/* otherwise calc new bid/ask pair */
+		with (px_t mid = (om >= q.b && om <= q.a)
+		      ? om : (q.a + q.b) / 2.df,
+		      sp = (q.a - q.b) / 2.df) {
+			char buf[64U];
+			size_t len = 0U;
+			const quo_t newq = {
+				quantized32(mid - (sp + spr), q.b),
+				quantized32(mid + (sp + spr), q.a)
+			};
+
+			fwrite(line, 1, beg, stdout);
+			len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
+			buf[len++] = '\t';
+			len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
+			fwrite(buf, 1, len, stdout);
+			fwrite(line + end, 1, nrd - end, stdout);
+
+			/* save midpoint for next round */
+			om = mid;
+		}
+	}
+
+	/* finalise our findings */
+	free(line);
+	return 0;
+}
+
 
 #include "mid.yucc"
 
@@ -337,10 +475,20 @@ main(int argc, char *argv[])
 		rc = desprd() < 0;
 	} else if (!argi->spread_arg || argi->spread_arg != YUCK_OPTARG_NONE) {
 		if (!widenp) {
-			rc = bidask() < 0;
+			if (argi->latent_flag) {
+				rc = latent_ba() < 0;
+			} else {
+				rc = bidask() < 0;
+			}
 		} else {
-			rc = bidask_widen() < 0;
+			if (argi->latent_flag) {
+				rc = latent_wd() < 0;
+			} else {
+				rc = bidask_widen() < 0;
+			}
 		}
+	} else if (argi->latent_flag) {
+		rc = latent_ms() < 0;
 	} else {
 		rc = midspr() < 0;
 	}
