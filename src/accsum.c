@@ -230,8 +230,8 @@ again:
 		if (on++ == NULL) {
 			goto again;
 		}
-		/* spread (cumulative) */
-		a.sprd += strtoqx(on, NULL) / 2.dd;
+		/* spread */
+		a.sprd = strtoqx(on, NULL) / 2.dd;
 		goto again;
 	}
 	/* make sure we're talking accounts */
@@ -298,13 +298,7 @@ calc_rcom(void)
 static inline qx_t
 calc_rspr(void)
 {
-	static qx_t acccom = 0.dd;
-	qx_t this = (a.sprd * l.base - a.base * l.sprd);
-	qx_t spr = this - acccom;
-
-	/* keep state */
-	acccom = this;
-	return spr;
+	return (a.sprd * l.base + a.base * l.sprd);
 }
 
 static int
