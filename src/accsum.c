@@ -16,6 +16,7 @@
 #include <arpa/inet.h>
 #include <sys/time.h>
 #include <time.h>
+#include <math.h>
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #endif	/* HAVE_DFP754_H */
@@ -287,8 +288,8 @@ offline(void)
 	tv_t tagg[countof(sstr)] = {};
 	qx_t rpnl[countof(sstr)] = {};
 	qx_t rp[countof(sstr)] = {};
-	qx_t best[countof(sstr)] = {};
-	qx_t wrst[countof(sstr)] = {};
+	qx_t best[countof(sstr)];
+	qx_t wrst[countof(sstr)];
 	/* higher valence metrics */
 	size_t wins[countof(sstr) * countof(sstr)] = {};
 	size_t cnts[countof(sstr) * countof(sstr)] = {};
@@ -298,6 +299,9 @@ offline(void)
 #define WINS(i, j)	(_M(wins, i, j))
 
 	alst = amtr = next_acc();
+
+	memset(best, -1, sizeof(best));
+	memset(wrst, -1, sizeof(wrst));
 
 	do {
 		const tv_t tdif = amtr - alst;
@@ -356,8 +360,7 @@ offline(void)
 	/* single trades */
 	fputs("\n\tavg\tbest\tworst\n", stdout);
 	for (size_t i = 1U; i < countof(sstr); i++) {
-		qx_t avg = quantized64(
-			cagg[i] ? rpnl[i] / (qx_t)cagg[i] : 0.dd, l.term);
+		qx_t avg = quantized64(rpnl[i] / (qx_t)cagg[i], l.term);
 		qx_t B = quantized64(best[i], l.term);
 		qx_t W = quantized64(wrst[i], l.term);
 
@@ -380,7 +383,7 @@ offline(void)
 			avg += rpnl[i];
 			cnt += cagg[i];
 		}
-		avg = quantized64(cnt ? avg / (qx_t)cnt : 0.dd, l.term);
+		avg = quantized64(avg / (qx_t)cnt, l.term);
 
 		B = best[1U];
 		W = wrst[1U];
@@ -404,13 +407,10 @@ offline(void)
 	/* single trades skewed averages */
 	fputs("\n\thit-r\thit-sk\tloss-sk\n", stdout);
 	for (size_t i = 1U; i < countof(sstr); i++) {
-		double r = cagg[i] ? (double)hits[i] / cagg[i] : 0.;
-		qx_t P = quantized64(
-			hits[i] ? rp[i] / (qx_t)hits[i] : 0.dd, l.term);
+		double r = fabs((double)hits[i] / (double)cagg[i]);
+		qx_t P = quantized64(rp[i] / (qx_t)hits[i], l.term);
 		qx_t L = quantized64(
-			cagg[i] - hits[i]
-			? (rpnl[i] - rp[i]) / (qx_t)(cagg[i] - hits[i])
-			: 0.dd, l.term);
+			(rpnl[i] - rp[i]) / (qx_t)(cagg[i] - hits[i]), l.term);
 
 		len = 0U;
 		buf[len++] = sstr[i];
@@ -434,10 +434,9 @@ offline(void)
 			P += rp[i];
 			s += rpnl[i];
 		}
-		r = cnt ? (double)hnt / cnt : 0.;
-		L = quantized64(
-			cnt - hnt ? (s - P) / (qx_t)(cnt - hnt) : 0.dd, l.term);
-		P = quantized64(hnt ? P / (qx_t)hnt : 0.dd, l.term);
+		r = (double)hnt / cnt;
+		L = quantized64((s - P) / (qx_t)(cnt - hnt), l.term);
+		P = quantized64(P / (qx_t)hnt, l.term);
 
 		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", r);
 		buf[len++] = '\t';

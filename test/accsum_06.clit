@@ -8,12 +8,12 @@ S	0	0	0.000000000
 
 	avg	best	worst
 L	833.33	3000.00	-1500.00
-S	0.00	0.00	0.00
+S	nan	nan	nan
 L+S	833.33	3000.00	-1500.00
 
 	hit-r	hit-sk	loss-sk
 L	0.6667	2000.00	-1500.00
-S	0.0000	0.00	0.00
+S	nan	nan	nan
 L+S	0.6667	2000.00	-1500.00
 
 	rpnl	rp	rl
