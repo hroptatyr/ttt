@@ -9,29 +9,27 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <errno.h>
-#include <netinet/in.h>
-#include <net/if.h>
-#include <sys/socket.h>
-#include <fcntl.h>
-#include <arpa/inet.h>
-#include <sys/time.h>
 #include <time.h>
 #include <math.h>
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
-#endif	/* HAVE_DFP754_H */
+#elif defined HAVE_DFP_STDLIB_H
+# include <dfp/stdlib.h>
+#elif defined HAVE_DECIMAL_H
+# include <decimal.h>
+#else
+static inline __attribute__((pure, const)) _Decimal64
+fabsd64(_Decimal64 x)
+{
+	return x >= 0 ? x : -x;
+}
+#endif
 #include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
 
 #define NSECS	(1000000000)
 #define MSECS	(1000)
-#define UDP_MULTICAST_TTL	64
-#define MCAST_ADDR	"ff05::134"
-#define MCAST_PORT	7878
-
-#undef EV_P
-#define EV_P  struct ev_loop *loop __attribute__((unused))
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
@@ -407,7 +405,7 @@ offline(void)
 	/* single trades skewed averages */
 	fputs("\n\thit-r\thit-sk\tloss-sk\n", stdout);
 	for (size_t i = 1U; i < countof(sstr); i++) {
-		double r = fabs((double)hits[i] / (double)cagg[i]);
+		double r = (double)hits[i] / (double)cagg[i];
 		qx_t P = quantized64(rp[i] / (qx_t)hits[i], l.term);
 		qx_t L = quantized64(
 			(rpnl[i] - rp[i]) / (qx_t)(cagg[i] - hits[i]), l.term);
@@ -415,7 +413,7 @@ offline(void)
 		len = 0U;
 		buf[len++] = sstr[i];
 		buf[len++] = '\t';
-		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", r);
+		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", fabs(r));
 		buf[len++] = '\t';
 		len += qxtostr(buf + len, sizeof(buf) - len, P);
 		buf[len++] = '\t';
@@ -438,7 +436,7 @@ offline(void)
 		L = quantized64((s - P) / (qx_t)(cnt - hnt), l.term);
 		P = quantized64(P / (qx_t)hnt, l.term);
 
-		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", r);
+		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", fabs(r));
 		buf[len++] = '\t';
 		len += qxtostr(buf + len, sizeof(buf) - len, P);
 		buf[len++] = '\t';
