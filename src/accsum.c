@@ -39,6 +39,7 @@ typedef long unsigned int tv_t;
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
+#define fabsqx		fabsd64
 #define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
@@ -54,8 +55,11 @@ typedef struct {
 
 typedef struct {
 	qx_t base;
+	/* terms account gross */
 	qx_t term;
+	/* terms account commissions */
 	qx_t comm;
+	/* terms account spread *gains* */
 	qx_t sprd;
 } acc_t;
 
@@ -153,17 +157,17 @@ static acc_t l;
 static tv_t
 next_acc(void)
 {
-	static acc_t newa = {
-		.base = 0.dd, .term = 0.dd, .comm = 0.dd,
-	};
 	static char *line;
 	static size_t llen;
 	static tv_t newm;
-	char *on;
 	ssize_t nrd;
+	char *on;
 
 	/* assign previous next_quo as current quo */
-	a = newa;
+	a.base = 0.dd;
+	a.term = 0.dd;
+	a.comm = 0.dd;
+	/* leave out a.sprd as we need to accumulate that ourself */
 
 again:
 	if (UNLIKELY((nrd = getline(&line, &llen, afp)) <= 0)) {
@@ -177,15 +181,17 @@ again:
 	/* snarf metronome */
 	newm = strtotv(line, &on);
 	if (grossp > 1U && UNLIKELY(!memcmp(on, "EXE\t", 4U))) {
+		qx_t b, sprd;
+
 		on += 4U;
-		/* insturment name */
+		/* instrument name */
 		on = memchr(on, '\t', eol - on);
 		if (on++ == NULL) {
 			goto again;
 		}
 		/* base qty */
-		on = memchr(on, '\t', eol - on);
-		if (on++ == NULL) {
+		b = strtoqx(on, &on);
+		if (on++ >= eol) {
 			goto again;
 		}
 		/* terms qty */
@@ -194,7 +200,8 @@ again:
 			goto again;
 		}
 		/* spread */
-		a.sprd = strtoqx(on, NULL) / 2.dd;
+		sprd = strtoqx(on, NULL) / 2.dd;
+		a.sprd += fabsqx(b) * sprd;
 		goto again;
 	}
 	/* make sure we're talking accounts */
@@ -261,7 +268,13 @@ calc_rcom(void)
 static inline qx_t
 calc_rspr(void)
 {
-	return (a.sprd * l.base + a.base * l.sprd);
+	static qx_t accspr = 0.dd;
+	qx_t this = (a.sprd * l.base - a.base * l.sprd) / (l.base - a.base);
+	qx_t spr = this - accspr;
+
+	/* keep state */
+	accspr = this;
+	return spr;
 }
 
 static int
