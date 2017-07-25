@@ -13,7 +13,17 @@
 #include <math.h>
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
-#endif	/* HAVE_DFP754_H */
+#elif defined HAVE_DFP_STDLIB_H
+# include <dfp/stdlib.h>
+#elif defined HAVE_DECIMAL_H
+# include <decimal.h>
+#else
+static inline __attribute__((pure, const)) _Decimal64
+fabsd64(_Decimal64 x)
+{
+	return x >= 0 ? x : -x;
+}
+#endif
 #include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
