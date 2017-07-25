@@ -1,12 +1,9 @@
-Usage: axp [QUOTES] < ACCOUNTS
+Usage: accsum < ACCOUNTS
 
-Analyse the market during periods of exposure.
-
-Output is number of regime switches, total time spent within a regime,
-and the total amount invested within a regime.
+Summarise trading from ACCOUNTS.
 
   -e, --edge            Treat direction changes as regime switch,
                         default: levels.
   -g, --gross           Do not take commissions into account.
-                        Use twice to not take spreads into account.
+                        Use twice not to take spreads into account.
   -v, --verbose         Print explanations.

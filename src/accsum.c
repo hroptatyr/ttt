@@ -39,6 +39,7 @@ typedef long unsigned int tv_t;
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
+#define fabsqx		fabsd64
 #define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
@@ -54,9 +55,12 @@ typedef struct {
 
 typedef struct {
 	qx_t base;
+	/* terms account gross */
 	qx_t term;
-	qx_t comb;
+	/* terms account commissions */
 	qx_t comm;
+	/* terms account spread *gains* */
+	qx_t sprd;
 } acc_t;
 
 typedef struct {
@@ -68,7 +72,6 @@ typedef struct {
 	qx_t comm;
 } eva_t;
 
-static tv_t intv = 10 * MSECS;
 static unsigned int edgp;
 static unsigned int grossp;
 static unsigned int verbp;
@@ -148,60 +151,23 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 }
 
 
-static tv_t nexv = NOT_A_TIME;
-static quo_t q;
 static acc_t a;
 static acc_t l;
-static qx_t S = 0.dd;
-
-static tv_t
-next_quo(void)
-{
-	static quo_t newq = {0.df, 0.df};
-	static char *line;
-	static size_t llen;
-	tv_t newm;
-	char *on;
-
-	/* assign previous next_quo as current quo */
-	q = newq;
-
-	if (UNLIKELY(qfp == NULL)) {
-		return NOT_A_TIME;
-	} else if (UNLIKELY(getline(&line, &llen, qfp) <= 0)) {
-		free(line);
-		return NOT_A_TIME;
-	}
-
-	newm = strtotv(line, &on);
-	/* instrument next */
-	on = strchr(on, '\t');
-	newq.b = strtopx(++on, &on);
-	newq.a = strtopx(++on, &on);
-	return newm;
-}
 
 static tv_t
 next_acc(void)
 {
-	static acc_t newa = {
-		.base = 0.dd, .term = 0.dd, .comm = 0.dd,
-	};
 	static char *line;
 	static size_t llen;
 	static tv_t newm;
-	char *on;
 	ssize_t nrd;
+	char *on;
 
 	/* assign previous next_quo as current quo */
-	a = newa;
-
-	/* set next valuation timer */
-	if (a.base) {
-		nexv = (((newm - 1UL) / intv) + 1UL) * intv;
-	} else {
-		nexv = NOT_A_TIME;
-	}
+	a.base = 0.dd;
+	a.term = 0.dd;
+	a.comm = 0.dd;
+	/* leave out a.sprd as we need to accumulate that ourself */
 
 again:
 	if (UNLIKELY((nrd = getline(&line, &llen, afp)) <= 0)) {
@@ -215,15 +181,17 @@ again:
 	/* snarf metronome */
 	newm = strtotv(line, &on);
 	if (grossp > 1U && UNLIKELY(!memcmp(on, "EXE\t", 4U))) {
+		qx_t b, sprd;
+
 		on += 4U;
-		/* insturment name */
+		/* instrument name */
 		on = memchr(on, '\t', eol - on);
 		if (on++ == NULL) {
 			goto again;
 		}
 		/* base qty */
-		on = memchr(on, '\t', eol - on);
-		if (on++ == NULL) {
+		b = strtoqx(on, &on);
+		if (on++ >= eol) {
 			goto again;
 		}
 		/* terms qty */
@@ -232,7 +200,8 @@ again:
 			goto again;
 		}
 		/* spread */
-		S += strtoqx(on, NULL) / 2.dd;
+		sprd = strtoqx(on, NULL) / 2.dd;
+		a.sprd += fabsqx(b) * sprd;
 		goto again;
 	}
 	/* make sure we're talking accounts */
@@ -250,6 +219,9 @@ again:
 	a.base = strtoqx(++on, &on);
 	if (UNLIKELY(on >= eol)) {
 		goto again;
+	} else if (l.base == a.base) {
+		/* nothing changed */
+		goto again;
 	}
 	/* terms */
 	a.term = strtoqx(++on, &on);
@@ -257,12 +229,15 @@ again:
 		goto again;
 	}
 	/* base commissions */
-	a.comb = strtoqx(++on, &on);
-	if (UNLIKELY(on >= eol)) {
-		goto again;
+	with (qx_t c) {
+		c = strtoqx(++on, &on);
+		if (UNLIKELY(on >= eol)) {
+			goto again;
+		}
+		/* terms commissions */
+		c += strtoqx(++on, &on);
+		a.comm = !grossp ? c : 0.dd;
 	}
-	/* terms commissions */
-	a.comm = strtoqx(++on, &on);
 	return newm;
 }
 
@@ -270,7 +245,7 @@ static inline qx_t
 calc_rpnl(void)
 {
 	static qx_t accpnl = 0.dd;
-	qx_t this = (a.term * l.base - a.base * l.term)  / (l.base - a.base);
+	qx_t this = (a.term * l.base - a.base * l.term) / (l.base - a.base);
 	qx_t pnl = this - accpnl;
 
 	/* keep state */
@@ -282,12 +257,24 @@ static inline qx_t
 calc_rcom(void)
 {
 	static qx_t acccom = 0.dd;
-	qx_t this = (a.comm * l.base - a.base * l.comm)  / (l.base - a.base);
+	qx_t this = (a.comm * l.base - a.base * l.comm) / (l.base - a.base);
 	qx_t com = this - acccom;
 
 	/* keep state */
 	acccom = this;
 	return com;
+}
+
+static inline qx_t
+calc_rspr(void)
+{
+	static qx_t accspr = 0.dd;
+	qx_t this = (a.sprd * l.base - a.base * l.sprd) / (l.base - a.base);
+	qx_t spr = this - accspr;
+
+	/* keep state */
+	accspr = this;
+	return spr;
 }
 
 static int
@@ -310,7 +297,6 @@ offline(void)
 #define CNTS(i, j)	(_M(cnts, i, j))
 #define WINS(i, j)	(_M(wins, i, j))
 
-	(void)next_quo();
 	alst = amtr = next_acc();
 
 	do {
@@ -323,8 +309,8 @@ offline(void)
 		CNTS(olsd, side)++;
 		/* check for winners */
 		with (qx_t r = calc_rpnl()) {
-			r += !grossp ? calc_rcom() : 0.dd;
-			r += grossp > 1U ? S : 0.dd;
+			r += calc_rcom();
+			r += calc_rspr();
 			rpnl[olsd] += r;
 			best[olsd] = best[olsd] >= r ? best[olsd] : r;
 			wrst[olsd] = wrst[olsd] <= r ? wrst[olsd] : r;
