@@ -259,12 +259,15 @@ again:
 		goto again;
 	}
 	/* base commissions */
-	a.comm = strtoqx(++on, &on);
-	if (UNLIKELY(on >= eol)) {
-		goto again;
+	with (qx_t c) {
+		c = strtoqx(++on, &on);
+		if (UNLIKELY(on >= eol)) {
+			goto again;
+		}
+		/* terms commissions */
+		c += strtoqx(++on, &on);
+		a.comm = !grossp ? c : 0.dd;
 	}
-	/* terms commissions */
-	a.comm += strtoqx(++on, &on);
 	return newm;
 }
 
@@ -337,8 +340,8 @@ offline(void)
 		CNTS(olsd, side)++;
 		/* check for winners */
 		with (qx_t r = calc_rpnl()) {
-			r += grossp > 0U ? 0.dd : calc_rcom();
-			r += grossp > 1U ? calc_rspr() : 0.dd;
+			r += calc_rcom();
+			r += calc_rspr();
 			rpnl[olsd] += r;
 			best[olsd] = best[olsd] >= r ? best[olsd] : r;
 			wrst[olsd] = wrst[olsd] <= r ? wrst[olsd] : r;
