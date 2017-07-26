@@ -101,6 +101,8 @@ typedef struct {
 	px_t lp;
 	px_t tp;
 	px_t sl;
+	/* number of rejected executions */
+	unsigned int nr;
 } ord_t;
 
 static tv_t exe_age = 60U;
@@ -109,7 +111,7 @@ static px_t comb = 0.df;
 static px_t comt = 0.df;
 static unsigned int absq;
 static unsigned int maxq;
-static unsigned int rtry;
+static tv_t rtry;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -408,7 +410,7 @@ retry:
 	}
 	/* tune to exe delay */
 	o.t += exe_age;
-	o.gtd = o.gtd ?: o.t;
+	o.gtd = o.gtd ?: rtry < NOT_A_TIME ? o.t + rtry : rtry;
 	return o;
 }
 
@@ -525,11 +527,6 @@ offline(FILE *qfp)
 			acc = alloc(acc, x, comb, comt);
 			send_acc(x.t, acc);
 
-			/* retry on rejection? */
-			if (UNLIKELY(!x.q && rtry)) {
-				continue;
-			}
-
 			/* check for brackets */
 			if (oq[i].tp) {
 				oq[noq++] = (ord_t){
@@ -556,7 +553,7 @@ offline(FILE *qfp)
 		if (UNLIKELY(stdin == NULL)) {
 			/* order file is eof'd, skip fetching more */
 			;
-		} else if (UNLIKELY(!noq || ioq < noq && oq[ioq].t < newq.t)) {
+		} else if (UNLIKELY(!noq || oq[noq - 1U].t < newq.t)) {
 			/* fill up the queue some more and do more exec'ing */
 			goto ord;
 		}
@@ -630,7 +627,14 @@ Error: commission must be given as PXb[/PXt]");
 
 	absq = argi->absqty_flag;
 	maxq = argi->maxqty_flag;
-	rtry = argi->retry_flag;
+
+	if (argi->retry_arg) {
+		if (argi->retry_arg != YUCK_OPTARG_NONE) {
+			rtry = strtoul(argi->retry_arg, NULL, 10);
+		} else {
+			rtry = NOT_A_TIME;
+		}
+	}
 
 	if (UNLIKELY((qfp = fopen(*argi->args, "r")) == NULL)) {
 		serror("\
