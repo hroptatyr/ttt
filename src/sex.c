@@ -109,6 +109,7 @@ static px_t comb = 0.df;
 static px_t comt = 0.df;
 static unsigned int absq;
 static unsigned int maxq;
+static unsigned int rtry;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -524,6 +525,11 @@ offline(FILE *qfp)
 			acc = alloc(acc, x, comb, comt);
 			send_acc(x.t, acc);
 
+			/* retry on rejection? */
+			if (UNLIKELY(!x.q && rtry)) {
+				continue;
+			}
+
 			/* check for brackets */
 			if (oq[i].tp) {
 				oq[noq++] = (ord_t){
@@ -624,6 +630,7 @@ Error: commission must be given as PXb[/PXt]");
 
 	absq = argi->absqty_flag;
 	maxq = argi->maxqty_flag;
+	rtry = argi->retry_flag;
 
 	if (UNLIKELY((qfp = fopen(*argi->args, "r")) == NULL)) {
 		serror("\
