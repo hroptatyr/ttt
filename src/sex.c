@@ -556,7 +556,7 @@ offline(FILE *qfp)
 		if (UNLIKELY(stdin == NULL)) {
 			/* order file is eof'd, skip fetching more */
 			;
-		} else if (UNLIKELY(!noq || ioq < noq && oq[ioq].t < newq.t)) {
+		} else if (UNLIKELY(!noq || oq[noq - 1U].t < newq.t)) {
 			/* fill up the queue some more and do more exec'ing */
 			goto ord;
 		}
