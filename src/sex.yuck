@@ -14,3 +14,4 @@ Simulate executions of ORDERS using QUOTES.
   -Q, --quantity=QX     Trade QX contracts per order.
   --maxqty              Allow at most two signals in the same direction.
   --absqty              Position absolute quantities.
+  --retry               Retry orders when rejected.
