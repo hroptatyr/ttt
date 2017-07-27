@@ -548,22 +548,27 @@ offline(FILE *qfp)
 			memmove(oq, oq + ioq, (noq - ioq) * sizeof(*oq));
 			noq -= ioq;
 			ioq = 0U;
-		} else if (UNLIKELY(noq >= ioq + zoq / 2U)) {
-			/* resize :( */
-			ord_t *nuq = malloc((zoq *= 16U) * sizeof(*oq));
-			memcpy(nuq, oq + ioq, (noq - ioq) * sizeof(*oq));
-			noq -= ioq;
-			ioq = 0U;
-			if (oq != _oq) {
-				free(oq);
-			}
-			oq = nuq;
 		}
 		if (UNLIKELY(stdin == NULL)) {
 			/* order file is eof'd, skip fetching more */
 			;
-		} else if (UNLIKELY(!noq || oq[noq - 1U].t < newq.t)) {
+		} else if (UNLIKELY(!noq)) {
 			/* fill up the queue some more and do more exec'ing */
+			goto ord;
+		} else if (oq[noq - 1U].t < newq.t) {
+			/* there could be more orders between Q and NEWQ
+			 * try exec'ing those as well */
+			if (UNLIKELY(noq >= ioq + zoq / 2U)) {
+				/* resize :( */
+				ord_t *nuq = malloc((zoq *= 16U) * sizeof(*oq));
+				memcpy(nuq, oq + ioq, (noq - ioq) * sizeof(*oq));
+				noq -= ioq;
+				ioq = 0U;
+				if (oq != _oq) {
+					free(oq);
+				}
+				oq = nuq;
+			}
 			goto ord;
 		}
 	}
