@@ -470,7 +470,7 @@ offline(FILE *qfp)
 			goto exe;
 		}
 		for (ord_t newo;
-		     noq < countof(oq) / 2U &&
+		     noq < countof(oq) &&
 			     (newo = yield_ord(stdin)).t < NOT_A_TIME;
 		     oq[noq++] = newo);
 		if (UNLIKELY(noq < countof(oq) / 2U)) {
