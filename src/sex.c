@@ -457,8 +457,8 @@ offline(FILE *qfp)
 	acc_t acc = {
 		.base = 0.dd, .term = 0.dd, .comb = 0.dd, .comt = 0.dd,
 	};
-	ord_t oq[256U];
-	size_t ioq = 0U, noq = 0U;
+	ord_t _oq[256U], *oq = _oq;
+	size_t ioq = 0U, noq = 0U, zoq = countof(_oq);
 	quo_t q = {NOT_A_TIME};
 
 	/* we can't do nothing before the first quote, so read that one
@@ -470,10 +470,9 @@ offline(FILE *qfp)
 			goto exe;
 		}
 		for (ord_t newo;
-		     noq < countof(oq) &&
-			     (newo = yield_ord(stdin)).t < NOT_A_TIME;
+		     noq < zoq && (newo = yield_ord(stdin)).t < NOT_A_TIME;
 		     oq[noq++] = newo);
-		if (UNLIKELY(noq < countof(oq) / 2U)) {
+		if (UNLIKELY(noq < zoq)) {
 			/* out of orders we are */
 			fclose(stdin);
 			stdin = NULL;
@@ -545,10 +544,20 @@ offline(FILE *qfp)
 		/* fast forward dead orders */
 		for (; ioq < noq && !oq[ioq].r; ioq++);
 		/* gc'ing again */
-		if (UNLIKELY(ioq >= countof(oq) / 2U)) {
+		if (UNLIKELY(ioq >= zoq / 2U)) {
 			memmove(oq, oq + ioq, (noq - ioq) * sizeof(*oq));
 			noq -= ioq;
 			ioq = 0U;
+		} else if (UNLIKELY(noq >= ioq + zoq / 2U)) {
+			/* resize :( */
+			ord_t *nuq = malloc((zoq *= 16U) * sizeof(*oq));
+			memcpy(nuq, oq + ioq, (noq - ioq) * sizeof(*oq));
+			noq -= ioq;
+			ioq = 0U;
+			if (oq != _oq) {
+				free(oq);
+			}
+			oq = nuq;
 		}
 		if (UNLIKELY(stdin == NULL)) {
 			/* order file is eof'd, skip fetching more */
@@ -566,6 +575,9 @@ offline(FILE *qfp)
 		send_exe(x);
 		acc = alloc(acc, x, comb, comt);
 		send_acc(x.t, acc);
+	}
+	if (oq != _oq) {
+		free(oq);
 	}
 	return 0;
 }
