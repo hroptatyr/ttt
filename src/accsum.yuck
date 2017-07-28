@@ -7,3 +7,4 @@ Summarise trading from ACCOUNTS.
   -g, --gross           Do not take commissions into account.
                         Use twice not to take spreads into account.
   -v, --verbose         Print explanations.
+  -t, --table           Use tabular form suitable for R and friends.

@@ -73,7 +73,6 @@ typedef struct {
 
 static unsigned int edgp;
 static unsigned int grossp;
-static unsigned int verbp;
 
 static FILE *qfp;
 static FILE *afp;
@@ -147,6 +146,12 @@ static ssize_t
 tvtostr(char *restrict buf, size_t bsz, tv_t t)
 {
 	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
+}
+
+static inline size_t
+memncpy(void *restrict buf, const void *src, size_t n)
+{
+	return memcpy(buf, src, n), n;
 }
 
 
@@ -276,21 +281,25 @@ calc_rspr(void)
 	return spr;
 }
 
+
+static const char sstr[3U] = "FLS";
+/* stats per side */
+static tv_t tagg[countof(sstr)] = {};
+static qx_t rpnl[countof(sstr)] = {};
+static qx_t rp[countof(sstr)] = {};
+static qx_t best[countof(sstr)];
+static qx_t wrst[countof(sstr)];
+/* higher valence metrics */
+static size_t wins[countof(sstr) * countof(sstr)] = {};
+static size_t cnts[countof(sstr) * countof(sstr)] = {};
+static size_t hits[countof(sstr)];
+static size_t cagg[countof(sstr)];
+
 static int
 offline(void)
 {
-	static const char sstr[3U] = "FLS";
 	tv_t alst;
 	tv_t amtr;
-	/* stats per side */
-	tv_t tagg[countof(sstr)] = {};
-	qx_t rpnl[countof(sstr)] = {};
-	qx_t rp[countof(sstr)] = {};
-	qx_t best[countof(sstr)];
-	qx_t wrst[countof(sstr)];
-	/* higher valence metrics */
-	size_t wins[countof(sstr) * countof(sstr)] = {};
-	size_t cnts[countof(sstr) * countof(sstr)] = {};
 	size_t olsd = 0U;
 #define _M(a, i, j)	(a[i + countof(sstr) * j])
 #define CNTS(i, j)	(_M(cnts, i, j))
@@ -324,13 +333,6 @@ offline(void)
 		olsd = side;
 	} while ((l = a, alst = amtr, amtr = next_acc()) < NOT_A_TIME);
 
-	char buf[256U];
-	size_t hits[countof(sstr)];
-	size_t cagg[countof(sstr)];
-	size_t len;
-
-	/* overview */
-	fputs("\thits\tcount\ttime\n", stdout);
 	for (size_t i = 0U; i < countof(sstr); i++) {
 		hits[i] = 0U;
 		cagg[i] = 0U;
@@ -342,6 +344,19 @@ offline(void)
 		for (size_t j = 0U; j < countof(sstr); j++) {
 			cagg[i] += CNTS(j, i);
 		}
+	}
+	return 0;
+}
+
+static void
+prnt_matrix(void)
+{
+	char buf[256U];
+	size_t len;
+
+	/* overview */
+	fputs("\thits\tcount\ttime\n", stdout);
+	for (size_t i = 0U; i < countof(sstr); i++) {
 		len = 0U;
 		buf[len++] = sstr[i];
 		buf[len++] = '\t';
@@ -374,7 +389,7 @@ offline(void)
 
 		fwrite(buf, 1, len, stdout);
 	}
-	len = (memcpy(buf, "L+S\t", 4U), 4U);
+	len = memncpy(buf, "L+S\t", 4U);
 	with (qx_t avg = 0.dd, B, W) {
 		size_t cnt = 0U;
 		for (size_t i = 1U; i < countof(sstr); i++) {
@@ -422,7 +437,7 @@ offline(void)
 
 		fwrite(buf, 1, len, stdout);
 	}
-	len = (memcpy(buf, "L+S\t", 4U), 4U);
+	len = memncpy(buf, "L+S\t", 4U);
 	with (qx_t s = 0.dd, P = 0.dd, L = 0.dd) {
 		double r;
 		size_t hnt = 0U, cnt = 0U;
@@ -465,7 +480,7 @@ offline(void)
 
 		fwrite(buf, 1, len, stdout);
 	}
-	len = (memcpy(buf, "L+S\t", 4U), 4U);
+	len = memncpy(buf, "L+S\t", 4U);
 	with (qx_t s = 0.dd, P = 0.dd, L = 0.dd) {
 		for (size_t i = 1U; i < countof(sstr); i++) {
 			s += rpnl[i];
@@ -488,21 +503,21 @@ offline(void)
 		fwrite(buf, 1, len, stdout);
 	}
 
-	/* transiitions */
+	/* transitions */
 	len = 0U;
 	buf[len++] = '\n';
-	len += (memcpy(buf + len, "count", 5U), 5U);
+	len += memncpy(buf + len, "count", 5U);
 	for (size_t i = 0U; i < countof(sstr); i++) {
 		buf[len++] = '\t';
 		buf[len++] = sstr[i];
-		len += (memcpy(buf + len, "new", 3U), 3U);
+		len += memncpy(buf + len, "new", 3U);
 	}
 	buf[len++] = '\n';
 	fwrite(buf, 1, len, stdout);
 	for (size_t i = 0U; i < countof(sstr); i++) {
 		len = 0U;
 		buf[len++] = sstr[i];
-		len += (memcpy(buf + len, "old", 3U), 3U);
+		len += memncpy(buf + len, "old", 3U);
 		for (size_t j = 0U; j < countof(sstr); j++) {
 			const size_t v = CNTS(i, j);
 			buf[len++] = '\t';
@@ -515,18 +530,18 @@ offline(void)
 	/* hits */
 	len = 0U;
 	buf[len++] = '\n';
-	len += (memcpy(buf + len, "hits", 4U), 4U);
+	len += memncpy(buf + len, "hits", 4U);
 	for (size_t i = 0U; i < countof(sstr); i++) {
 		buf[len++] = '\t';
 		buf[len++] = sstr[i];
-		len += (memcpy(buf + len, "new", 3U), 3U);
+		len += memncpy(buf + len, "new", 3U);
 	}
 	buf[len++] = '\n';
 	fwrite(buf, 1, len, stdout);
 	for (size_t i = 0U; i < countof(sstr); i++) {
 		len = 0U;
 		buf[len++] = sstr[i];
-		len += (memcpy(buf + len, "old", 3U), 3U);
+		len += memncpy(buf + len, "old", 3U);
 		for (size_t j = 0U; j < countof(sstr); j++) {
 			const size_t v = WINS(i, j);
 			buf[len++] = '\t';
@@ -535,11 +550,12 @@ offline(void)
 		buf[len++] = '\n';
 		fwrite(buf, 1, len, stdout);
 	}
+	return;
+}
 
-	if (LIKELY(!verbp)) {
-		return 0;
-	}
-
+static void
+prnt_expla(void)
+{
 	/* print an explanation */
 	static const char x[] = "\
 \f\n\
@@ -569,7 +585,277 @@ rl\trealised loss\n\
 ";
 
 	fwrite(x, sizeof(*x), countof(x), stdout);
-	return 0;
+	return;
+}
+
+static void
+prnt_table(void)
+{
+	char buf[512U];
+	size_t len;
+
+	/* overview */
+	for (size_t i = 0U; i < countof(sstr); i++) {
+		len = 0U;
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "hits", 4U);
+		buf[len++] = '\t';
+		len += snprintf(buf + len, sizeof(buf) - len, "%zu", hits[i]);
+		buf[len++] = '\n';
+
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "count", 5U);
+		buf[len++] = '\t';
+		len += snprintf(buf + len, sizeof(buf) - len, "%zu", cagg[i]);
+		buf[len++] = '\n';
+
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "time", 4U);
+		buf[len++] = '\t';
+		len += tvtostr(buf + len, sizeof(buf) - len, tagg[i]);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+
+	/* single trades */
+	for (size_t i = 1U; i < countof(sstr); i++) {
+		qx_t avg = quantized64(rpnl[i] / (qx_t)cagg[i], l.term);
+		qx_t B = quantized64(best[i], l.term);
+		qx_t W = quantized64(wrst[i], l.term);
+
+		len = 0U;
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "avg", 3U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, avg);
+		buf[len++] = '\n';
+
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "best", 4U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, B);
+		buf[len++] = '\n';
+
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "worst", 5U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, W);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+	with (qx_t avg = 0.dd, B, W) {
+		size_t cnt = 0U;
+		for (size_t i = 1U; i < countof(sstr); i++) {
+			avg += rpnl[i];
+			cnt += cagg[i];
+		}
+		avg = quantized64(avg / (qx_t)cnt, l.term);
+
+		B = best[1U];
+		W = wrst[1U];
+		for (size_t i = 2U; i < countof(sstr); i++) {
+			B = best[i] > B ? best[i] : B;
+			W = wrst[i] < W ? wrst[i] : W;
+		}
+		B = quantized64(B, l.term);
+		W = quantized64(W, l.term);
+
+		len = 0U;
+		len += memncpy(buf + len, "L+S_", 4U);
+		len += memncpy(buf + len, "avg", 3U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, avg);
+		buf[len++] = '\n';
+
+		len += memncpy(buf + len, "L+S_", 4U);
+		len += memncpy(buf + len, "best", 4U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, B);
+		buf[len++] = '\n';
+
+		len += memncpy(buf + len, "L+S_", 4U);
+		len += memncpy(buf + len, "worst", 5U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, W);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+
+	/* single trades skewed averages */
+	for (size_t i = 1U; i < countof(sstr); i++) {
+		double r = (double)hits[i] / (double)cagg[i];
+		qx_t P = quantized64(rp[i] / (qx_t)hits[i], l.term);
+		qx_t L = quantized64(
+			(rpnl[i] - rp[i]) / (qx_t)(cagg[i] - hits[i]), l.term);
+
+		len = 0U;
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "hit-r", 5U);
+		buf[len++] = '\t';
+		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", fabs(r));
+		buf[len++] = '\n';
+
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "hit-sk", 6U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, P);
+		buf[len++] = '\n';
+
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "loss-sk", 7U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, L);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+	with (qx_t s = 0.dd, P = 0.dd, L = 0.dd) {
+		double r;
+		size_t hnt = 0U, cnt = 0U;
+		for (size_t i = 1U; i < countof(sstr); i++) {
+			hnt += hits[i];
+			cnt += cagg[i];
+			P += rp[i];
+			s += rpnl[i];
+		}
+		r = (double)hnt / cnt;
+		L = quantized64((s - P) / (qx_t)(cnt - hnt), l.term);
+		P = quantized64(P / (qx_t)hnt, l.term);
+
+		len = 0U;
+		len += memncpy(buf + len, "L+S_", 4U);
+		len += memncpy(buf + len, "hit-r", 5U);
+		buf[len++] = '\t';
+		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", fabs(r));
+		buf[len++] = '\n';
+
+		len += memncpy(buf + len, "L+S_", 4U);
+		len += memncpy(buf + len, "hit-sk", 6U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, P);
+		buf[len++] = '\n';
+
+		len += memncpy(buf + len, "L+S_", 4U);
+		len += memncpy(buf + len, "loss-sk", 7U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, L);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+
+	/* rpnl */
+	for (size_t i = 1U; i < countof(sstr); i++) {
+		qx_t r = quantized64(rpnl[i], l.term);
+		qx_t P = quantized64(rp[i], l.term);
+		qx_t L = r - P;
+
+		len = 0U;
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "rpnl", 4U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, r);
+		buf[len++] = '\n';
+
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "rp", 2U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, P);
+		buf[len++] = '\n';
+
+		buf[len++] = sstr[i];
+		buf[len++] = '_';
+		len += memncpy(buf + len, "rl", 2U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, L);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+	with (qx_t s = 0.dd, P = 0.dd, L = 0.dd) {
+		for (size_t i = 1U; i < countof(sstr); i++) {
+			s += rpnl[i];
+		}
+		s = quantized64(s, l.term);
+
+		for (size_t i = 1U; i < countof(sstr); i++) {
+			P += rp[i];
+		}
+		P = quantized64(P, l.term);
+		L = s - P;
+
+		len = 0U;
+		len += memncpy(buf + len, "L+S_", 4U);
+		len += memncpy(buf + len, "rpnl", 4U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, s);
+		buf[len++] = '\n';
+
+		len += memncpy(buf + len, "L+S_", 4U);
+		len += memncpy(buf + len, "rp", 2U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, P);
+		buf[len++] = '\n';
+
+		len += memncpy(buf + len, "L+S_", 4U);
+		len += memncpy(buf + len, "rl", 2U);
+		buf[len++] = '\t';
+		len += qxtostr(buf + len, sizeof(buf) - len, L);
+		buf[len++] = '\n';
+
+		fwrite(buf, 1, len, stdout);
+	}
+
+	/* transitions */
+	for (size_t i = 0U; i < countof(sstr); i++) {
+		len = 0U;
+		for (size_t j = 0U; j < countof(sstr); j++) {
+			const size_t v = CNTS(i, j);
+
+			len += memncpy(buf + len, "count_", 6U);
+			buf[len++] = sstr[i];
+			len += memncpy(buf + len, "old_", 4U);
+			buf[len++] = sstr[j];
+			len += memncpy(buf + len, "new", 3U);
+			buf[len++] = '\t';
+			len += snprintf(buf + len, sizeof(buf) - len, "%zu", v);
+			buf[len++] = '\n';
+		}
+		fwrite(buf, 1, len, stdout);
+	}
+
+	/* hits */
+	for (size_t i = 0U; i < countof(sstr); i++) {
+		len = 0U;
+		for (size_t j = 0U; j < countof(sstr); j++) {
+			const size_t v = WINS(i, j);
+
+			len += memncpy(buf + len, "hits_", 5U);
+			buf[len++] = sstr[i];
+			len += memncpy(buf + len, "old_", 4U);
+			buf[len++] = sstr[j];
+			len += memncpy(buf + len, "new", 3U);
+			buf[len++] = '\t';
+			len += snprintf(buf + len, sizeof(buf) - len, "%zu", v);
+			buf[len++] = '\n';
+		}
+		fwrite(buf, 1, len, stdout);
+	}
+	return;
 }
 
 
@@ -588,7 +874,6 @@ main(int argc, char *argv[])
 
 	edgp = argi->edge_flag;
 	grossp = argi->gross_flag;
-	verbp = argi->verbose_flag;
 
 	if (UNLIKELY((afp = stdin) == NULL)) {
 		errno = 0, serror("\
@@ -608,6 +893,15 @@ Error: cannot open QUOTES file `%s'", *argi->args);
 
 	/* offline mode */
 	rc = offline();
+
+	if (!argi->table_flag) {
+		prnt_matrix();
+		if (argi->verbose_flag) {
+			prnt_expla();
+		}
+	} else {
+		prnt_table();
+	}
 
 	if (qfp) {
 		fclose(qfp);
