@@ -75,6 +75,8 @@ typedef struct {
 static unsigned int grossp;
 static const char *cont;
 static size_t conz;
+/* rewind metronome by this */
+static tv_t msub;
 
 static FILE *afp;
 
@@ -288,7 +290,7 @@ send_rpl(tv_t m, qx_t r)
 	char buf[256U];
 	size_t len;
 
-	len = tvtostr(buf, sizeof(buf), m);
+	len = tvtostr(buf, sizeof(buf), m - msub);
 	buf[len++] = '\t';
 	len += memncpy(buf + len, "RPL\t", 4U);
 	len += memncpy(buf + len, cont, conz);
@@ -338,6 +340,10 @@ main(int argc, char *argv[])
 	if (argi->pair_arg) {
 		cont = argi->pair_arg;
 		conz = strlen(cont);
+	}
+
+	if (argi->rewind_arg) {
+		msub = strtotv(argi->rewind_arg, NULL);
 	}
 
 	grossp = argi->gross_flag;
