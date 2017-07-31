@@ -1,0 +1,7 @@
+Usage: accrpl < ACCOUNTS
+
+Extract realised profits/losses from ACCOUNTS.
+
+  --pair=X              In output tag p/l's as X.
+  -g, --gross           Do not take commissions into account.
+                        Use twice not to take spreads into account.

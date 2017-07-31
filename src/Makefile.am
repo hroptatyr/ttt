@@ -158,6 +158,17 @@ accsum_LDFLAGS += $(dfp754_LIBS)
 accsum_LDADD = libmydfp.a
 BUILT_SOURCES += accsum.yucc
 
+bin_PROGRAMS += accrpl
+accrpl_SOURCES = accrpl.c accrpl.yuck
+accrpl_SOURCES += version.c version.h
+accrpl_CPPFLAGS = $(AM_CPPFLAGS)
+accrpl_CPPFLAGS += $(dfp754_CFLAGS)
+accrpl_CPPFLAGS += -DHAVE_VERSION_H
+accrpl_LDFLAGS = $(AM_LDFLAGS)
+accrpl_LDFLAGS += $(dfp754_LIBS)
+accrpl_LDADD = libmydfp.a
+BUILT_SOURCES += accrpl.yucc
+
 bin_PROGRAMS += xevent
 xevent_SOURCES = xevent.c xevent.yuck
 xevent_SOURCES += version.c version.h
