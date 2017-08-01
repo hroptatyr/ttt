@@ -33,6 +33,7 @@ typedef long unsigned int tv_t;
 #define qxtostr		d64tostr
 #define NOT_A_TIME	((tv_t)-1ULL)
 #define NANPX		NAND32
+#define isnanpx		isnand32
 
 /* relevant tick dimensions */
 typedef union {
@@ -96,6 +97,12 @@ out:
 	return r;
 }
 
+static inline size_t
+npxtostr(char *restrict buf, size_t bsz, px_t p)
+{
+	return !isnanpx(p) ? pxtostr(buf, bsz, p) : 0;
+}
+
 
 static quo_t q;
 static size_t beg;
@@ -118,10 +125,15 @@ push_beef(char *ln, size_t UNUSED(lz))
 	beg = ++on - ln;
 
 	/* snarf quotes */
-	if (!(q.b = strtopx(on, &on)) || *on++ != '\t' ||
-	    !(q.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
-		return -1;
+	with (const char *str = on) {
+		q.b = strtopx(str, &on);
+		q.b = on > str ? q.b : NANPX;
 	}
+	with (const char *str = ++on) {
+		q.a = strtopx(str, &on);
+		q.a = on > str ? q.a : NANPX;
+	}
+
 	end = on - ln;
 	return 0;
 }
@@ -148,9 +160,9 @@ bidask(void)
 			};
 
 			fwrite(line, 1, beg, stdout);
-			len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
+			len += npxtostr(buf + len, sizeof(buf) - len, newq.b);
 			buf[len++] = '\t';
-			len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
+			len += npxtostr(buf + len, sizeof(buf) - len, newq.a);
 			fwrite(buf, 1, len, stdout);
 			fwrite(line + end, 1, nrd - end, stdout);
 		}
@@ -183,9 +195,9 @@ bidask_widen(void)
 			};
 
 			fwrite(line, 1, beg, stdout);
-			len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
+			len += npxtostr(buf + len, sizeof(buf) - len, newq.b);
 			buf[len++] = '\t';
-			len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
+			len += npxtostr(buf + len, sizeof(buf) - len, newq.a);
 			fwrite(buf, 1, len, stdout);
 			fwrite(line + end, 1, nrd - end, stdout);
 		}
@@ -223,9 +235,9 @@ midspr(void)
 			size_t len = 0U;
 
 			fwrite(line, 1, beg, stdout);
-			len += pxtostr(buf + len, sizeof(buf) - len, mp);
+			len += npxtostr(buf + len, sizeof(buf) - len, mp);
 			buf[len++] = '\t';
-			len += pxtostr(buf + len, sizeof(buf) - len, sp);
+			len += npxtostr(buf + len, sizeof(buf) - len, sp);
 
 			if (line[end] == '\t') {
 				qx_t mq = (bsz + asz) / 2.dd;
@@ -277,9 +289,9 @@ desprd(void)
 			};
 
 			fwrite(line, 1, beg, stdout);
-			len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
+			len += npxtostr(buf + len, sizeof(buf) - len, newq.b);
 			buf[len++] = '\t';
-			len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
+			len += npxtostr(buf + len, sizeof(buf) - len, newq.a);
 
 			if (line[end] == '\t') {
 				qx_t bq = mq - im / 2.dd;
@@ -330,9 +342,9 @@ latent_ms(void)
 			size_t len = 0U;
 
 			fwrite(line, 1, beg, stdout);
-			len += pxtostr(buf + len, sizeof(buf) - len, mp);
+			len += npxtostr(buf + len, sizeof(buf) - len, mp);
 			buf[len++] = '\t';
-			len += pxtostr(buf + len, sizeof(buf) - len, sp);
+			len += npxtostr(buf + len, sizeof(buf) - len, sp);
 
 			if (line[end] == '\t') {
 				qx_t mq = (bsz + asz) / 2.dd;
@@ -380,9 +392,9 @@ latent_ba(void)
 			};
 
 			fwrite(line, 1, beg, stdout);
-			len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
+			len += npxtostr(buf + len, sizeof(buf) - len, newq.b);
 			buf[len++] = '\t';
-			len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
+			len += npxtostr(buf + len, sizeof(buf) - len, newq.a);
 			fwrite(buf, 1, len, stdout);
 			fwrite(line + end, 1, nrd - end, stdout);
 
@@ -421,9 +433,9 @@ latent_wd(void)
 			};
 
 			fwrite(line, 1, beg, stdout);
-			len += pxtostr(buf + len, sizeof(buf) - len, newq.b);
+			len += npxtostr(buf + len, sizeof(buf) - len, newq.b);
 			buf[len++] = '\t';
-			len += pxtostr(buf + len, sizeof(buf) - len, newq.a);
+			len += npxtostr(buf + len, sizeof(buf) - len, newq.a);
 			fwrite(buf, 1, len, stdout);
 			fwrite(line + end, 1, nrd - end, stdout);
 
