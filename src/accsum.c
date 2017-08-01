@@ -10,7 +10,6 @@
 #include <stdarg.h>
 #include <errno.h>
 #include <time.h>
-#include <math.h>
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #elif defined HAVE_DFP_STDLIB_H
@@ -152,6 +151,27 @@ static inline size_t
 memncpy(void *restrict buf, const void *src, size_t n)
 {
 	return memcpy(buf, src, n), n;
+}
+
+static ssize_t
+dtostr4(char *restrict buf, size_t UNUSED(bsz), double x)
+{
+/* works best for X in [0,1] */
+	size_t len = 0U;
+
+	if (x <= 1. && x >= 0.) {
+		unsigned int y = (unsigned int)(x * 100000.);
+
+		y = y / 10 + ((y % 10) >= 5);
+		buf[len++] = (char)((y >= 10000U) ^ '0');
+		buf[len++] = '.';
+		for (size_t i = 0U; i < 4U; i++, y *= 10U) {
+			buf[len++] = (char)((y / 1000U) % 10U ^ '0');
+		}
+		return len;
+	}
+	/* otherwise we say it's NAN */
+	return memncpy(buf, "nan", 3U);
 }
 
 
@@ -428,7 +448,7 @@ prnt_matrix(void)
 		len = 0U;
 		buf[len++] = sstr[i];
 		buf[len++] = '\t';
-		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", fabs(r));
+		len += dtostr4(buf + len, sizeof(buf) - len, r);
 		buf[len++] = '\t';
 		len += qxtostr(buf + len, sizeof(buf) - len, P);
 		buf[len++] = '\t';
@@ -451,7 +471,7 @@ prnt_matrix(void)
 		L = quantized64((s - P) / (qx_t)(cnt - hnt), l.term);
 		P = quantized64(P / (qx_t)hnt, l.term);
 
-		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", fabs(r));
+		len += dtostr4(buf + len, sizeof(buf) - len, r);
 		buf[len++] = '\t';
 		len += qxtostr(buf + len, sizeof(buf) - len, P);
 		buf[len++] = '\t';
@@ -702,7 +722,7 @@ prnt_table(void)
 		buf[len++] = '_';
 		len += memncpy(buf + len, "hit-r", 5U);
 		buf[len++] = '\t';
-		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", fabs(r));
+		len += dtostr4(buf + len, sizeof(buf) - len, r);
 		buf[len++] = '\n';
 
 		buf[len++] = sstr[i];
@@ -738,7 +758,7 @@ prnt_table(void)
 		len += memncpy(buf + len, "L+S_", 4U);
 		len += memncpy(buf + len, "hit-r", 5U);
 		buf[len++] = '\t';
-		len += snprintf(buf + len, sizeof(buf) - len, "%.4f", fabs(r));
+		len += dtostr4(buf + len, sizeof(buf) - len, r);
 		buf[len++] = '\n';
 
 		len += memncpy(buf + len, "L+S_", 4U);
