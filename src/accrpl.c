@@ -285,17 +285,19 @@ calc_rspr(void)
 }
 
 static void
-send_rpl(tv_t m, qx_t r)
+send_rpl(tv_t m, tv_t rt, qx_t r)
 {
 	char buf[256U];
-	size_t len;
+	size_t len = 0U;
 
-	len = tvtostr(buf, sizeof(buf), m - msub);
+	len += tvtostr(buf + len, sizeof(buf) - len, m - msub);
 	buf[len++] = '\t';
 	len += memncpy(buf + len, "RPL\t", 4U);
 	len += memncpy(buf + len, cont, conz);
 	buf[len++] = '\t';
 	len += qxtostr(buf + len, sizeof(buf) - len, r);
+	buf[len++] = '\t';
+	len += tvtostr(buf + len, sizeof(buf) - len, rt - m);
 	buf[len++] = '\n';
 
 	fwrite(buf, 1, len, stdout);
@@ -317,7 +319,7 @@ offline(void)
 		r += calc_rspr();
 
 		if (LIKELY(alst < NOT_A_TIME) && l.base) {
-			send_rpl(alst, quantizeqx(r, l.term));
+			send_rpl(alst, amtr, quantizeqx(r, l.term));
 		}
 	} while ((l = a, alst = amtr, amtr = next_acc()) < NOT_A_TIME);
 	return 0;
