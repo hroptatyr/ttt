@@ -288,14 +288,21 @@ static void
 send_rpl(tv_t m, tv_t rt, qx_t r)
 {
 	char buf[256U];
-	size_t len = 0U;
+	size_t len = 0U, lem;
 
 	len += tvtostr(buf + len, sizeof(buf) - len, m - msub);
 	buf[len++] = '\t';
+	lem = len;
 	len += memncpy(buf + len, "RPL\t", 4U);
 	len += memncpy(buf + len, cont, conz);
 	buf[len++] = '\t';
 	len += qxtostr(buf + len, sizeof(buf) - len, r);
+	buf[len++] = '\n';
+
+	/* exposure time */
+	len += memncpy(buf + len, buf + 0, lem);
+	len += memncpy(buf + len, "XPT\t", 4U);
+	len += memncpy(buf + len, cont, conz);
 	buf[len++] = '\t';
 	len += tvtostr(buf + len, sizeof(buf) - len, rt - m);
 	buf[len++] = '\n';
