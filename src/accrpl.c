@@ -316,7 +316,7 @@ offline(void)
 		r += calc_rcom();
 		r += calc_rspr();
 
-		if (LIKELY(alst < NOT_A_TIME)) {
+		if (LIKELY(alst < NOT_A_TIME) && l.base) {
 			send_rpl(alst, quantizeqx(r, l.term));
 		}
 	} while ((l = a, alst = amtr, amtr = next_acc()) < NOT_A_TIME);
