@@ -228,7 +228,7 @@ send_exe(exe_t x)
 
 	len = tvtostr(buf, sizeof(buf), x.t);
 	buf[len++] = '\t';
-	len += (memcpy(buf + len, (x.q ? vexe : vrej), strlenof(vexe)),
+	len += (memcpy(buf + len, (isnanpx(x.p) ? vrej : vexe), strlenof(vexe)),
 		strlenof(vexe));
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -296,10 +296,6 @@ try_exec(ord_t o, quo_t q)
 		} else if (o.q < 0.dd) {
 			p = q.a;
 		} else {
-			p = 0.df;
-		}
-		if (UNLIKELY(isnanpx(p))) {
-			/* reject */
 			break;
 		}
 		return (exe_t){t, p, -o.q, s, age};
@@ -308,24 +304,26 @@ try_exec(ord_t o, quo_t q)
 		/* otherwise do nothing */
 		break;
 	}
-	return (exe_t){t, 0.df, 0.dd, s, age};
+	return (exe_t){t, NANPX, o.q, s, age};
 }
 
 static acc_t
 alloc(acc_t a, exe_t x, px_t cb/*base comm*/, px_t ct/*terms coommission*/)
 {
 /* allocate execution X to account A. */
-	/* calc accounts */
-	a.base += x.q;
-	a.term -= x.q * x.p;
-	a.comb -= fabsd64(x.q) * cb;
-	a.comt -= fabsd64(x.q * x.p) * ct;
+	if (LIKELY(!isnanpx(x.p))) {
+		/* calc accounts */
+		a.base += x.q;
+		a.term -= x.q * x.p;
+		a.comb -= fabsd64(x.q) * cb;
+		a.comt -= fabsd64(x.q * x.p) * ct;
 
-	/* quantize to make them look nicer */
-	a.base = quantized64(a.base, 0.00dd);
-	a.term = quantized64(a.term, 0.00dd);
-	a.comb = quantized64(a.comb, 0.00dd);
-	a.comt = quantized64(a.comt, 0.00dd);
+		/* quantize to make them look nicer */
+		a.base = quantized64(a.base, 0.00dd);
+		a.term = quantized64(a.term, 0.00dd);
+		a.comb = quantized64(a.comb, 0.00dd);
+		a.comt = quantized64(a.comt, 0.00dd);
+	}
 	return a;
 }
 
@@ -459,7 +457,7 @@ offline(FILE *qfp)
 	};
 	ord_t _oq[256U], *oq = _oq;
 	size_t ioq = 0U, noq = 0U, zoq = countof(_oq);
-	quo_t q = {NOT_A_TIME};
+	quo_t q = {NOT_A_TIME, NANPX, NANPX};
 
 	/* we can't do nothing before the first quote, so read that one
 	 * as a reference and fast forward orders beyond that point */
@@ -510,14 +508,15 @@ offline(FILE *qfp)
 				: oq[i].q;
 			/* try executing him */
 			x = try_exec(oq[i], q);
-			if (!x.q && oq[i].gtd > x.t) {
+			if (isnanpx(x.p) && oq[i].gtd > x.t) {
 				continue;
 			}
 			/* massage execution */
 			x.q -= !absq ||
 				(oq[i].r & RGM_CANCEL) == RGM_CANCEL ||
 				x.q > 0.dd && acc.base > 0.dd ||
-				x.q < 0.dd && acc.base < 0.dd
+				x.q < 0.dd && acc.base < 0.dd ||
+				isnanpx(x.p)
 				? 0.dd
 				: acc.base;
 			x.q = !maxq || acc.base != x.q ? x.q : 0.dd;
