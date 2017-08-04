@@ -1,10 +1,10 @@
 /*** nifty.h -- generally handy macroes
  *
- * Copyright (C) 2009-2016 Sebastian Freundt
+ * Copyright (C) 2009-2017 Sebastian Freundt
  *
  * Author:  Sebastian Freundt <freundt@ga-group.nl>
  *
- * This file is part of vwapmom.
+ * This file is part of ttt.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -87,7 +87,7 @@
 	     paste(__ep, __LINE__);					\
 	     errno = paste(__er, __LINE__), paste(__ep, __LINE__) = 0)
 
-static __inline void*
+static inline void*
 deconst(const void *cp)
 {
 	union {
