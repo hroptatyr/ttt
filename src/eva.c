@@ -19,28 +19,18 @@
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #endif	/* HAVE_DFP754_H */
-#include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
 #include "hash.h"
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
-#define UDP_MULTICAST_TTL	64
-#define MCAST_ADDR	"ff05::134"
-#define MCAST_PORT	7878
-
-#undef EV_P
-#define EV_P  struct ev_loop *loop __attribute__((unused))
+#include "tv.h"
+#include "nifty.h"
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
-typedef long unsigned int tv_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
 typedef struct {
@@ -115,59 +105,6 @@ strtohx(const char *x, char **on)
 	return res;
 }
 
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
-}
-
 
 static ssize_t
 send_eva(eva_t x)
@@ -209,7 +146,7 @@ eva(tv_t t, acc_t a, quo_t q)
 }
 
 
-static tv_t nexv = NOT_A_TIME;
+static tv_t nexv = NATV;
 static quo_t q;
 static acc_t a;
 
@@ -227,12 +164,12 @@ next_quo(void)
 
 	if (UNLIKELY(getline(&line, &llen, qfp) <= 0)) {
 		free(line);
-		return NOT_A_TIME;
+		return NATV;
 	}
 
 	newm = strtotv(line, &on);
 	/* instrument next */
-	on = strchr(on, '\t');
+	on = strchr(++on, '\t');
 	newq.b = strtopx(++on, &on);
 	newq.a = strtopx(++on, &on);
 	return newm;
@@ -257,19 +194,19 @@ next_acc(void)
 	if (a.base) {
 		nexv = (((newm - 1UL) / intv) + 1UL) * intv;
 	} else {
-		nexv = NOT_A_TIME;
+		nexv = NATV;
 	}
 
 again:
 	if (UNLIKELY(getline(&line, &llen, afp) <= 0)) {
 		free(line);
-		return NOT_A_TIME;
+		return NATV;
 	}
 
 	/* snarf metronome */
 	newm = strtotv(line, &on);
 	/* make sure we're talking accounts */
-	if (UNLIKELY(memcmp(on, "ACC\t", 4U))) {
+	if (UNLIKELY(memcmp(++on, "ACC\t", 4U))) {
 		goto again;
 	}
 	on += 4U;
@@ -307,7 +244,7 @@ offline(void)
 		if (amtr <= qmtr) {
 			amtr = next_acc();
 		}
-	} while (amtr < NOT_A_TIME || qmtr < NOT_A_TIME);
+	} while (amtr < NATV || qmtr < NATV);
 	return 0;
 }
 
@@ -343,7 +280,7 @@ Error: interval argument cannot be naught");
 			goto out;
 		}
 		/* turn into milliseconds */
-		intv *= MSECS;
+		intv *= NSECS;
 	}
 
 	if (UNLIKELY((afp = stdin) == NULL)) {

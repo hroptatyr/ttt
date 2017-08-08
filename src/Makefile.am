@@ -94,6 +94,7 @@ BUILT_SOURCES += sex.yucc
 
 bin_PROGRAMS += eva
 eva_SOURCES = eva.c eva.yuck
+eva_SOURCES += tv.c tv.h
 eva_SOURCES += hash.c hash.h
 eva_SOURCES += version.c version.h
 eva_CPPFLAGS = $(AM_CPPFLAGS)
