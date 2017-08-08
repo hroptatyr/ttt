@@ -38,23 +38,12 @@ typedef struct {
 	double rate;
 } pareto_t;
 
-typedef struct {
-	tv_t t;
-	enum {
-		UNIT_NONE,
-		UNIT_NSECS,
-		UNIT_DAYS,
-		UNIT_MONTHS,
-		UNIT_YEARS,
-	} u;
-} tvu_t;
-
 static tvu_t intv;
 
 static unsigned int highbits = 1U;
 static unsigned int elapsp;
 static unsigned int allp;
-static tv_t pbase;
+static tvu_t pbase;
 
 #if defined __INTEL_COMPILER
 # pragma warning (disable:981)
@@ -82,108 +71,6 @@ memncpy(void *restrict tgt, const void *src, size_t zrc)
 {
 	(void)memcpy(tgt, src, zrc);
 	return zrc;
-}
-
-static tvu_t
-strtotvu(const char *str, char **endptr)
-{
-	char *on;
-	tvu_t r;
-
-	if (!(r.t = strtoul(str, &on, 10))) {
-		return (tvu_t){};
-	}
-	switch (*on++) {
-	secs:
-	case '\0':
-	case 'S':
-	case 's':
-		/* seconds, don't fiddle */
-		r.t *= NSECS;
-	msecs:
-		r.u = UNIT_NSECS;
-		break;
-
-	case 'm':
-	case 'M':
-		switch (*on) {
-		case '\0':
-			/* they want minutes, oh oh */
-			r.t *= 60UL;
-			goto secs;
-		case 's':
-		case 'S':
-			/* milliseconds it is then */
-			goto msecs;
-		case 'o':
-		case 'O':
-			r.u = UNIT_MONTHS;
-			break;
-		default:
-			goto invalid;
-		}
-		break;
-
-	case 'y':
-	case 'Y':
-		r.u = UNIT_YEARS;
-		break;
-
-	case 'h':
-	case 'H':
-		r.t *= 60U * 60U;
-		goto secs;
-	case 'd':
-	case 'D':
-		r.u = UNIT_DAYS;
-		break;
-
-	default:
-	invalid:
-		errno = 0, serror("\
-Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
-		return (tvu_t){};
-	}
-	if (endptr != NULL) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-cttostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	struct tm *tm;
-	time_t u;
-
-	switch (intv.u) {
-	default:
-	case UNIT_NONE:
-		memcpy(buf, "ALL", 3U);
-		return 3U;
-	case UNIT_NSECS:
-		return tvtostr(buf, bsz, t);
-	case UNIT_DAYS:
-	case UNIT_MONTHS:
-	case UNIT_YEARS:
-		break;
-	}
-
-	u = t / MSECS;
-	u--;
-	tm = gmtime(&u);
-
-	switch (intv.u) {
-	case UNIT_DAYS:
-		return strftime(buf, bsz, "%F", tm);
-	case UNIT_MONTHS:
-		return strftime(buf, bsz, "%Y-%m", tm);
-	case UNIT_YEARS:
-		return strftime(buf, bsz, "%Y", tm);
-	default:
-		break;
-	}
-	return 0;
 }
 
 static ssize_t
@@ -393,17 +280,19 @@ next_cndl(tv_t t)
 		return NATV;
 	case UNIT_NSECS:
 		return (t / intv.t + 1U) * intv.t;
+	case UNIT_SECS:
+		return (t / NSECS / intv.t + 1U) * intv.t * NSECS;
 	case UNIT_DAYS:
-		t /= 24U * 60U * 60U * MSECS;
+		t /= 24ULL * 60ULL * 60ULL * NSECS;
 		t++;
-		t *= 24U * 60U * 60U * MSECS;
+		t *= 24ULL * 60ULL * 60ULL * NSECS;
 		return t;
 	case UNIT_MONTHS:
 	case UNIT_YEARS:
 		break;
 	}
 
-	u = t / MSECS;
+	u = t / NSECS;
 	tm = gmtime(&u);
 	tm->tm_mday = 1;
 	tm->tm_yday = 0;
@@ -427,7 +316,7 @@ next_cndl(tv_t t)
 		};
 		break;
 	}
-	return mktime(tm) * MSECS;
+	return mktime(tm) * NSECS;
 }
 
 static inline void
@@ -472,23 +361,23 @@ push_erlng(char *ln, size_t UNUSED(lz))
 		nxct = next_cndl(t);
 	} else if (LIKELY(ip++ < np)) {
 		return 0;
-	} else if (t - last < pbase) {
+	} else if (t - last < pbase.t) {
 		/* hasn't survived long enough */
 		;
 	} else {
 		/* measure time */
 		const tv_t dt = t - last;
 		size_t acc = !elapsp ? 1ULL : dt;
-		unsigned int slot = ilog2(dt / MSECS + 1U);
+		unsigned int slot = ilog2(dt / NSECS + 1U);
 		/* determine sub slot, if applicable */
 		unsigned int width = (1U << slot), base = width - 1U;
 		unsigned int subs;
 
 		{
 			/* translate in terms of base */
-			subs = (dt - base * MSECS) << (highbits - 5U);
+			subs = (dt - base * NSECS) << (highbits - 5U);
 			/* divide by width */
-			subs /= width * MSECS;
+			subs /= width * NSECS;
 
 			slot <<= highbits;
 			slot >>= 5U;
@@ -525,8 +414,8 @@ push_poiss(char *ln, size_t UNUSED(lz))
 		rset_cndl();
 		nxct = next_cndl(t);
 		/* make sure we use the trimmed t value */
-		t /= pbase;
-	} else if (UNLIKELY((t /= pbase) < last)) {
+		t /= pbase.t;
+	} else if (UNLIKELY((t /= pbase.t) < last)) {
 		errno = 0, serror("\
 Warning: non-chronological");
 		rc = -1;
@@ -634,7 +523,7 @@ fit_erlang(void)
 
 	const double ltd = log((double)td);
 	gamma_t m = {
-		ltd, (double)(np + 1U), (double)(td * (np + 1U) * MSECS) / su,
+		ltd, (double)(np + 1U), (double)(td * (np + 1U) * NSECS) / su,
 	};
 	/* reconstruct
 	 * so that fitted model and empirical model have same support */
@@ -643,7 +532,7 @@ fit_erlang(void)
 			if (!dlt[i]) {
 				continue;
 			}
-			tmp += exp(m.logn + dgamma(m, (double)thi[i] / MSECS));
+			tmp += exp(m.logn + dgamma(m, (double)thi[i] / NSECS));
 		}
 		/* get at least the same count in the count */
 		m.logn += ltd - log((double)tmp);
@@ -656,7 +545,7 @@ fit_gamma(void)
 {
 	size_t td = 0U;
 	double ls = 0, su = 0;
-	const double lms = log((double)MSECS);
+	const double lms = log((double)NSECS);
 
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
 		td += dlt[i];
@@ -688,7 +577,7 @@ fit_gamma(void)
 			if (!dlt[i]) {
 				continue;
 			}
-			tmp += exp(m.logn + dgamma(m, (double)thi[i] / MSECS));
+			tmp += exp(m.logn + dgamma(m, (double)thi[i] / NSECS));
 		}
 		/* get at least the same count in the count */
 		m.logn += ltd - log((double)tmp);
@@ -784,27 +673,27 @@ prnt_cndl_mtrx(void)
 	}
 
 	/* delta t */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	/* type t */
 	buf[len++] = '\t';
 	buf[len++] = 'L';
 	len += tztostr(buf + len, sizeof(buf) - len, tlo, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	/* type t */
 	buf[len++] = '\t';
 	buf[len++] = 'H';
 	len += tztostr(buf + len, sizeof(buf) - len, thi, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	/* type t */
 	len += memncpy(buf + len, "\tcnt", strlenof("\tcnt"));
 	len += zztostr(buf + len, sizeof(buf) - len, dlt, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	/* type t */
 	len += memncpy(buf + len, "\ttheo_erlang", strlenof("\ttheo_erlang"));
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
@@ -813,11 +702,11 @@ prnt_cndl_mtrx(void)
 		}
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len,
-			      mtozu(me.logn, dgamma(me, (double)thi[i] / MSECS)));
+			      mtozu(me.logn, dgamma(me, (double)thi[i] / NSECS)));
 	}
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	/* type t */
 	len += memncpy(buf + len, "\ttheo_gamma", strlenof("\ttheo_gamma"));
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
@@ -826,11 +715,11 @@ prnt_cndl_mtrx(void)
 		}
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len,
-			      mtozu(mg.logn, dgamma(mg, (double)thi[i] / MSECS)));
+			      mtozu(mg.logn, dgamma(mg, (double)thi[i] / NSECS)));
 	}
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	/* type t */
 	len += memncpy(buf + len, "\ttheo_lomax", strlenof("\ttheo_lomax"));
 	for (size_t i = 0U, n = 1U << highbits; i < n; i++) {
@@ -868,7 +757,8 @@ prnt_cndl_molt(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		/* type t */
 		buf[len++] = '\t';
 		len += tvtostr(buf + len, sizeof(buf) - len, tlo[i]);
@@ -878,10 +768,10 @@ prnt_cndl_molt(void)
 		len += ztostr(buf + len, sizeof(buf) - len, dlt[i]);
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len,
-			      mtozu(me.logn, dgamma(me, (double)thi[i] / MSECS)));
+			      mtozu(me.logn, dgamma(me, (double)thi[i] / NSECS)));
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len,
-			      mtozu(mg.logn, dgamma(mg, (double)thi[i] / MSECS)));
+			      mtozu(mg.logn, dgamma(mg, (double)thi[i] / NSECS)));
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len,
 			      mtozu(ml.logn, dpareto(ml, (double)thi[i])));
@@ -915,7 +805,7 @@ prnt_cndl_mtrx_poiss(void)
 	}
 
 	/* delta t */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	len += memncpy(buf + len, "\tcnt", strlenof("\tcnt"));
 	for (size_t i = 0U; i < cntz; i++) {
 		if (!dlt[i] && !allp) {
@@ -926,7 +816,7 @@ prnt_cndl_mtrx_poiss(void)
 	}
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	len += memncpy(buf + len, "\ttheo_zip", strlenof("\ttheo_zip"));
 	for (size_t i = 0U; i < cntz; i++) {
 		if (!dlt[i] && !allp) {
@@ -961,7 +851,8 @@ prnt_cndl_molt_poiss(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		/* type t */
 		buf[len++] = '\t';
 		len += ztostr(buf + len, sizeof(buf) - len, i);
@@ -993,10 +884,27 @@ Error: occurrences must be positive.");
 	}
 	if (!argi->base_arg) {
 		;
-	} else if (!(pbase = strtotvu(argi->base_arg, NULL).t)) {
+	} else if (!(pbase = strtotvu(argi->base_arg, NULL)).t) {
 		errno = 0, serror("\
 Error: cannot read base argument.");
 		return -1;
+	}
+	switch (pbase.u) {
+	case UNIT_NONE:
+	case UNIT_MONTHS:
+	case UNIT_YEARS:
+		errno = 0, serror("\
+Error: invalid suffix in base argument.");
+		return -1;
+	case UNIT_NSECS:
+		/* yay */
+		break;
+	case UNIT_SECS:
+		pbase.t *= NSECS;
+		break;
+	case UNIT_DAYS:
+		pbase.t *= 60ULL * 60ULL * 24ULL * NSECS;
+		break;
 	}
 	/* set candle printer */
 	prnt_cndl = !argi->table_flag ? prnt_cndl_molt : prnt_cndl_mtrx;
@@ -1056,7 +964,7 @@ Error: verbose flag can only be used one to five times.");
 			const size_t s = ((1ULL << (i >> sh)) - 1U);
 			const size_t l = (s + 1U);
 
-			tlo[i] = s * MSECS + (((i & w) * l * MSECS) >> sh);
+			tlo[i] = s * NSECS + (((i & w) * l * NSECS) >> sh);
 		}
 		for (size_t i = 0U, n = (1U << highbits) - 1U; i < n; i++) {
 			thi[i] = tlo[i + 1U];
@@ -1073,8 +981,25 @@ setup_poisson(struct yuck_cmd_poisson_s argi[static 1U])
 		errno = 0, serror("\
 Error: --base argument is mandatory.");
 		return -1;
-	} else if (!(pbase = strtotvu(argi->base_arg, NULL).t)) {
+	} else if (!(pbase = strtotvu(argi->base_arg, NULL)).t) {
 		return -1;
+	}
+	switch (pbase.u) {
+	case UNIT_NONE:
+	case UNIT_MONTHS:
+	case UNIT_YEARS:
+		errno = 0, serror("\
+Error: invalid suffix in base argument.");
+		return -1;
+	case UNIT_NSECS:
+		/* yay */
+		break;
+	case UNIT_SECS:
+		pbase.t *= NSECS;
+		break;
+	case UNIT_DAYS:
+		pbase.t *= 60ULL * 60ULL * 24ULL * NSECS;
+		break;
 	}
 
 	/* set candle printer */
@@ -1099,12 +1024,19 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (argi->interval_arg &&
-	    !(intv = strtotvu(argi->interval_arg, NULL)).t) {
-		errno = 0, serror("\
+	if (argi->interval_arg) {
+		intv = strtotvu(argi->interval_arg, NULL);
+		if (!intv.t) {
+			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
-		rc = EXIT_FAILURE;
-		goto out;
+			rc = EXIT_FAILURE;
+			goto out;
+		} else if (!intv.u) {
+			errno = 0, serror("\
+Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
+			rc = EXIT_FAILURE;
+			goto out;
+		}
 	}
 
 	allp = argi->all_flag;
