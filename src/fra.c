@@ -19,24 +19,20 @@
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #endif	/* HAVE_DFP754_H */
-#include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
 #include "hash.h"
-
-#define NSECS		(1000000000)
-#define MSECS		(1000)
+#include "tv.h"
+#include "nifty.h"
 
 #define MAX_PREDS	(4096U)
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
-typedef long unsigned int tv_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
 typedef struct {
@@ -59,60 +55,6 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
-}
-
-
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
 }
 
 
@@ -154,17 +96,17 @@ next_quo(void)
 	char *on;
 
 	if (UNLIKELY(qfp == NULL)) {
-		return NOT_A_TIME;
+		return NATV;
 	} else if (UNLIKELY(getline(&line, &llen, qfp) <= 0)) {
 		free(line);
 		fclose(qfp);
 		qfp = NULL;
-		return NOT_A_TIME;
+		return NATV;
 	}
 
 	newm = strtotv(line, &on);
 	/* instrument next */
-	on = strchr(on, '\t');
+	on = strchr(++on, '\t');
 	quo.b = strtopx(++on, &on);
 	quo.a = strtopx(++on, &on);
 	return newm;
@@ -179,27 +121,27 @@ next_fra(void)
 	char *on;
 
 	if (UNLIKELY(ffp == NULL)) {
-		return NOT_A_TIME;
+		return NATV;
 	} else if (UNLIKELY(getline(&line, &llen, ffp) <= 0)) {
 		free(line);
 		fclose(ffp);
 		ffp = NULL;
-		return NOT_A_TIME;
+		return NATV;
 	}
 
 	/* snarf metronome */
 	newm = strtotv(line, &on);
 	/* anything that comes now is a FRA identifier */
-	if (UNLIKELY((cont = on) == NULL)) {
-		return NOT_A_TIME;
+	if (UNLIKELY((cont = ++on) == NULL)) {
+		return NATV;
 	} else if (UNLIKELY((on = strchr(cont, '\t')) == NULL)) {
-		return NOT_A_TIME;
+		return NATV;
 	}
 	/* stash identifier */
 	conz = on++ - cont;
 	/* overread underlying */
 	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
-		return NOT_A_TIME;
+		return NATV;
 	}
 	/* snarf the base amount */
 	fra = (quo_t){strtopx(++on, &on), strtopx(++on, &on)};
@@ -215,12 +157,12 @@ offline(void)
 
 	fmtr = next_fra();
 
-	while (fmtr < NOT_A_TIME) {
+	while (fmtr < NATV) {
 		while ((qmtr = next_quo()) <= fmtr) {
 			/* stash */
 			base = quo;
 		}
-		if (UNLIKELY(qmtr == NOT_A_TIME)) {
+		if (UNLIKELY(qmtr == NATV)) {
 			/* it's better if we have quotes after
 			 * the last forward pricing */
 			break;

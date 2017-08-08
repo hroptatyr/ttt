@@ -217,6 +217,7 @@ BUILT_SOURCES += opt.yucc
 
 bin_PROGRAMS += fra
 fra_SOURCES = fra.c fra.yuck
+fra_SOURCES += tv.c tv.h
 fra_SOURCES += hash.c hash.h
 fra_SOURCES += version.c version.h
 fra_CPPFLAGS = $(AM_CPPFLAGS)
