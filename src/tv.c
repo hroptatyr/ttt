@@ -88,6 +88,80 @@ out:
 	return r;
 }
 
+tvu_t
+strtotvu(const char *str, char **endptr)
+{
+	char *on;
+	tvu_t r;
+
+	switch (*on++) {
+	secs:
+	case '\0':
+	case 'S':
+	case 's':
+		/* seconds, don't fiddle */
+		r.u = UNIT_SECS;
+		break;
+
+	case 'n':
+	case 'N':
+		switch (*on) {
+		case 's':
+		case 'S':
+		nsecs:
+			r.u = UNIT_NSECS;
+			break;
+		default:
+			goto invalid;
+		}
+
+	case 'm':
+	case 'M':
+		switch (*on) {
+		case '\0':
+			/* they want minutes, oh oh */
+			r.t *= 60UL;
+			goto secs;
+		case 's':
+		case 'S':
+			/* milliseconds it is then */
+			r.t *= USECS;
+			r.u = UNIT_NSECS;
+			goto nsecs;
+		case 'o':
+		case 'O':
+			r.u = UNIT_MONTHS;
+			break;
+		default:
+			goto invalid;
+		}
+		break;
+
+	case 'y':
+	case 'Y':
+		r.u = UNIT_YEARS;
+		break;
+
+	case 'h':
+	case 'H':
+		r.t *= 60U * 60U;
+		goto secs;
+	case 'd':
+	case 'D':
+		r.u = UNIT_DAYS;
+		break;
+
+	default:
+	invalid:
+		r.u = UNIT_NONE;
+		break;
+	}
+	if (endptr != NULL) {
+		*endptr = on;
+	}
+	return r;
+}
+
 ssize_t
 tvtostr(char *restrict buf, size_t bsz, tv_t t)
 {

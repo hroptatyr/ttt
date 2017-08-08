@@ -48,7 +48,20 @@ typedef long unsigned int tv_t;
 
 #define NATV	((tv_t)-1LU)
 
+typedef struct {
+	tv_t t;
+	enum {
+		UNIT_NONE,
+		UNIT_NSECS,
+		UNIT_SECS,
+		UNIT_DAYS,
+		UNIT_MONTHS,
+		UNIT_YEARS,
+	} u;
+} tvu_t;
+
 extern tv_t strtotv(const char *ln, char **endptr);
+extern tvu_t strtotvu(const char *ln, char **endptr);
 
 extern ssize_t tvtostr(char *restrict buf, size_t bsz, tv_t t);
 
