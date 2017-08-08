@@ -31,6 +31,7 @@ libmydfp_a_CPPFLAGS += $(dfp754_CFLAGS)
 
 bin_PROGRAMS += candle
 candle_SOURCES = candle.c candle.yuck
+candle_SOURCES += tv.c tv.h
 candle_SOURCES += version.c version.h
 candle_CPPFLAGS = $(AM_CPPFLAGS)
 candle_CPPFLAGS += $(dfp754_CFLAGS)
