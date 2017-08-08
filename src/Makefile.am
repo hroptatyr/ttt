@@ -234,6 +234,7 @@ BUILT_SOURCES += fra.yucc
 
 bin_PROGRAMS += spread
 spread_SOURCES = spread.c spread.yuck
+spread_SOURCES += tv.c tv.h
 spread_SOURCES += hash.c hash.h
 spread_SOURCES += version.c version.h
 spread_CPPFLAGS = $(AM_CPPFLAGS)
