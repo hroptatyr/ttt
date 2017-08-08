@@ -66,14 +66,7 @@ typedef struct {
 	qx_t hi;
 } qxrng_t;
 
-static tv_t intv;
-static enum {
-	UNIT_NONE,
-	UNIT_SECS,
-	UNIT_DAYS,
-	UNIT_MONTHS,
-	UNIT_YEARS,
-} unit;
+static tvu_t intv;
 
 static unsigned int highbits = 1U;
 static unsigned int elapsp;
@@ -93,42 +86,6 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
-}
-
-static ssize_t
-cttostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	struct tm *tm;
-	time_t u;
-
-	switch (unit) {
-	default:
-	case UNIT_NONE:
-		memcpy(buf, "ALL", 3U);
-		return 3U;
-	case UNIT_SECS:
-		return tvtostr(buf, bsz, t);
-	case UNIT_DAYS:
-	case UNIT_MONTHS:
-	case UNIT_YEARS:
-		break;
-	}
-
-	u = t / MSECS;
-	u--;
-	tm = gmtime(&u);
-
-	switch (unit) {
-	case UNIT_DAYS:
-		return strftime(buf, bsz, "%F", tm);
-	case UNIT_MONTHS:
-		return strftime(buf, bsz, "%Y-%m", tm);
-	case UNIT_YEARS:
-		return strftime(buf, bsz, "%Y", tm);
-	default:
-		break;
-	}
-	return 0;
 }
 
 static ssize_t
@@ -412,16 +369,18 @@ next_cndl(tv_t t)
 	struct tm *tm;
 	time_t u;
 
-	switch (unit) {
+	switch (intv.u) {
 	default:
 	case UNIT_NONE:
 		return NATV;
+	case UNIT_NSECS:
+		return (t / intv.t + 1U) * intv.t;
 	case UNIT_SECS:
-		return (t / intv + 1U) * intv;
+		return (t / NSECS / intv.t + 1U) * intv.t * NSECS;
 	case UNIT_DAYS:
-		t /= 24U * 60U * 60U * NSECS;
+		t /= 24ULL * 60ULL * 60ULL * NSECS;
 		t++;
-		t *= 24U * 60U * 60U * NSECS;
+		t *= 24ULL * 60ULL * 60ULL * NSECS;
 		return t;
 	case UNIT_MONTHS:
 	case UNIT_YEARS:
@@ -436,7 +395,7 @@ next_cndl(tv_t t)
 	tm->tm_min = 0;
 	tm->tm_sec = 0;
 
-	switch (unit) {
+	switch (intv.u) {
 	case UNIT_MONTHS:
 		*tm = (struct tm){
 			.tm_year = tm->tm_year,
@@ -637,7 +596,7 @@ prnt_cndl_mtrx(void)
 	}
 
 	/* delta t */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	/* type t */
@@ -648,7 +607,7 @@ prnt_cndl_mtrx(void)
 	len += zztostr(buf + len, sizeof(buf) - len, dlt, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	/* type t */
@@ -659,7 +618,7 @@ prnt_cndl_mtrx(void)
 	len += tztostr(buf + len, sizeof(buf) - len, tlo, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	/* type t */
@@ -672,7 +631,7 @@ prnt_cndl_mtrx(void)
 
 
 	/* bid */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -682,7 +641,7 @@ prnt_cndl_mtrx(void)
 	len += zztostr(buf + len, sizeof(buf) - len, bid, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -692,7 +651,7 @@ prnt_cndl_mtrx(void)
 	len += pztostr(buf + len, sizeof(buf) - len, blo, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -704,7 +663,7 @@ prnt_cndl_mtrx(void)
 
 
 	/* ask */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -714,7 +673,7 @@ prnt_cndl_mtrx(void)
 	len += zztostr(buf + len, sizeof(buf) - len, ask, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -724,7 +683,7 @@ prnt_cndl_mtrx(void)
 	len += pztostr(buf + len, sizeof(buf) - len, alo, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -736,7 +695,7 @@ prnt_cndl_mtrx(void)
 
 
 	/* spr */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -746,7 +705,7 @@ prnt_cndl_mtrx(void)
 	len += zztostr(buf + len, sizeof(buf) - len, spr, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -756,7 +715,7 @@ prnt_cndl_mtrx(void)
 	len += pztostr(buf + len, sizeof(buf) - len, slo, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -767,7 +726,7 @@ prnt_cndl_mtrx(void)
 	buf[len++] = '\n';
 
 	/* renormalised spr */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -777,7 +736,7 @@ prnt_cndl_mtrx(void)
 	len += zztostr(buf + len, sizeof(buf) - len, rsp, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -787,7 +746,7 @@ prnt_cndl_mtrx(void)
 	len += pztostr(buf + len, sizeof(buf) - len, rlo, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -807,7 +766,7 @@ prnt_cndl_mtrx(void)
 
 Bsz:
 	/* bid quantities */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -817,7 +776,7 @@ Bsz:
 	len += zztostr(buf + len, sizeof(buf) - len, bsz, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -827,7 +786,7 @@ Bsz:
 	len += qztostr(buf + len, sizeof(buf) - len, Blo, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -847,7 +806,7 @@ Bsz:
 
 Asz:
 	/* ask quantities */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -857,7 +816,7 @@ Asz:
 	len += zztostr(buf + len, sizeof(buf) - len, asz, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -867,7 +826,7 @@ Asz:
 	len += qztostr(buf + len, sizeof(buf) - len, Alo, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -878,7 +837,7 @@ Asz:
 	buf[len++] = '\n';
 
 	/* imbalance */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -888,7 +847,7 @@ Asz:
 	len += zztostr(buf + len, sizeof(buf) - len, imb, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -898,7 +857,7 @@ Asz:
 	len += qztostr(buf + len, sizeof(buf) - len, Ilo, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -909,7 +868,7 @@ Asz:
 	buf[len++] = '\n';
 
 	/* renormalised imbalance */
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -919,7 +878,7 @@ Asz:
 	len += zztostr(buf + len, sizeof(buf) - len, rim, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -929,7 +888,7 @@ Asz:
 	len += qztostr(buf + len, sizeof(buf) - len, Rlo, 1U << highbits);
 	buf[len++] = '\n';
 
-	len += cttostr(buf + len, sizeof(buf) - len, nxct);
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
 	buf[len++] = '\t';
@@ -970,7 +929,8 @@ prnt_cndl_molt(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, cont, conz), conz);
 		/* type t */
@@ -993,7 +953,8 @@ prnt_cndl_molt(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, cont, conz), conz);
 		buf[len++] = '\t';
@@ -1015,7 +976,8 @@ prnt_cndl_molt(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, cont, conz), conz);
 		buf[len++] = '\t';
@@ -1037,7 +999,8 @@ prnt_cndl_molt(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, cont, conz), conz);
 		buf[len++] = '\t';
@@ -1059,7 +1022,8 @@ prnt_cndl_molt(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, cont, conz), conz);
 		buf[len++] = '\t';
@@ -1081,7 +1045,8 @@ prnt_cndl_molt(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, cont, conz), conz);
 		buf[len++] = '\t';
@@ -1103,7 +1068,8 @@ prnt_cndl_molt(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, cont, conz), conz);
 		buf[len++] = '\t';
@@ -1125,7 +1091,8 @@ prnt_cndl_molt(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, cont, conz), conz);
 		buf[len++] = '\t';
@@ -1147,7 +1114,8 @@ prnt_cndl_molt(void)
 			continue;
 		}
 		/* otherwise */
-		len += cttostr(buf + len, sizeof(buf) - len, nxct);
+		len += tvutostr(buf + len, sizeof(buf) - len,
+				(tvu_t){nxct, intv.u});
 		buf[len++] = '\t';
 		len += (memcpy(buf + len, cont, conz), conz);
 		buf[len++] = '\t';
@@ -1180,50 +1148,13 @@ main(int argc, char *argv[])
 	}
 
 	if (argi->interval_arg) {
-		char *on;
-
-		if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
+		intv = strtotvu(argi->interval_arg, NULL);
+		if (!intv.t) {
 			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
 			rc = 1;
 			goto out;
-		}
-		switch (*on++) {
-		secs:
-		case '\0':
-		case 'S':
-		case 's':
-			/* seconds, don't fiddle */
-			intv *= NSECS;
-			unit = UNIT_SECS;
-			break;
-		case 'm':
-		case 'M':
-			if (*on == 'o' || *on == 'O') {
-				goto months;
-			}
-			intv *= 60U;
-			goto secs;
-
-		months:
-			unit = UNIT_MONTHS;
-			break;
-
-		case 'y':
-		case 'Y':
-			unit = UNIT_YEARS;
-			break;
-
-		case 'h':
-		case 'H':
-			intv *= 60U * 60U;
-			goto secs;
-		case 'd':
-		case 'D':
-			unit = UNIT_DAYS;
-			break;
-
-		default:
+		} else if (!intv.u) {
 			errno = 0, serror("\
 Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 			rc = 1;
