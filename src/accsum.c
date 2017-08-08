@@ -23,22 +23,18 @@ fabsd64(_Decimal64 x)
 	return x >= 0 ? x : -x;
 }
 #endif
-#include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
+#include "tv.h"
+#include "nifty.h"
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
-typedef long unsigned int tv_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
 #define fabsqx		fabsd64
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
 typedef struct {
@@ -93,60 +89,6 @@ serror(const char *fmt, ...)
 	return;
 }
 
-
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
-}
-
 static inline size_t
 memncpy(void *restrict buf, const void *src, size_t n)
 {
@@ -198,12 +140,12 @@ again:
 		free(line);
 		line = NULL;
 		llen = 0UL;
-		return NOT_A_TIME;
+		return NATV;
 	}
 	const char *const eol = line + nrd;
 
 	/* snarf metronome */
-	newm = strtotv(line, &on);
+	newm = strtotv(line, &on), on++;
 	if (grossp > 1U && UNLIKELY(!memcmp(on, "EXE\t", 4U))) {
 		qx_t b, sprd;
 
@@ -351,7 +293,7 @@ offline(void)
 		}
 
 		olsd = side;
-	} while ((l = a, alst = amtr, amtr = next_acc()) < NOT_A_TIME);
+	} while ((l = a, alst = amtr, amtr = next_acc()) < NATV);
 
 	for (size_t i = 0U; i < countof(sstr); i++) {
 		hits[i] = 0U;
