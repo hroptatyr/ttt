@@ -40,14 +40,7 @@ typedef struct {
 	qx_t a;
 } qty_t;
 
-static tv_t intv;
-static enum {
-	UNIT_NONE,
-	UNIT_SECS,
-	UNIT_DAYS,
-	UNIT_MONTHS,
-	UNIT_YEARS,
-} unit;
+static tvu_t intv;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -64,42 +57,6 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
-}
-
-static ssize_t
-cttostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	struct tm *tm;
-	time_t u;
-
-	switch (unit) {
-	default:
-	case UNIT_NONE:
-		memcpy(buf, "ALL", 3U);
-		return 3U;
-	case UNIT_SECS:
-		return tvtostr(buf, bsz, t);
-	case UNIT_DAYS:
-	case UNIT_MONTHS:
-	case UNIT_YEARS:
-		break;
-	}
-
-	u = t / NSECS;
-	u--;
-	tm = gmtime(&u);
-
-	switch (unit) {
-	case UNIT_DAYS:
-		return strftime(buf, bsz, "%F", tm);
-	case UNIT_MONTHS:
-		return strftime(buf, bsz, "%Y-%m", tm);
-	case UNIT_YEARS:
-		return strftime(buf, bsz, "%Y", tm);
-	default:
-		break;
-	}
-	return 0;
 }
 
 static inline __attribute__((pure, const)) tv_t
@@ -172,16 +129,18 @@ next_cndl(tv_t t)
 	struct tm *tm;
 	time_t u;
 
-	switch (unit) {
+	switch (intv.u) {
 	default:
 	case UNIT_NONE:
 		return NATV;
+	case UNIT_NSECS:
+		return (t / intv.t + 1U) * intv.t;
 	case UNIT_SECS:
-		return (t / intv + 1U) * intv;
+		return (t / NSECS / intv.t + 1U) * intv.t * NSECS;
 	case UNIT_DAYS:
-		t /= 24U * 60U * 60U * NSECS;
+		t /= 24ULL * 60ULL * 60ULL * NSECS;
 		t++;
-		t *= 24U * 60U * 60U * NSECS;
+		t *= 24ULL * 60ULL * 60ULL * NSECS;
 		return t;
 	case UNIT_MONTHS:
 	case UNIT_YEARS:
@@ -196,7 +155,7 @@ next_cndl(tv_t t)
 	tm->tm_min = 0;
 	tm->tm_sec = 0;
 
-	switch (unit) {
+	switch (intv.u) {
 	case UNIT_MONTHS:
 		*tm = (struct tm){
 			.tm_year = tm->tm_year,
@@ -350,7 +309,7 @@ prnt_cndl(void)
 	}
 
 	/* candle identifier */
-	len = cttostr(buf, sizeof(buf), nxct);
+	len = tvutostr(buf, sizeof(buf), (tvu_t){nxct, intv.u});
 
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
@@ -412,50 +371,13 @@ main(int argc, char *argv[])
 	}
 
 	if (argi->interval_arg) {
-		char *on;
-
-		if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
+		intv = strtotvu(argi->interval_arg, NULL);
+		if (!intv.t) {
 			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
 			rc = 1;
 			goto out;
-		}
-		switch (*on++) {
-		secs:
-		case '\0':
-		case 'S':
-		case 's':
-			/* seconds, don't fiddle */
-			intv *= NSECS;
-			unit = UNIT_SECS;
-			break;
-		case 'm':
-		case 'M':
-			if (*on == 'o' || *on == 'O') {
-				goto months;
-			}
-			intv *= 60U;
-			goto secs;
-
-		months:
-			unit = UNIT_MONTHS;
-			break;
-
-		case 'y':
-		case 'Y':
-			unit = UNIT_YEARS;
-			break;
-
-		case 'h':
-		case 'H':
-			intv *= 60U * 60U;
-			goto secs;
-		case 'd':
-		case 'D':
-			unit = UNIT_DAYS;
-			break;
-
-		default:
+		} else if (!intv.u) {
 			errno = 0, serror("\
 Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 			rc = 1;
