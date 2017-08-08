@@ -135,6 +135,7 @@ BUILT_SOURCES += mid.yucc
 
 bin_PROGRAMS += qq
 qq_SOURCES = qq.c qq.yuck
+qq_SOURCES += tv.c tv.h
 qq_SOURCES += version.c version.h
 qq_CPPFLAGS = $(AM_CPPFLAGS)
 qq_CPPFLAGS += $(dfp754_CFLAGS)
