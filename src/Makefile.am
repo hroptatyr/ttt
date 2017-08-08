@@ -160,6 +160,7 @@ BUILT_SOURCES += accsum.yucc
 
 bin_PROGRAMS += accrpl
 accrpl_SOURCES = accrpl.c accrpl.yuck
+accrpl_SOURCES += tv.c tv.h
 accrpl_SOURCES += version.c version.h
 accrpl_CPPFLAGS = $(AM_CPPFLAGS)
 accrpl_CPPFLAGS += $(dfp754_CFLAGS)
