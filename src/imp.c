@@ -20,28 +20,18 @@
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #endif	/* HAVE_DFP754_H */
-#include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
+#include "tv.h"
 #include "hash.h"
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
-#define UDP_MULTICAST_TTL	64
-#define MCAST_ADDR	"ff05::134"
-#define MCAST_PORT	7878
-
-#undef EV_P
-#define EV_P  struct ev_loop *loop __attribute__((unused))
+#include "nifty.h"
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
-typedef long unsigned int tv_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
 typedef struct {
@@ -111,51 +101,6 @@ strtohx(const char *x, char **on)
 	return res;
 }
 
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)))) {
-			return NOT_A_TIME;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
 static inline __attribute__((const, pure)) qx_t
 min_qx(qx_t q1, qx_t q2)
 {
@@ -183,8 +128,7 @@ send_eva(tv_t top, tv_t now, px_t pnl)
 	char buf[256U];
 	size_t len;
 
-	len = snprintf(buf, sizeof(buf), "%lu.%03lu000000",
-		       now / MSECS, now % MSECS);
+	len = tvtostr(buf, sizeof(buf), now);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
 	len += snprintf(buf + len, sizeof(buf) - len, "%lu", now - top);
@@ -201,8 +145,7 @@ send_abs(tv_t UNUSED(top), tv_t now, px_t pnl)
 	char buf[256U];
 	size_t len;
 
-	len = snprintf(buf, sizeof(buf), "%lu.%03lu000000",
-		       now / MSECS, now % MSECS);
+	len = tvtostr(buf, sizeof(buf), now);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
 	len += snprintf(buf + len, sizeof(buf) - len, "%lu", now % maxt);
@@ -219,8 +162,7 @@ send_sum(tv_t lag, double pnl, double dev, double skew, double kurt)
 	char buf[256U];
 	size_t len;
 
-	len = snprintf(buf, sizeof(buf), "%lu.%03lu000000",
-		       metr / MSECS, metr % MSECS);
+	len = tvtostr(buf, sizeof(buf), metr);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
 	len += snprintf(buf + len, sizeof(buf) - len, "%lu", lag);
@@ -430,7 +372,7 @@ offline(FILE *qfp, bool sump)
 			}
 		}
 		/* instrument next */
-		on = strchr(on, '\t');
+		on = strchr(++on, '\t');
 		q.b = strtopx(++on, &on);
 		q.a = strtopx(++on, &on);
 
@@ -445,7 +387,7 @@ offline(FILE *qfp, bool sump)
 				continue;
 			}
 			/* read the order */
-			switch (*on) {
+			switch (*++on) {
 			case 'L'/*ONG*/:
 				pp = INFD32;
 				break;
@@ -491,7 +433,7 @@ offline(FILE *qfp, bool sump)
 
 		metr = strtotv(line, &on);
 		/* instrument next */
-		on = strchr(on, '\t');
+		on = strchr(++on, '\t');
 		q.b = strtopx(++on, &on);
 		q.a = -strtopx(++on, &on);
 	}
@@ -534,19 +476,19 @@ Error: interval parameter must be positive.");
 			rc = 1;
 			goto out;
 		}
-		/* we operate in MSECS */
-		intv *= MSECS;
+		/* we operate in NSECS */
+		intv *= NSECS;
 	}
 
 	if (argi->max_lag_arg) {
 		maxt = strtoul(argi->max_lag_arg, NULL, 10);
-		maxt *= MSECS;
+		maxt *= NSECS;
 	}
 
 	if ((abs_tod_p = !!argi->abs_tod_flag)) {
 		/* we need a maxt in this case */
 		if (!maxt) {
-			maxt = 86400 * MSECS;
+			maxt = 86400 * NSECS;
 		}
 	}
 

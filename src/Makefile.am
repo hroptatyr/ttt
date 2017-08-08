@@ -106,6 +106,7 @@ BUILT_SOURCES += eva.yucc
 
 bin_PROGRAMS += imp
 imp_SOURCES = imp.c imp.yuck
+imp_SOURCES += tv.c tv.h
 imp_SOURCES += hash.c hash.h
 imp_SOURCES += version.c version.h
 imp_CPPFLAGS = $(AM_CPPFLAGS)
