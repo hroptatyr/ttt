@@ -81,6 +81,7 @@ BUILT_SOURCES += loghist.yucc
 bin_PROGRAMS += sex
 sex_SOURCES = sex.c sex.yuck
 sex_SOURCES += hash.c hash.h
+sex_SOURCES += tv.c tv.h
 sex_SOURCES += version.c version.h
 sex_CPPFLAGS = $(AM_CPPFLAGS)
 sex_CPPFLAGS += $(dfp754_CFLAGS)

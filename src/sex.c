@@ -32,25 +32,20 @@ fabsd64(_Decimal64 x)
 	return x >= 0 ? x : -x;
 }
 #endif	/* HAVE_DFP754_H || HAVE_DFP_STDLIB_H */
-#include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
 #include "hash.h"
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
+#include "tv.h"
+#include "nifty.h"
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
-typedef long unsigned int tv_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
 #define NANPX		NAND32
 #define isnanpx		isnand32
-
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
 typedef struct {
@@ -105,7 +100,7 @@ typedef struct {
 	unsigned int nr;
 } ord_t;
 
-static tv_t exe_age = 60U;
+static tv_t exe_age = 60U * USECS;
 static qx_t qty = 1.dd;
 static px_t comb = 0.df;
 static px_t comt = 0.df;
@@ -155,59 +150,6 @@ strtohx(const char *x, char **on)
 		*on = ep;
 	}
 	return res;
-}
-
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY((s = strtoul(ln, &on, 10), on == ln))) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
 }
 
 static inline __attribute__((const, pure)) tv_t
@@ -342,10 +284,10 @@ retry:
 		free(line);
 		line = NULL;
 		llen = 0UL;
-		return (ord_t){NOT_A_TIME};
+		return (ord_t){NATV};
 	}
 	/* otherwise snarf the order line */
-	if (UNLIKELY((t = strtotv(line, &on)) == NOT_A_TIME || on == line)) {
+	if (UNLIKELY((t = strtotv(line, &on)) == NATV || on++ == line)) {
 		goto retry;
 	}
 	/* read the order */
@@ -389,7 +331,7 @@ retry:
 		}
 		/* otherwise snarf the limit price */
 		if ((p = strtopx(++on, &on))) {
-			o.gtd = NOT_A_TIME;
+			o.gtd = NATV;
 			o.lp = p;
 		}
 		if (*on != '\t' && (on = strchr(on, '\t')) == NULL) {
@@ -408,7 +350,7 @@ retry:
 	}
 	/* tune to exe delay */
 	o.t += exe_age;
-	o.gtd = o.gtd ?: rtry < NOT_A_TIME ? o.t + rtry : rtry;
+	o.gtd = o.gtd ?: rtry < NATV ? o.t + rtry : rtry;
 	return o;
 }
 
@@ -426,10 +368,10 @@ retry:
 		free(line);
 		line = NULL;
 		llen = 0UL;
-		return (quo_t){NOT_A_TIME};
+		return (quo_t){NATV};
 	}
 	/* otherwise snarf the quote line */
-	if (UNLIKELY((q.t = strtotv(line, &on)) == NOT_A_TIME || on == line)) {
+	if (UNLIKELY((q.t = strtotv(line, &on)) == NATV || on++ == line)) {
 		goto retry;
 	}
 	/* instrument next */
@@ -457,18 +399,18 @@ offline(FILE *qfp)
 	};
 	ord_t _oq[256U], *oq = _oq;
 	size_t ioq = 0U, noq = 0U, zoq = countof(_oq);
-	quo_t q = {NOT_A_TIME, NANPX, NANPX};
+	quo_t q = {NATV, NANPX, NANPX};
 
 	/* we can't do nothing before the first quote, so read that one
 	 * as a reference and fast forward orders beyond that point */
-	for (quo_t newq; (newq = yield_quo(qfp)).t < NOT_A_TIME; q = newq) {
+	for (quo_t newq; (newq = yield_quo(qfp)).t < NATV; q = newq) {
 	ord:
 		if (UNLIKELY(stdin == NULL)) {
 			/* order file is eof'd, skip fetching more */
 			goto exe;
 		}
 		for (ord_t newo;
-		     noq < zoq && (newo = yield_ord(stdin)).t < NOT_A_TIME;
+		     noq < zoq && (newo = yield_ord(stdin)).t < NATV;
 		     oq[noq++] = newo);
 		if (UNLIKELY(noq < zoq)) {
 			/* out of orders we are */
@@ -530,7 +472,7 @@ offline(FILE *qfp)
 				oq[noq++] = (ord_t){
 					x.t,
 					.r = (rgm_t)(oq[i].r ^ RGM_CANCEL),
-					.gtd = NOT_A_TIME,
+					.gtd = NATV,
 					.q = -x.q,
 					.lp = oq[i].tp,
 					.sl = oq[i].sl,
@@ -614,6 +556,7 @@ Error: QUOTES file is mandatory.");
 
 	if (argi->exe_delay_arg) {
 		exe_age = strtoul(argi->exe_delay_arg, NULL, 10);
+		exe_age *= USECS;
 	}
 
 	if (argi->commission_arg) {
@@ -648,7 +591,7 @@ Error: commission must be given as PXb[/PXt]");
 		if (argi->retry_arg != YUCK_OPTARG_NONE) {
 			rtry = strtoul(argi->retry_arg, NULL, 10);
 		} else {
-			rtry = NOT_A_TIME;
+			rtry = NATV;
 		}
 	}
 
