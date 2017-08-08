@@ -1,4 +1,4 @@
-Usage: xchunk FILE < EVENT_STAMPS
+Usage: xevent FILE < EVENT_STAMPS
 
 Split FILE into chunks around EVENT_STAMPS.
 
