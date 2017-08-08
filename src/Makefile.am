@@ -171,6 +171,7 @@ BUILT_SOURCES += accrpl.yucc
 
 bin_PROGRAMS += xevent
 xevent_SOURCES = xevent.c xevent.yuck
+xevent_SOURCES += tv.c tv.h
 xevent_SOURCES += version.c version.h
 xevent_CPPFLAGS = $(AM_CPPFLAGS)
 xevent_CPPFLAGS += -D_GNU_SOURCE

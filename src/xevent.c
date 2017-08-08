@@ -7,9 +7,8 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/resource.h>
+#include "tv.h"
 #include "nifty.h"
-
-typedef long unsigned int tv_t;
 
 /* context lines */
 static tv_t nbef, naft;
@@ -18,10 +17,6 @@ static unsigned int verbp;
 
 #define MAP_MEM		(MAP_PRIVATE | MAP_ANON)
 #define PROT_MEM	(PROT_READ | PROT_WRITE)
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -39,57 +34,6 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
-}
-
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)))) {
-			return NOT_A_TIME;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
 }
 
 
@@ -226,7 +170,7 @@ next:
 	while ((nrd = getline(&line, &llen, fp)) > 0) {
 		char *on;
 
-		if (UNLIKELY((metr = strtotv(line, &on)) == NOT_A_TIME)) {
+		if (UNLIKELY((metr = strtotv(line, &on)) == NATV)) {
 			continue;
 		} else if (LIKELY(metr < from)) {
 			continue;
@@ -243,7 +187,7 @@ next:
 				len += (memcpy(tmp + len, "\tSHOCK\n", 7U), 7U);
 			}
 			bangln(next, tmp, len);
-			next = NOT_A_TIME;
+			next = NATV;
 		} else if (UNLIKELY(metr > till)) {
 			prntln(nnfn++);
 		}
@@ -285,12 +229,12 @@ main(int argc, char *argv[])
 
 	if (argi->before_arg) {
 		nbef = strtoul(argi->before_arg, NULL, 0);
-		nbef *= MSECS;
+		nbef *= NSECS;
 	}
 
 	if (argi->after_arg) {
 		naft = strtoul(argi->after_arg, NULL, 0);
-		naft *= MSECS;
+		naft *= NSECS;
 	}
 
 	if (argi->number_arg) {
