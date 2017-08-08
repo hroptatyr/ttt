@@ -189,6 +189,7 @@ BUILT_SOURCES += xevent.yucc
 
 bin_PROGRAMS += thours
 thours_SOURCES = thours.c thours.yuck
+thours_SOURCES += tv.c tv.h
 thours_SOURCES += version.c version.h
 thours_CPPFLAGS = $(AM_CPPFLAGS)
 thours_CPPFLAGS += -D_GNU_SOURCE
