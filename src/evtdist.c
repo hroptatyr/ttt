@@ -16,13 +16,8 @@
 #include <ieee754.h>
 #include <math.h>
 #include <tgmath.h>
+#include "tv.h"
 #include "nifty.h"
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
-
-typedef long unsigned int tv_t;
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 typedef struct {
 	double logn;
@@ -47,7 +42,7 @@ typedef struct {
 	tv_t t;
 	enum {
 		UNIT_NONE,
-		UNIT_MSECS,
+		UNIT_NSECS,
 		UNIT_DAYS,
 		UNIT_MONTHS,
 		UNIT_YEARS,
@@ -89,61 +84,6 @@ memncpy(void *restrict tgt, const void *src, size_t zrc)
 	return zrc;
 }
 
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return t < NOT_A_TIME
-		? snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS)
-		: 0U;
-}
-
 static tvu_t
 strtotvu(const char *str, char **endptr)
 {
@@ -159,9 +99,9 @@ strtotvu(const char *str, char **endptr)
 	case 'S':
 	case 's':
 		/* seconds, don't fiddle */
-		r.t *= MSECS;
+		r.t *= NSECS;
 	msecs:
-		r.u = UNIT_MSECS;
+		r.u = UNIT_NSECS;
 		break;
 
 	case 'm':
@@ -221,7 +161,7 @@ cttostr(char *restrict buf, size_t bsz, tv_t t)
 	case UNIT_NONE:
 		memcpy(buf, "ALL", 3U);
 		return 3U;
-	case UNIT_MSECS:
+	case UNIT_NSECS:
 		return tvtostr(buf, bsz, t);
 	case UNIT_DAYS:
 	case UNIT_MONTHS:
@@ -450,8 +390,8 @@ next_cndl(tv_t t)
 	switch (intv.u) {
 	default:
 	case UNIT_NONE:
-		return NOT_A_TIME;
-	case UNIT_MSECS:
+		return NATV;
+	case UNIT_NSECS:
 		return (t / intv.t + 1U) * intv.t;
 	case UNIT_DAYS:
 		t /= 24U * 60U * 60U * MSECS;
@@ -515,11 +455,10 @@ rset_rngs(void)
 static int
 push_erlng(char *ln, size_t UNUSED(lz))
 {
-	char *on;
 	tv_t t;
 
 	/* metronome is up first */
-	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
+	if (UNLIKELY((t = strtotv(ln, NULL)) == NATV)) {
 		return -1;
 	} else if (UNLIKELY(t < last)) {
 		fputs("Warning: non-chronological\n", stderr);
@@ -571,14 +510,13 @@ static int
 push_poiss(char *ln, size_t UNUSED(lz))
 {
 	static size_t this = 1U;
-	char *on;
-	tv_t t;
 	int rc = 0;
+	tv_t t;
 
 	/* metronome is up first */
 	if (UNLIKELY(ln == NULL)) {
 		goto final;
-	} else if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
+	} else if (UNLIKELY((t = strtotv(ln, NULL)) == NATV)) {
 		return -1;
 	} else if (UNLIKELY(t > nxct)) {
 		if (LIKELY(nxct)) {
@@ -1123,7 +1061,7 @@ Error: verbose flag can only be used one to five times.");
 		for (size_t i = 0U, n = (1U << highbits) - 1U; i < n; i++) {
 			thi[i] = tlo[i + 1U];
 		}
-		thi[(1U << highbits) - 1U] = NOT_A_TIME;
+		thi[(1U << highbits) - 1U] = NATV;
 	}
 	return 0;
 }

@@ -63,6 +63,7 @@ BUILT_SOURCES += quodist.yucc
 
 bin_PROGRAMS += evtdist
 evtdist_SOURCES = evtdist.c evtdist.yuck
+evtdist_SOURCES += tv.c tv.h
 evtdist_SOURCES += version.c version.h
 evtdist_CPPFLAGS = $(AM_CPPFLAGS)
 evtdist_CPPFLAGS += -DHAVE_VERSION_H
