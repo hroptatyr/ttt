@@ -118,6 +118,7 @@ BUILT_SOURCES += imp.yucc
 
 bin_PROGRAMS += mid
 mid_SOURCES = mid.c mid.yuck
+mid_SOURCES += tv.c tv.h
 mid_SOURCES += version.c version.h
 mid_CPPFLAGS = $(AM_CPPFLAGS)
 mid_CPPFLAGS += $(dfp754_CFLAGS)
