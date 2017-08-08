@@ -17,21 +17,17 @@
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #endif	/* HAVE_DFP754_H */
-#include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
+#include "tv.h"
+#include "nifty.h"
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
-typedef long unsigned int tv_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
 typedef struct {
@@ -44,14 +40,7 @@ typedef struct {
 	qx_t a;
 } qty_t;
 
-static tv_t intv;
-static enum {
-	UNIT_NONE,
-	UNIT_SECS,
-	UNIT_DAYS,
-	UNIT_MONTHS,
-	UNIT_YEARS,
-} unit;
+static tvu_t intv;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -68,95 +57,6 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
-}
-
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
-}
-
-static ssize_t
-cttostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	struct tm *tm;
-	time_t u;
-
-	switch (unit) {
-	default:
-	case UNIT_NONE:
-		memcpy(buf, "ALL", 3U);
-		return 3U;
-	case UNIT_SECS:
-		return tvtostr(buf, bsz, t);
-	case UNIT_DAYS:
-	case UNIT_MONTHS:
-	case UNIT_YEARS:
-		break;
-	}
-
-	u = t / MSECS;
-	u--;
-	tm = gmtime(&u);
-
-	switch (unit) {
-	case UNIT_DAYS:
-		return strftime(buf, bsz, "%F", tm);
-	case UNIT_MONTHS:
-		return strftime(buf, bsz, "%Y-%m", tm);
-	case UNIT_YEARS:
-		return strftime(buf, bsz, "%Y", tm);
-	default:
-		break;
-	}
-	return 0;
 }
 
 static inline __attribute__((pure, const)) tv_t
@@ -213,9 +113,9 @@ static qx_t maxbsz = 0.dd;
 /* buy and sell imbalances */
 static qx_t maxbim = 0.dd;
 static qx_t maxsim = 0.dd;
-static tv_t _1st = NOT_A_TIME;
+static tv_t _1st = NATV;
 static tv_t last;
-static tv_t mindlt = NOT_A_TIME;
+static tv_t mindlt = NATV;
 static tv_t maxdlt;
 
 static char cont[64];
@@ -229,23 +129,25 @@ next_cndl(tv_t t)
 	struct tm *tm;
 	time_t u;
 
-	switch (unit) {
+	switch (intv.u) {
 	default:
 	case UNIT_NONE:
-		return NOT_A_TIME;
+		return NATV;
+	case UNIT_NSECS:
+		return (t / intv.t + 1U) * intv.t;
 	case UNIT_SECS:
-		return (t / intv + 1U) * intv;
+		return (t / NSECS / intv.t + 1U) * intv.t * NSECS;
 	case UNIT_DAYS:
-		t /= 24U * 60U * 60U * MSECS;
+		t /= 24ULL * 60ULL * 60ULL * NSECS;
 		t++;
-		t *= 24U * 60U * 60U * MSECS;
+		t *= 24ULL * 60ULL * 60ULL * NSECS;
 		return t;
 	case UNIT_MONTHS:
 	case UNIT_YEARS:
 		break;
 	}
 
-	u = t / MSECS;
+	u = t / NSECS;
 	tm = gmtime(&u);
 	tm->tm_mday = 1;
 	tm->tm_yday = 0;
@@ -253,7 +155,7 @@ next_cndl(tv_t t)
 	tm->tm_min = 0;
 	tm->tm_sec = 0;
 
-	switch (unit) {
+	switch (intv.u) {
 	case UNIT_MONTHS:
 		*tm = (struct tm){
 			.tm_year = tm->tm_year,
@@ -269,7 +171,7 @@ next_cndl(tv_t t)
 		};
 		break;
 	}
-	return mktime(tm) * MSECS;
+	return mktime(tm) * NSECS;
 }
 
 static int
@@ -306,7 +208,7 @@ push_init(char *ln, size_t UNUSED(lz))
 	minbid = maxbid;
 	maxask = minask;
 
-	mindlt = NOT_A_TIME;
+	mindlt = NATV;
 	maxdlt = 0ULL;
 
 	memcpy(cont, ln, conz = iz);
@@ -323,7 +225,9 @@ push_beef(char *ln, size_t lz)
 	int rc = 0;
 
 	/* metronome is up first */
-	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
+	if (UNLIKELY((t = strtotv(ln, &on)) == NATV)) {
+		return -1;
+	} else if (UNLIKELY(*on++ != '\t')) {
 		return -1;
 	} else if (UNLIKELY(t < last)) {
 		fputs("Warning: non-chronological\n", stderr);
@@ -392,7 +296,7 @@ prnt_cndl(void)
 	char buf[4096U];
 	size_t len = 0U;
 
-	if (UNLIKELY(_1st == NOT_A_TIME)) {
+	if (UNLIKELY(_1st == NATV)) {
 		return;
 	}
 
@@ -405,7 +309,7 @@ prnt_cndl(void)
 	}
 
 	/* candle identifier */
-	len = cttostr(buf, sizeof(buf), nxct);
+	len = tvutostr(buf, sizeof(buf), (tvu_t){nxct, intv.u});
 
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, cont, conz), conz);
@@ -415,7 +319,7 @@ prnt_cndl(void)
 	buf[len++] = '\t';
 	len += tvtostr(buf + len, sizeof(buf) - len, last);
 	buf[len++] = '\t';
-	if (mindlt != NOT_A_TIME) {
+	if (mindlt != NATV) {
 		len += tvtostr(buf + len, sizeof(buf) - len, mindlt);
 	}
 	buf[len++] = '\t';
@@ -467,50 +371,13 @@ main(int argc, char *argv[])
 	}
 
 	if (argi->interval_arg) {
-		char *on;
-
-		if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
+		intv = strtotvu(argi->interval_arg, NULL);
+		if (!intv.t) {
 			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
 			rc = 1;
 			goto out;
-		}
-		switch (*on++) {
-		secs:
-		case '\0':
-		case 'S':
-		case 's':
-			/* seconds, don't fiddle */
-			intv *= MSECS;
-			unit = UNIT_SECS;
-			break;
-		case 'm':
-		case 'M':
-			if (*on == 'o' || *on == 'O') {
-				goto months;
-			}
-			intv *= 60U;
-			goto secs;
-
-		months:
-			unit = UNIT_MONTHS;
-			break;
-
-		case 'y':
-		case 'Y':
-			unit = UNIT_YEARS;
-			break;
-
-		case 'h':
-		case 'H':
-			intv *= 60U * 60U;
-			goto secs;
-		case 'd':
-		case 'D':
-			unit = UNIT_DAYS;
-			break;
-
-		default:
+		} else if (!intv.u) {
 			errno = 0, serror("\
 Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 			rc = 1;

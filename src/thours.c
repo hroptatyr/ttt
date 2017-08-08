@@ -11,28 +11,13 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <time.h>
+#include "tv.h"
 #include "nifty.h"
 
-#define NSECS	(1000000000)
-#define MSECS	(1000)
-
 typedef size_t cnt_t;
-typedef long unsigned int tv_t;
-#define NOT_A_TIME	((tv_t)-1ULL)
 
-typedef struct {
-	tv_t t;
-	enum {
-		UNIT_NONE,
-		UNIT_MSECS,
-		UNIT_DAYS,
-		UNIT_MONTHS,
-		UNIT_YEARS,
-	} u;
-} tvu_t;
-
-static tvu_t intv = {60U * 60U * 24U * 7U * MSECS, UNIT_MSECS};
-static tvu_t trnd = {60U * 60U * MSECS, UNIT_MSECS};
+static tvu_t intv = {60U * 60U * 24U * 7U, UNIT_SECS};
+static tvu_t trnd = {60U * 60U, UNIT_SECS};
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -51,122 +36,6 @@ serror(const char *fmt, ...)
 	return;
 }
 
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static tvu_t
-strtotvu(const char *str, char **endptr)
-{
-	char *on;
-	tvu_t r;
-
-	if (!(r.t = strtoul(str, &on, 10))) {
-		return (tvu_t){};
-	}
-	switch (*on++) {
-	secs:
-	case '\0':
-	case 'S':
-	case 's':
-		/* seconds, don't fiddle */
-		r.t *= MSECS;
-	msecs:
-		r.u = UNIT_MSECS;
-		break;
-
-	case 'm':
-	case 'M':
-		switch (*on) {
-		case '\0':
-			/* they want minutes, oh oh */
-			r.t *= 60UL;
-			goto secs;
-		case 's':
-		case 'S':
-			/* milliseconds it is then */
-			goto msecs;
-		case 'o':
-		case 'O':
-			r.u = UNIT_MONTHS;
-			break;
-		default:
-			goto invalid;
-		}
-		break;
-
-	case 'y':
-	case 'Y':
-		r.u = UNIT_YEARS;
-		break;
-
-	case 'h':
-	case 'H':
-		r.t *= 60U * 60U;
-		goto secs;
-	case 'w':
-	case 'W':
-		r.t *= 7U;
-	case 'd':
-	case 'D':
-		r.u = UNIT_DAYS;
-		break;
-
-	default:
-	invalid:
-		errno = 0, serror("\
-Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
-		return (tvu_t){};
-	}
-	if (endptr != NULL) {
-		*endptr = on;
-	}
-	return r;
-}
-
 
 static int
 offline(void)
@@ -179,7 +48,7 @@ offline(void)
 	size_t nm;
 
 	/* estimate */
-	if (trnd.u != UNIT_MSECS) {
+	if (trnd.u != UNIT_SECS) {
 	nimpl:
 		errno = 0, serror("not implemented");
 		return -1;
@@ -187,9 +56,9 @@ offline(void)
 
 	switch (intv.u) {
 	case UNIT_DAYS:
-		intv.t *= 24U * 60U * 60U * MSECS;
-		intv.u = UNIT_MSECS;
-	case UNIT_MSECS:
+		intv.t *= 24U * 60U * 60U;
+		intv.u = UNIT_SECS;
+	case UNIT_SECS:
 		break;
 	default:
 		goto nimpl;
@@ -200,15 +69,16 @@ offline(void)
 		return -1;
 	}
 	while ((nrd = getline(&line, &llen, stdin)) > 0) {
-		char *on;
 		tv_t t;
 
-		if (UNLIKELY((t = strtotv(line, &on)) == NOT_A_TIME)) {
+		if (UNLIKELY((t = strtotv(line, NULL)) == NATV)) {
 			/* got metronome cock-up */
 			continue;
 		}
+		/* round to seconds */
+		t /= NSECS;
 		/* move to monday */
-		t -= 4U * 24U * 60U * 60U * MSECS;
+		t -= 4U * 24U * 60U * 60U;
 		/* align ... */
 		t %= intv.t;
 		/* ... and round */
@@ -242,20 +112,34 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (argi->interval_arg &&
-	    !(intv = strtotvu(argi->interval_arg, NULL)).t) {
-		errno = 0, serror("\
+	if (argi->interval_arg) {
+		intv = strtotvu(argi->interval_arg, NULL);
+		if (!intv.t) {
+			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
-		rc = EXIT_FAILURE;
-		goto out;
+			rc = EXIT_FAILURE;
+			goto out;
+		} else if (!intv.u) {
+			errno = 0, serror("\
+Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
+			rc = 1;
+			goto out;
+		}
 	}
 
-	if (argi->round_arg &&
-	    !(trnd = strtotvu(argi->round_arg, NULL)).t) {
-		errno = 0, serror("\
+	if (argi->round_arg) {
+		trnd = strtotvu(argi->round_arg, NULL);
+		if (!trnd.t) {
+			errno = 0, serror("\
 Error: cannot read rounding argument, must be positive.");
-		rc = EXIT_FAILURE;
-		goto out;
+			rc = EXIT_FAILURE;
+			goto out;
+		} else if (!intv.u) {
+			errno = 0, serror("\
+Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
+			rc = 1;
+			goto out;
+		}
 	}
 
 	/* offline mode */

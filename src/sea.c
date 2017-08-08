@@ -29,21 +29,17 @@ fabsd64(_Decimal64 x)
 	return x >= 0 ? x : -x;
 }
 #endif	/* HAVE_DFP754_H || HAVE_DFP_STDLIB_H */
-#include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
+#include "tv.h"
+#include "nifty.h"
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
-typedef long unsigned int tv_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
 typedef struct {
@@ -88,8 +84,8 @@ static const char *const smodes[] = {
 };
 
 /* parameters */
-static tv_t modulus = 86400U * MSECS;
-static tv_t binwdth = 60U * MSECS;
+static tv_t modulus = 86400U * NSECS;
+static tv_t binwdth = 60U * NSECS;
 static size_t nbins;
 
 static smode_t smode;
@@ -109,59 +105,6 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
-}
-
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
 }
 
 
@@ -206,7 +149,7 @@ stuf_triv(tv_t t)
 
 
 static tv_t metr;
-static tik_t nxquo = {NOT_A_TIME};
+static tik_t nxquo = {NATV};
 static tik_t prquo;
 /* contract we're on about */
 static char cont[64];
@@ -225,19 +168,19 @@ push_init(char *ln, size_t UNUSED(lz))
 	char *on;
 
 	/* metronome is up first */
-	if (UNLIKELY((metr = strtotv(ln, &on)) == NOT_A_TIME)) {
+	if (UNLIKELY((metr = strtotv(ln, &on)) == NATV)) {
 		return -1;
 	}
 
 	/* instrument name, don't hash him */
-	if (UNLIKELY((on = strchr(ip = on, '\t')) == NULL)) {
+	if (UNLIKELY((on = strchr(ip = ++on, '\t')) == NULL)) {
 		return -1;
 	}
-	iz = on++ - ip;
+	iz = on - ip;
 
 	/* snarf quotes */
-	if (!(bid = strtopx(on, &on)) || *on++ != '\t' ||
-	    !(ask = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
+	if (!(bid = strtopx(++on, &on)) || *on != '\t' ||
+	    !(ask = strtopx(++on, &on)) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
 	/* we're init'ing, so everything changed */
@@ -256,19 +199,18 @@ push_beef(char *ln, size_t UNUSED(lz))
 	char *on;
 
 	/* metronome is up first */
-	if (UNLIKELY((metr = strtotv(ln, &on)) == NOT_A_TIME)) {
+	if (UNLIKELY((metr = strtotv(ln, &on)) == NATV)) {
 		return -1;
 	}
 
 	/* instrument name, don't hash him */
-	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
+	if (UNLIKELY((on = strchr(++on, '\t')) == NULL)) {
 		return -1;
 	}
-	on++;
 
 	/* snarf quotes */
-	if (!(bid = strtopx(on, &on)) || *on++ != '\t' ||
-	    !(ask = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
+	if (!(bid = strtopx(++on, &on)) || *on != '\t' ||
+	    !(ask = strtopx(++on, &on)) || (*on != '\t' && *on != '\n')) {
 		return -1;
 	}
 	/* obtain mid+spr representation */
@@ -336,7 +278,7 @@ bin_velo(sbin_t sch)
 {
 	tv_t tdlt = nxquo.t - prquo.t;
 	px_t pdlt = fabsd32(nxquo.m - prquo.m);
-	const double xp = (double)pdlt * MSECS / tdlt;
+	const double xp = (double)pdlt * NSECS / tdlt;
 
 	bin_gen(sch, xp);
 	return;
@@ -345,7 +287,7 @@ bin_velo(sbin_t sch)
 static void
 bin_tdlt(sbin_t sch)
 {
-	bin_gen(sch, (double)(nxquo.t - prquo.t) / MSECS);
+	bin_gen(sch, (double)(nxquo.t - prquo.t) / NSECS);
 	return;
 }
 
@@ -384,13 +326,13 @@ des_velo(sbin_t sch)
 	tv_t tdlt = nxquo.t - prquo.t;
 	px_t pdlt = nxquo.m - prquo.m;
 
-	return (px_t)(des_gen(sch, (double)pdlt * MSECS / tdlt) * tdlt / MSECS);
+	return (px_t)(des_gen(sch, (double)pdlt * NSECS / tdlt) * tdlt / NSECS);
 }
 
 static tv_t
 des_tdlt(sbin_t sch)
 {
-	return (tv_t)(des_gen(sch, (double)(nxquo.t - prquo.t) / MSECS) * MSECS);
+	return (tv_t)(des_gen(sch, (double)(nxquo.t - prquo.t) / NSECS) * NSECS);
 }
 
 static inline double
@@ -428,13 +370,13 @@ ens_velo(sbin_t sch)
 	tv_t tdlt = nxquo.t - prquo.t;
 	px_t pdlt = nxquo.m - prquo.m;
 
-	return (px_t)(ens_gen(sch, (double)pdlt * MSECS / tdlt) * tdlt / MSECS);
+	return (px_t)(ens_gen(sch, (double)pdlt * NSECS / tdlt) * tdlt / NSECS);
 }
 
 static tv_t
 ens_tdlt(sbin_t sch)
 {
-	return (tv_t)(ens_gen(sch, (double)(nxquo.t - prquo.t) / MSECS) * MSECS);
+	return (tv_t)(ens_gen(sch, (double)(nxquo.t - prquo.t) / NSECS) * NSECS);
 }
 
 
@@ -694,7 +636,7 @@ Error: modulus parameter must be positive.");
 			goto out;
 		}
 		/* turn into msec resolutiona */
-		modulus *= MSECS;
+		modulus *= NSECS;
 	}
 	if (argi->width_arg) {
 		if (!(binwdth = strtoul(argi->width_arg, NULL, 10))) {
@@ -704,7 +646,7 @@ Error: window width parameter must be positive.");
 			goto out;
 		}
 		/* turn into msec resolutiona */
-		binwdth *= MSECS;
+		binwdth *= NSECS;
 	}
 
 	if (argi->mode_arg) {

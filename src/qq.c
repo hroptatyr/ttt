@@ -30,21 +30,17 @@ fabsd64(_Decimal64 x)
 	return x >= 0 ? x : -x;
 }
 #endif	/* HAVE_DFP754_H || HAVE_DFP_STDLIB_H */
-#include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
+#include "tv.h"
+#include "nifty.h"
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
-typedef long unsigned int tv_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
 typedef struct {
@@ -55,54 +51,6 @@ typedef struct {
 static px_t qunt = 0.df;
 
 
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-
 static int
 push_beef(char *ln, size_t lz)
 {
@@ -111,12 +59,12 @@ push_beef(char *ln, size_t lz)
 	char *on;
 
 	/* metronome is up first */
-	if (UNLIKELY(strtotv(ln, &on) == NOT_A_TIME)) {
+	if (UNLIKELY(strtotv(ln, &on) == NATV)) {
 		return -1;
 	}
 
 	/* instrument name, don't hash him */
-	if (UNLIKELY((on = strchr(on, '\t')) == NULL)) {
+	if (UNLIKELY((on = strchr(++on, '\t')) == NULL)) {
 		return -1;
 	}
 	on++;

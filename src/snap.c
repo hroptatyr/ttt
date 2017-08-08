@@ -14,17 +14,12 @@
 #include <sys/time.h>
 #include <time.h>
 #include <assert.h>
+#include "tv.h"
 #include "nifty.h"
 
-#define NSECS	(1000000000)
-#define MSECS	(1000)
-
-typedef long unsigned int tv_t;
-#define NOT_A_TIME	((tv_t)-1ULL)
-
 /* command line params */
-static tv_t intv = 1U * MSECS;
-static tv_t offs = 0U * MSECS;
+static tv_t intv = 1U * NSECS;
+static tv_t offs = 0U * NSECS;
 static FILE *sfil;
 
 
@@ -58,57 +53,6 @@ _next_2pow(size_t z)
 	return z;
 }
 
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
-}
-
 
 static tv_t metr;
 static tv_t(*next)(tv_t);
@@ -126,14 +70,14 @@ _next_stmp(tv_t newm)
 	static size_t llen;
 
 	if (getline(&line, &llen, sfil) > 0 &&
-	    (newm = strtotv(line, NULL)) != NOT_A_TIME) {
+	    (newm = strtotv(line, NULL)) != NATV) {
 		return newm - 1ULL;
 	}
 	/* otherwise it's the end of the road */
 	free(line);
 	line = NULL;
 	llen = 0UL;
-	return NOT_A_TIME;
+	return NATV;
 }
 
 static int
@@ -167,7 +111,7 @@ push_beef(char *ln, size_t UNUSED(lz))
 	/* metronome is up first */
 	if (UNLIKELY(ln == NULL)) {
 		/* last snapshot of the day */
-		for (; metr != NOT_A_TIME; metr = next(NOT_A_TIME)) {
+		for (; metr != NATV; metr = next(NATV)) {
 			/* materialise snapshots */
 			snap();
 		}
@@ -178,7 +122,7 @@ push_beef(char *ln, size_t UNUSED(lz))
 			lbsz = 0ULL;
 		}
 		return 0;
-	} else if (UNLIKELY((nmtr = strtotv(ln, &on)) == NOT_A_TIME)) {
+	} else if (UNLIKELY((nmtr = strtotv(ln, &on)) == NATV)) {
 		return -1;
 	}
 	/* align metronome to interval */
@@ -233,19 +177,19 @@ Error: cannot read interval argument, must be positive.");
 		case 's':
 		case 'S':
 			/* user wants seconds, do they not? */
-			intv *= MSECS;
+			intv *= NSECS;
 			break;
 		case 'm':
 		case 'M':
 			switch (*++on) {
 			case '\0':
 				/* they want minutes, oh oh */
-				intv *= 60UL * MSECS;
+				intv *= 60UL * NSECS;
 				break;
 			case 's':
 			case 'S':
 				/* milliseconds it is then */
-				intv = intv;
+				intv *= USECS;
 				break;
 			default:
 				goto invalid_intv;
@@ -254,7 +198,7 @@ Error: cannot read interval argument, must be positive.");
 		case 'h':
 		case 'H':
 			/* them hours we use */
-			intv *= 60UL * 60UL * MSECS;
+			intv *= 60UL * 60UL * NSECS;
 			break;
 		default:
 		invalid_intv:
@@ -276,19 +220,19 @@ Error: invalid suffix in interval, use `ms', `s', `m', or `h'");
 		case 's':
 		case 'S':
 			/* user wants seconds, do they not? */
-			o *= MSECS;
+			o *= NSECS;
 			break;
 		case 'm':
 		case 'M':
 			switch (*++on) {
 			case '\0':
 				/* they want minutes, oh oh */
-				o *= 60U * MSECS;
+				o *= 60U * NSECS;
 				break;
 			case 's':
 			case 'S':
 				/* milliseconds it is then */
-				o = o;
+				o *= USECS;
 				break;
 			default:
 				goto invalid_offs;
@@ -297,7 +241,7 @@ Error: invalid suffix in interval, use `ms', `s', `m', or `h'");
 		case 'h':
 		case 'H':
 			/* them hours we use */
-			o *= 60U * 60U * MSECS;
+			o *= 60U * 60U * NSECS;
 			break;
 		default:
 		invalid_offs:

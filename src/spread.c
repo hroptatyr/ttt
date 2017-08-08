@@ -17,22 +17,18 @@
 #if defined HAVE_DFP754_H
 # include <dfp754.h>
 #endif	/* HAVE_DFP754_H */
-#include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
 #include "hash.h"
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
+#include "tv.h"
+#include "nifty.h"
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
-typedef long unsigned int tv_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
 typedef struct {
@@ -89,59 +85,6 @@ xstrlcpy(char *restrict dst, const char *src, size_t dsz)
 	return ssz;
 }
 
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS);
-}
-
 static hx_t
 strtohx(const char *x, char **on)
 {
@@ -189,7 +132,6 @@ push_beef(char *ln, size_t UNUSED(lz))
 {
 	static px_t legquo[2U * countof(hxs)];
 	static uint64_t seen;
-	char *bp;
 	char *on;
 	unsigned int which;
 	px_t b, a;
@@ -199,13 +141,13 @@ push_beef(char *ln, size_t UNUSED(lz))
 #define LEGASK(x)	(legquo[(x) * countof(hxs) + 1U])
 #define LEGQUO(x, y)	(legquo[(x) * countof(hxs) + (y)])
 
-	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
+	if (UNLIKELY((t = strtotv(ln, &on)) == NATV)) {
 		/* got metronome cock-up */
 		return -1;
 	}
 
 	with (hx_t hx) {
-		if (UNLIKELY(!(hx = strtohx(on, &on)) || *on != '\t')) {
+		if (UNLIKELY(!(hx = strtohx(++on, &on)) || *on != '\t')) {
 			return -1;
 		}
 		for (which = 0U; which < nlegs; which++) {
@@ -218,9 +160,8 @@ push_beef(char *ln, size_t UNUSED(lz))
 	}
 snarf:
 	/* snarf quotes */
-	if (*++on != '\t' && *(bp = on) != '\n' &&
-	    (b = strtopx(on, &on)) && *on++ == '\t' &&
-	    (a = strtopx(on, &on)) && (*on == '\n' || *on == '\t')) {
+	if ((b = strtopx(++on, &on)) && *on == '\t' &&
+	    (a = strtopx(++on, &on)) && (*on == '\n' || *on == '\t')) {
 		LEGQUO(which, lev[which] < 0.df) = b * lev[which];
 		LEGQUO(which, lev[which] > 0.df) = a * lev[which];
 		seen |= 1ULL << which;

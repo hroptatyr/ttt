@@ -31,6 +31,7 @@ libmydfp_a_CPPFLAGS += $(dfp754_CFLAGS)
 
 bin_PROGRAMS += candle
 candle_SOURCES = candle.c candle.yuck
+candle_SOURCES += tv.c tv.h
 candle_SOURCES += version.c version.h
 candle_CPPFLAGS = $(AM_CPPFLAGS)
 candle_CPPFLAGS += $(dfp754_CFLAGS)
@@ -42,6 +43,7 @@ BUILT_SOURCES += candle.yucc
 
 bin_PROGRAMS += snap
 snap_SOURCES = snap.c snap.yuck
+snap_SOURCES += tv.c tv.h
 snap_SOURCES += version.c version.h
 snap_CPPFLAGS = $(AM_CPPFLAGS)
 snap_CPPFLAGS += -DHAVE_VERSION_H
@@ -51,6 +53,7 @@ BUILT_SOURCES += snap.yucc
 
 bin_PROGRAMS += quodist
 quodist_SOURCES = quodist.c quodist.yuck
+quodist_SOURCES += tv.c tv.h
 quodist_SOURCES += version.c version.h
 quodist_CPPFLAGS = $(AM_CPPFLAGS)
 quodist_CPPFLAGS += $(dfp754_CFLAGS)
@@ -62,6 +65,7 @@ BUILT_SOURCES += quodist.yucc
 
 bin_PROGRAMS += evtdist
 evtdist_SOURCES = evtdist.c evtdist.yuck
+evtdist_SOURCES += tv.c tv.h
 evtdist_SOURCES += version.c version.h
 evtdist_CPPFLAGS = $(AM_CPPFLAGS)
 evtdist_CPPFLAGS += -DHAVE_VERSION_H
@@ -81,6 +85,7 @@ BUILT_SOURCES += loghist.yucc
 bin_PROGRAMS += sex
 sex_SOURCES = sex.c sex.yuck
 sex_SOURCES += hash.c hash.h
+sex_SOURCES += tv.c tv.h
 sex_SOURCES += version.c version.h
 sex_CPPFLAGS = $(AM_CPPFLAGS)
 sex_CPPFLAGS += $(dfp754_CFLAGS)
@@ -92,6 +97,7 @@ BUILT_SOURCES += sex.yucc
 
 bin_PROGRAMS += eva
 eva_SOURCES = eva.c eva.yuck
+eva_SOURCES += tv.c tv.h
 eva_SOURCES += hash.c hash.h
 eva_SOURCES += version.c version.h
 eva_CPPFLAGS = $(AM_CPPFLAGS)
@@ -104,6 +110,7 @@ BUILT_SOURCES += eva.yucc
 
 bin_PROGRAMS += imp
 imp_SOURCES = imp.c imp.yuck
+imp_SOURCES += tv.c tv.h
 imp_SOURCES += hash.c hash.h
 imp_SOURCES += version.c version.h
 imp_CPPFLAGS = $(AM_CPPFLAGS)
@@ -116,6 +123,7 @@ BUILT_SOURCES += imp.yucc
 
 bin_PROGRAMS += mid
 mid_SOURCES = mid.c mid.yuck
+mid_SOURCES += tv.c tv.h
 mid_SOURCES += version.c version.h
 mid_CPPFLAGS = $(AM_CPPFLAGS)
 mid_CPPFLAGS += $(dfp754_CFLAGS)
@@ -127,6 +135,7 @@ BUILT_SOURCES += mid.yucc
 
 bin_PROGRAMS += qq
 qq_SOURCES = qq.c qq.yuck
+qq_SOURCES += tv.c tv.h
 qq_SOURCES += version.c version.h
 qq_CPPFLAGS = $(AM_CPPFLAGS)
 qq_CPPFLAGS += $(dfp754_CFLAGS)
@@ -138,6 +147,7 @@ BUILT_SOURCES += qq.yucc
 
 bin_PROGRAMS += sea
 sea_SOURCES = sea.c sea.yuck
+sea_SOURCES += tv.c tv.h
 sea_SOURCES += version.c version.h
 sea_CPPFLAGS = $(AM_CPPFLAGS)
 sea_CPPFLAGS += $(dfp754_CFLAGS)
@@ -149,6 +159,7 @@ BUILT_SOURCES += sea.yucc
 
 bin_PROGRAMS += accsum
 accsum_SOURCES = accsum.c accsum.yuck
+accsum_SOURCES += tv.c tv.h
 accsum_SOURCES += version.c version.h
 accsum_CPPFLAGS = $(AM_CPPFLAGS)
 accsum_CPPFLAGS += $(dfp754_CFLAGS)
@@ -160,6 +171,7 @@ BUILT_SOURCES += accsum.yucc
 
 bin_PROGRAMS += accrpl
 accrpl_SOURCES = accrpl.c accrpl.yuck
+accrpl_SOURCES += tv.c tv.h
 accrpl_SOURCES += version.c version.h
 accrpl_CPPFLAGS = $(AM_CPPFLAGS)
 accrpl_CPPFLAGS += $(dfp754_CFLAGS)
@@ -171,6 +183,7 @@ BUILT_SOURCES += accrpl.yucc
 
 bin_PROGRAMS += xevent
 xevent_SOURCES = xevent.c xevent.yuck
+xevent_SOURCES += tv.c tv.h
 xevent_SOURCES += version.c version.h
 xevent_CPPFLAGS = $(AM_CPPFLAGS)
 xevent_CPPFLAGS += -D_GNU_SOURCE
@@ -178,6 +191,7 @@ BUILT_SOURCES += xevent.yucc
 
 bin_PROGRAMS += thours
 thours_SOURCES = thours.c thours.yuck
+thours_SOURCES += tv.c tv.h
 thours_SOURCES += version.c version.h
 thours_CPPFLAGS = $(AM_CPPFLAGS)
 thours_CPPFLAGS += -D_GNU_SOURCE
@@ -185,6 +199,7 @@ BUILT_SOURCES += thours.yucc
 
 bin_PROGRAMS += sma
 sma_SOURCES = sma.c sma.yuck
+sma_SOURCES += tv.c tv.h
 sma_SOURCES += version.c version.h
 sma_CPPFLAGS = $(AM_CPPFLAGS)
 sma_CPPFLAGS += -D_GNU_SOURCE
@@ -197,6 +212,7 @@ BUILT_SOURCES += sma.yucc
 
 bin_PROGRAMS += opt
 opt_SOURCES = opt.c opt.yuck
+opt_SOURCES += tv.c tv.h
 opt_SOURCES += hash.c hash.h
 opt_SOURCES += version.c version.h
 opt_CPPFLAGS = $(AM_CPPFLAGS)
@@ -209,6 +225,7 @@ BUILT_SOURCES += opt.yucc
 
 bin_PROGRAMS += fra
 fra_SOURCES = fra.c fra.yuck
+fra_SOURCES += tv.c tv.h
 fra_SOURCES += hash.c hash.h
 fra_SOURCES += version.c version.h
 fra_CPPFLAGS = $(AM_CPPFLAGS)
@@ -221,6 +238,7 @@ BUILT_SOURCES += fra.yucc
 
 bin_PROGRAMS += spread
 spread_SOURCES = spread.c spread.yuck
+spread_SOURCES += tv.c tv.h
 spread_SOURCES += hash.c hash.h
 spread_SOURCES += version.c version.h
 spread_CPPFLAGS = $(AM_CPPFLAGS)
