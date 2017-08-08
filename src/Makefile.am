@@ -208,6 +208,7 @@ BUILT_SOURCES += sma.yucc
 
 bin_PROGRAMS += opt
 opt_SOURCES = opt.c opt.yuck
+opt_SOURCES += tv.c tv.h
 opt_SOURCES += hash.c hash.h
 opt_SOURCES += version.c version.h
 opt_CPPFLAGS = $(AM_CPPFLAGS)
