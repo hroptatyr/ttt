@@ -93,6 +93,97 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 }
 
 
+/* line buffer, we keep offsets and stamps per line and the big buffer */
+static size_t nlines, zlines;
+static tv_t *tvs;
+static off_t *ofs;
+static char *buf;
+static size_t bsz, bix, bof;
+
+static void
+bangln(tv_t metr, const char *ln, size_t lz)
+{
+	if (UNLIKELY(nlines + 1U >= zlines)) {
+		zlines = (zlines * 2U) ?: 256U;
+		tvs = realloc(tvs, zlines * sizeof(*tvs));
+		ofs = realloc(ofs, zlines * sizeof(*ofs));
+	}
+	/* store current offset */
+	ofs[nlines] = bix;
+	tvs[nlines] = metr;
+	/* convenience */
+	ofs[++nlines] = bix + lz;
+	if (UNLIKELY(bix + lz > bsz)) {
+		bsz = (bsz * 2U) ?: 4096U;
+		buf = realloc(buf, bsz * sizeof(*buf));
+	}
+	memcpy(buf + bix, ln, lz);
+	bix += lz;
+	return;
+}
+
+static void
+ffwdln(tv_t from)
+{
+	size_t i;
+
+	for (i = 0U; i < nlines && tvs[i] < from; i++);
+	if (i == nlines) {
+		/* reset buffer and stuff */
+		bix = bof = 0U;
+		nlines = 0U;
+	} else {
+		/* TVS[I] >= FROM */
+		if ((bof = ofs[i]) >= bsz / 2U) {
+			memmove(buf, buf + bof, bix - bof);
+			memmove(tvs, tvs + i, (nlines - i) * sizeof(*tvs));
+			nlines -= i;
+			for (size_t j = 0U; j < nlines; j++, i++) {
+				ofs[j] = ofs[i] - bof;
+			}
+		}
+		/* otherwise leave things as is */
+	}
+	return;
+}
+
+static int
+prntln(long unsigned int n)
+{
+	char ofn[32U];
+	int fd;
+
+	if (UNLIKELY(bof >= bix)) {
+		return 0;
+	}
+	snprintf(ofn, sizeof(ofn), "xx%08lu", n);
+	if (UNLIKELY((fd = open(ofn, O_RDWR | O_CREAT | O_TRUNC, 0666)) < 0)) {
+		return -1;
+	}
+	write(fd, buf + bof, bix - bof);
+	close(fd);
+	/* also print filename */
+	puts(ofn);
+	return 0;
+}
+
+static void
+freeln(void)
+{
+	if (tvs) {
+		free(tvs);
+	}
+	if (ofs) {
+		free(ofs);
+	}
+	if (buf) {
+		free(buf);
+	}
+	bix = bof = bsz = nlines = zlines = 0U;
+	return;
+}
+
+
 static int
 xevent(FILE *fp)
 {
@@ -100,14 +191,12 @@ xevent(FILE *fp)
 	size_t llen = 0UL;
 	tv_t next, from, till, metr;
 	ssize_t nrd;
-	char ofn[32U];
 	char shk[256U];
 	size_t zshk;
-	FILE *ofp;
 	int rc = 0;
 
 next:
-	do {
+	{
 		char *on;
 
 		if ((nrd = getline(&line, &llen, stdin)) <= 0) {
@@ -130,14 +219,10 @@ next:
 				memcpy(shk, on, zshk);
 			}
 		}
-	} while (next < metr);
-	/* and open output file in anticipation */
-	snprintf(ofn, sizeof(ofn), "xx%08lu", nnfn++);
-	if ((ofp = fopen(ofn, "w")) == NULL) {
-		rc = -1;
-		goto out;
 	}
 
+	/* fast forward buffer */
+	ffwdln(from);
 	while ((nrd = getline(&line, &llen, fp)) > 0) {
 		char *on;
 
@@ -146,38 +231,37 @@ next:
 		} else if (LIKELY(metr < from)) {
 			continue;
 		} else if (UNLIKELY(metr > next && verbp)) {
-			char buf[256U];
+			char tmp[256U];
 			size_t len;
 
-			len = tvtostr(buf, sizeof(buf), next);
+			len = tvtostr(tmp, sizeof(tmp), next);
 			if (zshk) {
-				buf[len++] = '\t';
-				len += (memcpy(buf + len, shk, zshk), zshk);
-				buf[len++] = '\t';
-				buf[len++] = '\t';
-				buf[len++] = '\t';
-				buf[len++] = '\t';
-				buf[len++] = '\t';
-				buf[len++] = '\t';
-				buf[len++] = '\n';
+				tmp[len++] = '\t';
+				len += (memcpy(tmp + len, shk, zshk), zshk);
+				tmp[len++] = '\n';
 			} else {
-				memcpy(buf + len, "\tSHOCK\t\t\t\t\t\t\n", 13U);
-				len += 13U;
+				len += (memcpy(tmp + len, "\tSHOCK\n", 7U), 7U);
 			}
-			fwrite(buf, 1, len, ofp);
+			bangln(next, tmp, len);
 			next = NOT_A_TIME;
 		} else if (UNLIKELY(metr > till)) {
-			fclose(ofp);
-			puts(ofn);
+			prntln(nnfn++);
+		}
+		/* copy line lest we forget*/
+		bangln(metr, line, nrd);
+
+		if (UNLIKELY(metr > till)) {
+			/* fetch next stamp */
 			goto next;
 		}
-		/* copy line */
-		fwrite(line, 1, nrd, ofp);
 	}
+	/* final buffer */
+	prntln(nnfn++);
 out:
 	if (line) {
 		free(line);
 	}
+	freeln();
 	return rc;
 }
 
