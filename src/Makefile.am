@@ -147,6 +147,7 @@ BUILT_SOURCES += qq.yucc
 
 bin_PROGRAMS += sea
 sea_SOURCES = sea.c sea.yuck
+sea_SOURCES += tv.c tv.h
 sea_SOURCES += version.c version.h
 sea_CPPFLAGS = $(AM_CPPFLAGS)
 sea_CPPFLAGS += $(dfp754_CFLAGS)
