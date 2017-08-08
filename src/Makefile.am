@@ -52,6 +52,7 @@ BUILT_SOURCES += snap.yucc
 
 bin_PROGRAMS += quodist
 quodist_SOURCES = quodist.c quodist.yuck
+quodist_SOURCES += tv.c tv.h
 quodist_SOURCES += version.c version.h
 quodist_CPPFLAGS = $(AM_CPPFLAGS)
 quodist_CPPFLAGS += $(dfp754_CFLAGS)

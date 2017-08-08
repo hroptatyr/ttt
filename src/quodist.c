@@ -32,22 +32,18 @@ fabsd64(_Decimal64 x)
 	return x >= 0 ? x : -x;
 }
 #endif	/* HAVE_DFP754_H */
-#include "nifty.h"
 #include "dfp754_d32.h"
 #include "dfp754_d64.h"
-
-#define NSECS	(1000000000)
-#define MSECS	(1000)
+#include "tv.h"
+#include "nifty.h"
 
 typedef _Decimal32 px_t;
 typedef _Decimal64 qx_t;
-typedef long unsigned int tv_t;
 typedef size_t cnt_t;
 #define strtopx		strtod32
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
-#define NOT_A_TIME	((tv_t)-1ULL)
 
 /* relevant tick dimensions */
 typedef struct {
@@ -97,61 +93,6 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
-}
-
-static tv_t
-strtotv(const char *ln, char **endptr)
-{
-	char *on;
-	tv_t r;
-
-	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
-			r = NOT_A_TIME;
-			goto out;
-		} else if (*on == '.') {
-			char *moron;
-
-			x = strtoul(++on, &moron, 10);
-			if (UNLIKELY(moron - on > 9U)) {
-				return NOT_A_TIME;
-			} else if ((moron - on) % 3U) {
-				/* huh? */
-				return NOT_A_TIME;
-			}
-			switch (moron - on) {
-			case 9U:
-				x /= MSECS;
-			case 6U:
-				x /= MSECS;
-			case 3U:
-				break;
-			case 0U:
-			default:
-				break;
-			}
-			on = moron;
-		} else {
-			x = 0U;
-		}
-		r = s * MSECS + x;
-	}
-	/* overread up to 3 tabs */
-	for (size_t i = 0U; *on == '\t' && i < 3U; on++, i++);
-out:
-	if (LIKELY(endptr != NULL)) {
-		*endptr = on;
-	}
-	return r;
-}
-
-static ssize_t
-tvtostr(char *restrict buf, size_t bsz, tv_t t)
-{
-	return t < NOT_A_TIME
-		? snprintf(buf, bsz, "%lu.%03lu000000", t / MSECS, t % MSECS)
-		: 0U;
 }
 
 static ssize_t
@@ -314,14 +255,14 @@ qxtoslot(const qx_t x)
 static inline __attribute__((const, pure)) size_t
 tvtoslot(const tv_t t)
 {
-	unsigned int slot = ilog2(t / MSECS + 1U);
+	unsigned int slot = ilog2(t / NSECS + 1U);
 	/* determine sub slot, if applicable */
 	unsigned int width = (1U << slot);
 	unsigned int base = width - 1U;
 	unsigned int subs;
 
 	/* translate in terms of base */
-	subs = (t - base * MSECS) << (highbits - 5U);
+	subs = (t - base * NSECS) / USECS << (highbits - 5U);
 	/* divide by width */
 	subs /= width * MSECS;
 
@@ -381,7 +322,7 @@ dqrtoslot(const qx_t x)
 /* next candle time */
 static tv_t nxct;
 
-static tv_t _1st = NOT_A_TIME;
+static tv_t _1st = NATV;
 static tv_t last;
 
 static char cont[64];
@@ -474,20 +415,20 @@ next_cndl(tv_t t)
 	switch (unit) {
 	default:
 	case UNIT_NONE:
-		return NOT_A_TIME;
+		return NATV;
 	case UNIT_SECS:
 		return (t / intv + 1U) * intv;
 	case UNIT_DAYS:
-		t /= 24U * 60U * 60U * MSECS;
+		t /= 24U * 60U * 60U * NSECS;
 		t++;
-		t *= 24U * 60U * 60U * MSECS;
+		t *= 24U * 60U * 60U * NSECS;
 		return t;
 	case UNIT_MONTHS:
 	case UNIT_YEARS:
 		break;
 	}
 
-	u = t / MSECS;
+	u = t / NSECS;
 	tm = gmtime(&u);
 	tm->tm_mday = 1;
 	tm->tm_yday = 0;
@@ -511,7 +452,7 @@ next_cndl(tv_t t)
 		};
 		break;
 	}
-	return mktime(tm) * MSECS;
+	return mktime(tm) * NSECS;
 }
 
 static void
@@ -556,7 +497,9 @@ push_beef(char *ln, size_t lz)
 	int rc = 0;
 
 	/* metronome is up first */
-	if (UNLIKELY((t = strtotv(ln, &on)) == NOT_A_TIME)) {
+	if (UNLIKELY((t = strtotv(ln, &on)) == NATV)) {
+		return -1;
+	} else if (*on++ != '\t') {
 		return -1;
 	} else if (t < last) {
 		fputs("Warning: non-chronological\n", stderr);
@@ -672,7 +615,7 @@ prnt_cndl_mtrx(void)
 	static size_t ncndl;
 	size_t len = 0U;
 
-	if (UNLIKELY(_1st == NOT_A_TIME)) {
+	if (UNLIKELY(_1st == NATV)) {
 		return;
 	}
 
@@ -1007,7 +950,7 @@ prnt_cndl_molt(void)
 	static size_t ncndl;
 	size_t len = 0U;
 
-	if (UNLIKELY(_1st == NOT_A_TIME)) {
+	if (UNLIKELY(_1st == NATV)) {
 		return;
 	}
 
@@ -1251,7 +1194,7 @@ Error: cannot read interval argument, must be positive.");
 		case 'S':
 		case 's':
 			/* seconds, don't fiddle */
-			intv *= MSECS;
+			intv *= NSECS;
 			unit = UNIT_SECS;
 			break;
 		case 'm':
