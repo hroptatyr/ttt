@@ -197,6 +197,7 @@ BUILT_SOURCES += thours.yucc
 
 bin_PROGRAMS += sma
 sma_SOURCES = sma.c sma.yuck
+sma_SOURCES += tv.c tv.h
 sma_SOURCES += version.c version.h
 sma_CPPFLAGS = $(AM_CPPFLAGS)
 sma_CPPFLAGS += -D_GNU_SOURCE
