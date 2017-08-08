@@ -16,19 +16,8 @@
 
 typedef size_t cnt_t;
 
-typedef struct {
-	tv_t t;
-	enum {
-		UNIT_NONE,
-		UNIT_NSECS,
-		UNIT_DAYS,
-		UNIT_MONTHS,
-		UNIT_YEARS,
-	} u;
-} tvu_t;
-
-static tvu_t intv = {60U * 60U * 24U * 7U * NSECS, UNIT_NSECS};
-static tvu_t trnd = {60U * 60U * NSECS, UNIT_NSECS};
+static tvu_t intv = {60U * 60U * 24U * 7U, UNIT_SECS};
+static tvu_t trnd = {60U * 60U, UNIT_SECS};
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -47,75 +36,6 @@ serror(const char *fmt, ...)
 	return;
 }
 
-static tvu_t
-strtotvu(const char *str, char **endptr)
-{
-	char *on;
-	tvu_t r;
-
-	if (!(r.t = strtoul(str, &on, 10))) {
-		return (tvu_t){};
-	}
-	switch (*on++) {
-	secs:
-	case '\0':
-	case 'S':
-	case 's':
-		/* seconds, don't fiddle */
-		r.t *= NSECS;
-	msecs:
-		r.u = UNIT_NSECS;
-		break;
-
-	case 'm':
-	case 'M':
-		switch (*on) {
-		case '\0':
-			/* they want minutes, oh oh */
-			r.t *= 60UL;
-			goto secs;
-		case 's':
-		case 'S':
-			/* milliseconds it is then */
-			goto msecs;
-		case 'o':
-		case 'O':
-			r.u = UNIT_MONTHS;
-			break;
-		default:
-			goto invalid;
-		}
-		break;
-
-	case 'y':
-	case 'Y':
-		r.u = UNIT_YEARS;
-		break;
-
-	case 'h':
-	case 'H':
-		r.t *= 60U * 60U;
-		goto secs;
-	case 'w':
-	case 'W':
-		r.t *= 7U;
-	case 'd':
-	case 'D':
-		r.u = UNIT_DAYS;
-		break;
-
-	default:
-	invalid:
-		errno = 0, serror("\
-Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
-		return (tvu_t){};
-	}
-	if (endptr != NULL) {
-		*endptr = on;
-	}
-	return r;
-}
-
 
 static int
 offline(void)
@@ -128,7 +48,7 @@ offline(void)
 	size_t nm;
 
 	/* estimate */
-	if (trnd.u != UNIT_NSECS) {
+	if (trnd.u != UNIT_SECS) {
 	nimpl:
 		errno = 0, serror("not implemented");
 		return -1;
@@ -136,9 +56,9 @@ offline(void)
 
 	switch (intv.u) {
 	case UNIT_DAYS:
-		intv.t *= 24U * 60U * 60U * NSECS;
-		intv.u = UNIT_NSECS;
-	case UNIT_NSECS:
+		intv.t *= 24U * 60U * 60U;
+		intv.u = UNIT_SECS;
+	case UNIT_SECS:
 		break;
 	default:
 		goto nimpl;
@@ -155,8 +75,10 @@ offline(void)
 			/* got metronome cock-up */
 			continue;
 		}
+		/* round to seconds */
+		t /= NSECS;
 		/* move to monday */
-		t -= 4U * 24U * 60U * 60U * NSECS;
+		t -= 4U * 24U * 60U * 60U;
 		/* align ... */
 		t %= intv.t;
 		/* ... and round */
@@ -190,20 +112,34 @@ main(int argc, char *argv[])
 		goto out;
 	}
 
-	if (argi->interval_arg &&
-	    !(intv = strtotvu(argi->interval_arg, NULL)).t) {
-		errno = 0, serror("\
+	if (argi->interval_arg) {
+		intv = strtotvu(argi->interval_arg, NULL);
+		if (!intv.t) {
+			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
-		rc = EXIT_FAILURE;
-		goto out;
+			rc = EXIT_FAILURE;
+			goto out;
+		} else if (!intv.u) {
+			errno = 0, serror("\
+Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
+			rc = 1;
+			goto out;
+		}
 	}
 
-	if (argi->round_arg &&
-	    !(trnd = strtotvu(argi->round_arg, NULL)).t) {
-		errno = 0, serror("\
+	if (argi->round_arg) {
+		trnd = strtotvu(argi->round_arg, NULL);
+		if (!trnd.t) {
+			errno = 0, serror("\
 Error: cannot read rounding argument, must be positive.");
-		rc = EXIT_FAILURE;
-		goto out;
+			rc = EXIT_FAILURE;
+			goto out;
+		} else if (!intv.u) {
+			errno = 0, serror("\
+Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
+			rc = 1;
+			goto out;
+		}
 	}
 
 	/* offline mode */
