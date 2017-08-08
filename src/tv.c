@@ -38,6 +38,8 @@
 # include "config.h"
 #endif	/* HAVE_CONFIG_H */
 #include <stdlib.h>
+#include <string.h>
+#include <time.h>
 #include "tv.h"
 #include "nifty.h"
 
@@ -94,6 +96,7 @@ strtotvu(const char *str, char **endptr)
 	char *on;
 	tvu_t r;
 
+	r.t = strtoul(str, &on, 10);
 	switch (*on++) {
 	secs:
 	case '\0':
@@ -186,6 +189,42 @@ tvtostr(char *restrict buf, size_t bsz, tv_t t)
 		buf[i + j] = (tn % 10U) ^ '0';
 	}
 	return i + 10U;
+}
+
+ssize_t
+tvutostr(char *restrict buf, size_t bsz, tvu_t t)
+{
+	struct tm *tm;
+	time_t u;
+
+	switch (t.u) {
+	default:
+	case UNIT_NONE:
+		memcpy(buf, "ALL", 3U);
+		return 3U;
+	case UNIT_SECS:
+		return tvtostr(buf, bsz, t.t);
+	case UNIT_DAYS:
+	case UNIT_MONTHS:
+	case UNIT_YEARS:
+		break;
+	}
+
+	u = t.t / NSECS;
+	u--;
+	tm = gmtime(&u);
+
+	switch (t.u) {
+	case UNIT_DAYS:
+		return strftime(buf, bsz, "%F", tm);
+	case UNIT_MONTHS:
+		return strftime(buf, bsz, "%Y-%m", tm);
+	case UNIT_YEARS:
+		return strftime(buf, bsz, "%Y", tm);
+	default:
+		break;
+	}
+	return 0;
 }
 
 /* tv.c ends here */
