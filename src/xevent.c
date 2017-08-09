@@ -79,12 +79,13 @@ ffwdln(tv_t from)
 	} else {
 		/* TVS[I] >= FROM */
 		if ((bof = ofs[i]) >= bsz / 2U) {
-			memmove(buf, buf + bof, bix - bof);
+			memmove(buf, buf + bof, bix -= bof);
 			memmove(tvs, tvs + i, (nlines - i) * sizeof(*tvs));
 			nlines -= i;
 			for (size_t j = 0U; j < nlines; j++, i++) {
 				ofs[j] = ofs[i] - bof;
 			}
+			bof = 0U;
 		}
 		/* otherwise leave things as is */
 	}
