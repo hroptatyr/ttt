@@ -21,7 +21,18 @@ script:
 branches:
   only:
     - master
+    - /^v\d+\..*/
 
 notifications:
   email:
     - devel@fresse.org
+
+deploy:
+  provider: releases
+  api_key:
+    secure: Yw0R70oVaRDNevraVPWEGgIcee5IPikZgS+h4fQsW86ICe2uWuhNT7eDBTaKfVpRLOO+bt9ahbOTcmbeqKQ69zB+W9LEuRMQ7zAgBg2q09uov7lyRquMMoa0dTLGmPAPRQOmRTxJv9UWKOmcvaAi0pifaO62tx1JCS/av30z/NHOTQfQ3ohEJFRp4WPEA/XGdKMEZVrJEBQSf71BHtBg0vSvUpwSm/eDuJccD01fe39BZYMrw1Qu/zgq4VWloj5UwJNCAzYS5yh28gdIGtTRgjbnB56Ujxrkp4LUKgK0lqzSboUi9Xqx2OBARkzOQgqCwit0VcoJhiFVxGuoIzJ6keve2UrNI7xZfvApsGNbkgSMYC+Zw1QHmWQvqQJR0sbxgbI1oIRnSCcjQO+59dP7X9WWk8KVLh0KTA0XfjEga99Lyu4RPhzL/MC+805PHvfb0ZLAKRbMzK5wgKEkM0Oqx5IE7lDyF0WWnqWRi2eT+fp2Nvtq7ZdgnUXg9CxTBYoWJXTTfJrGZb3skFB5z66nAJiI2g47edRn43Hg9RD+M/W/BgNHYbvJA2sRnTFFX9m4RgcR0crFtYflZyoL7L67ueX6fUgkU2ZMTW163eOc3GrgQpsozhu6Ljw9C2306b6lu2oOOnGyXNCRTtsuXbbDUc8qHxCyaAGtzZ5ufBZhKYk=
+  file_glob: true
+  file: ttt-*.tar.xz
+  skip_cleanup: true
+  on:
+    tags: true
