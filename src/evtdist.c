@@ -284,7 +284,7 @@ next_cndl(tv_t t)
 		return (t / NSECS / intv.t + 1U) * intv.t * NSECS;
 	case UNIT_DAYS:
 		t /= 24ULL * 60ULL * 60ULL * NSECS;
-		t++;
+		t += intv.t;
 		t *= 24ULL * 60ULL * 60ULL * NSECS;
 		return t;
 	case UNIT_MONTHS:
@@ -304,13 +304,13 @@ next_cndl(tv_t t)
 	case UNIT_MONTHS:
 		*tm = (struct tm){
 			.tm_year = tm->tm_year,
-			.tm_mon = tm->tm_mon + 1,
+			.tm_mon = tm->tm_mon + intv.t,
 			.tm_mday = 1,
 		};
 		break;
 	case UNIT_YEARS:
 		*tm = (struct tm){
-			.tm_year = tm->tm_year + 1,
+			.tm_year = tm->tm_year + intv.t,
 			.tm_mon = 0,
 			.tm_mday = 1,
 		};
@@ -890,12 +890,12 @@ Error: cannot read base argument.");
 		return -1;
 	}
 	switch (pbase.u) {
-	case UNIT_NONE:
 	case UNIT_MONTHS:
 	case UNIT_YEARS:
 		errno = 0, serror("\
 Error: invalid suffix in base argument.");
 		return -1;
+	case UNIT_NONE:
 	case UNIT_NSECS:
 		/* yay */
 		break;
@@ -986,6 +986,9 @@ Error: --base argument is mandatory.");
 	}
 	switch (pbase.u) {
 	case UNIT_NONE:
+		errno = 0, serror("\
+Error: base argument in poisson mode is mandatory.");
+		return -1;
 	case UNIT_MONTHS:
 	case UNIT_YEARS:
 		errno = 0, serror("\
