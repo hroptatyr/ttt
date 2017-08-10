@@ -890,12 +890,12 @@ Error: cannot read base argument.");
 		return -1;
 	}
 	switch (pbase.u) {
-	case UNIT_NONE:
 	case UNIT_MONTHS:
 	case UNIT_YEARS:
 		errno = 0, serror("\
 Error: invalid suffix in base argument.");
 		return -1;
+	case UNIT_NONE:
 	case UNIT_NSECS:
 		/* yay */
 		break;
@@ -986,6 +986,9 @@ Error: --base argument is mandatory.");
 	}
 	switch (pbase.u) {
 	case UNIT_NONE:
+		errno = 0, serror("\
+Error: base argument in poisson mode is mandatory.");
+		return -1;
 	case UNIT_MONTHS:
 	case UNIT_YEARS:
 		errno = 0, serror("\
