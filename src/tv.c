@@ -154,6 +154,12 @@ strtotvu(const char *str, char **endptr)
 		r.u = UNIT_DAYS;
 		break;
 
+	case 'w':
+	case 'W':
+		r.u = UNIT_DAYS;
+		r.t *= 7U;
+		break;
+
 	default:
 	invalid:
 		r.u = UNIT_NONE;
