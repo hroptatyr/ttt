@@ -111,12 +111,14 @@ strtotvu(const char *str, char **endptr)
 		switch (*on) {
 		case 's':
 		case 'S':
+			on++;
 		nsecs:
 			r.u = UNIT_NSECS;
 			break;
 		default:
 			goto invalid;
 		}
+		break;
 
 	case 'm':
 	case 'M':
@@ -129,11 +131,12 @@ strtotvu(const char *str, char **endptr)
 		case 'S':
 			/* milliseconds it is then */
 			r.t *= USECS;
-			r.u = UNIT_NSECS;
+			on++;
 			goto nsecs;
 		case 'o':
 		case 'O':
 			r.u = UNIT_MONTHS;
+			on++;
 			break;
 		default:
 			goto invalid;
@@ -158,6 +161,19 @@ strtotvu(const char *str, char **endptr)
 	case 'W':
 		r.u = UNIT_DAYS;
 		r.t *= 7U;
+		break;
+
+	case 'u':
+	case 'U':
+		switch (*on) {
+		case 's':
+		case 'S':
+			on++;
+			r.t *= MSECS;
+			goto nsecs;
+		default:
+			goto invalid;
+		}
 		break;
 
 	default:
