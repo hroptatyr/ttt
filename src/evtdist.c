@@ -353,12 +353,21 @@ push_erlagg(char *ln, size_t UNUSED(lz))
 	} else if (UNLIKELY(t < last)) {
 		fputs("Warning: non-chronological\n", stderr);
 		return -1;
-	} else if (UNLIKELY(t > nxct)) {
+	} else if (UNLIKELY(t > nxct) && LIKELY(!allp)) {
 		if (LIKELY(nxct)) {
 			prnt_cndl();
 		}
 		agg = 0.;
 		nxct = next_cndl(t);
+	} else if (UNLIKELY(t > nxct)) {
+		if (UNLIKELY(!nxct)) {
+			nxct = next_cndl(t);
+		}
+		for (; nxct < t; nxct = next_cndl(nxct)) {
+			prnt_cndl();
+			agg = NAN;
+		}
+		agg = 0.;
 	}
 
 	/* measure time */
