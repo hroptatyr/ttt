@@ -11,6 +11,19 @@ An event is indicated by a unix timestamp on stdin.
   --all                 Print all bins instead of non-zero ones.
 
 
+Usage: evtdist erlagg < EVENTS
+
+Integrate over the reciprocated Erlang histogram.
+This is the same as summing the inverse of timestamp deltas.
+
+  -o, --offset=S        Offset predecessors of events by -S seconds,
+                        can be suffixed with ms for milliseconds, us for
+                        microseconds, ns for nanoseconds.
+                        This is to avoid singularities in datasets which
+                        contain simultaenous events.
+                        Default: 0
+
+
 Usage: evtdist erlang < EVENTS
 
 The difference between the current timestamp and the last will be

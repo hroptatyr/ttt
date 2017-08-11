@@ -264,6 +264,7 @@ static size_t *dlt;
 static tv_t *tlo;
 static tv_t *thi;
 static size_t cntz;
+static double agg;
 
 static void(*prnt_cndl)(void);
 static char buf[sizeof(cnt)];
@@ -339,6 +340,47 @@ rset_rngs(void)
 		return;
 	}
 	return;
+}
+
+static int
+push_erlagg(char *ln, size_t UNUSED(lz))
+{
+	tv_t t;
+
+	/* metronome is up first */
+	if (UNLIKELY((t = strtotv(ln, NULL)) == NATV)) {
+		return -1;
+	} else if (UNLIKELY(t < last)) {
+		fputs("Warning: non-chronological\n", stderr);
+		return -1;
+	} else if (UNLIKELY(t > nxct)) {
+		if (LIKELY(nxct)) {
+			prnt_cndl();
+		}
+		agg = 0.;
+		nxct = next_cndl(t);
+	}
+
+	/* measure time */
+	with (tv_t dt = t - last) {
+		/* add offset */
+		switch (pbase.u) {
+		default:
+		case UNIT_NONE:
+			break;
+		case UNIT_NSECS:
+			dt += pbase.t;
+			break;
+		case UNIT_SECS:
+			dt += pbase.t * 1000000000ULL;
+			break;
+		}
+		agg += (double)NSECS / (double)dt;
+	}
+	/* and store state */
+	last = t;
+	ip = 0U;
+	return 0;
 }
 
 static int
@@ -649,6 +691,29 @@ mtozu(double logn, double x)
 
 
 /* printers */
+static void
+prnt_agg(void)
+{
+	static size_t ncndl;
+	size_t len = 0U;
+
+	if (!ncndl++) {
+		static const char hdr[] = "cndl\tcnt\n";
+		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
+	}
+
+	len = 0U;
+	/* candle instance */
+	len += tvutostr(buf + len, sizeof(buf) - len, (tvu_t){nxct, intv.u});
+	/* count */
+	buf[len++] = '\t';
+	len += snprintf(buf + len, sizeof(buf) - len, "%.0f", agg);
+	buf[len++] = '\n';
+
+	fwrite(buf, sizeof(*buf), len, stdout);
+	return;
+}
+
 static void
 prnt_cndl_mtrx(void)
 {
@@ -1016,6 +1081,29 @@ Error: invalid suffix in base argument.");
 	return 0;
 }
 
+static int
+setup_erlagg(struct yuck_cmd_erlagg_s argi[static 1U])
+{
+	if (argi->offset_arg) {
+		pbase = strtotvu(argi->offset_arg, NULL);
+		switch (pbase.u) {
+		default:
+			break;
+		case UNIT_NONE:
+		case UNIT_DAYS:
+		case UNIT_MONTHS:
+		case UNIT_YEARS:
+			errno = 0, serror("\
+Error: invalid suffix to --offset argument.");
+			return -1;
+		}			
+	}
+
+	/* set candle printer */
+	prnt_cndl = prnt_agg;
+	return 0;
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -1045,7 +1133,6 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 	allp = argi->all_flag;
 
 	switch (argi->cmd) {
-	default:
 	case EVTDIST_CMD_ERLANG:
 		if (setup_erlang((void*)argi) < 0) {
 			rc = EXIT_FAILURE;
@@ -1054,6 +1141,13 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 		break;
 	case EVTDIST_CMD_POISSON:
 		if (setup_poisson((void*)argi) < 0) {
+			rc = EXIT_FAILURE;
+			goto out;
+		}
+		break;
+	default:
+	case EVTDIST_CMD_ERLAGG:
+		if (setup_erlagg((void*)argi) < 0) {
 			rc = EXIT_FAILURE;
 			goto out;
 		}
@@ -1078,6 +1172,11 @@ Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 			}
 			/* finalise poisson pusher */
 			(void)push_poiss(NULL, 0U);
+			break;
+		case EVTDIST_CMD_ERLAGG:
+			while ((nrd = getline(&line, &llen, stdin)) > 0) {
+				(void)push_erlagg(line, nrd);
+			}
 			break;
 		}
 		/* finalise our findings */
