@@ -706,7 +706,9 @@ prnt_agg(void)
 	static size_t ncndl;
 	size_t len = 0U;
 
-	if (!ncndl++) {
+	if (UNLIKELY(!nxct)) {
+		return;
+	} else if (!ncndl++) {
 		static const char hdr[] = "cndl\tcnt\n";
 		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
 	}
@@ -732,7 +734,9 @@ prnt_cndl_mtrx(void)
 	const gamma_t mg = fit_gamma();
 	const pareto_t ml = fit_lomax();
 
-	if (!ncndl++) {
+	if (UNLIKELY(!nxct)) {
+		return;
+	} else if (!ncndl++) {
 		static const char hdr[] = "cndl\tmetric";
 
 		len = memncpy(buf, hdr, strlenof(hdr));
@@ -819,7 +823,9 @@ prnt_cndl_molt(void)
 	const gamma_t mg = fit_gamma();
 	const pareto_t ml = fit_lomax();
 
-	if (!ncndl++) {
+	if (UNLIKELY(!nxct)) {
+		return;
+	} else if (!ncndl++) {
 		static const char hdr[] = "cndl\tlo\thi\tcnt\ttheo_erlang\ttheo_gamma\ttheo_lomax\n";
 		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
 	}
@@ -862,7 +868,9 @@ prnt_cndl_mtrx_poiss(void)
 	size_t len = 0U;
 	const zip_t m = fit_zip();
 
-	if (!ncndl++) {
+	if (UNLIKELY(!nxct)) {
+		return;
+	} else if (!ncndl++) {
 		static const char hdr[] = "cndl\tmetric";
 
 		len = memncpy(buf, hdr, strlenof(hdr));
@@ -913,7 +921,9 @@ prnt_cndl_molt_poiss(void)
 	size_t len = 0U;
 	const zip_t m = fit_zip();
 
-	if (!ncndl++) {
+	if (UNLIKELY(!nxct)) {
+		return;
+	} else if (!ncndl++) {
 		static const char hdr[] = "cndl\tk\tcnt\ttheo\n";
 		fwrite(hdr, sizeof(*hdr), strlenof(hdr), stdout);
 	}
