@@ -52,7 +52,7 @@ static px_t qunt = 0.df;
 
 
 static int
-push_beef(char *ln, size_t lz)
+push_qunt(const char *ln, size_t lz)
 {
 	static quo_t last;
 	quo_t q;
@@ -85,6 +85,40 @@ push_beef(char *ln, size_t lz)
 	return 0;
 }
 
+static int
+push_latm(const char *ln, size_t lz)
+{
+	static px_t lasm;
+	quo_t q;
+	char *on;
+
+	/* metronome is up first */
+	if (UNLIKELY(strtotv(ln, &on) == NATV)) {
+		return -1;
+	}
+
+	/* instrument name, don't hash him */
+	if (UNLIKELY((on = strchr(++on, '\t')) == NULL)) {
+		return -1;
+	}
+	on++;
+
+	/* snarf quotes */
+	if (!(q.b = strtopx(on, &on)) || *on++ != '\t' ||
+	    !(q.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
+		return -1;
+	}
+	/* check against old midpoint */
+	if (lasm >= q.b && lasm <= q.a) {
+		return 0;
+	}
+	/* otherwise print */
+	fwrite(ln, 1, lz, stdout);
+	/* and store state */
+	lasm = (q.a + q.b) / 2.df;
+	return 0;
+}
+
 
 #include "qq.yucc"
 
@@ -93,7 +127,7 @@ main(int argc, char *argv[])
 {
 /* grep -F 'EURUSD FAST Curncy' | cut -f1,5,6 */
 	static yuck_t argi[1U];
-
+	int(*push_beef)(const char*, size_t) = push_latm;
 	int rc = 0;
 
 	if (yuck_parse(argi, argc, argv) < 0) {
@@ -103,6 +137,7 @@ main(int argc, char *argv[])
 
 	if (argi->quantum_arg) {
 		qunt = strtopx(argi->quantum_arg, NULL);
+		push_beef = push_qunt;
 	}
 
 	{

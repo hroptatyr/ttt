@@ -90,6 +90,7 @@ EXTRA_DIST += EURUSD
 TESTS += qq_01.clit
 TESTS += qq_02.clit
 TESTS += qq_03.clit
+TESTS += qq_04.clit
 EXTRA_DIST += EURUSD
 
 ## Makefile.am ends here
