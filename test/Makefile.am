@@ -87,4 +87,9 @@ TESTS += quodist_05.clit
 TESTS += quodist_06.clit
 EXTRA_DIST += EURUSD
 
+TESTS += qq_01.clit
+TESTS += qq_02.clit
+TESTS += qq_03.clit
+EXTRA_DIST += EURUSD
+
 ## Makefile.am ends here
