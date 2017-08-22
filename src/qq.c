@@ -49,12 +49,14 @@ typedef struct {
 } quo_t;
 
 static px_t qunt = 0.df;
+static unsigned int rptp;
 
 
 static int
-push_beef(char *ln, size_t lz)
+push_qunt(const char *ln, size_t lz)
 {
 	static quo_t last;
+	const char *pre;
 	quo_t q;
 	char *on;
 
@@ -67,7 +69,7 @@ push_beef(char *ln, size_t lz)
 	if (UNLIKELY((on = strchr(++on, '\t')) == NULL)) {
 		return -1;
 	}
-	on++;
+	pre = ++on;
 
 	/* snarf quotes */
 	if (!(q.b = strtopx(on, &on)) || *on++ != '\t' ||
@@ -76,12 +78,69 @@ push_beef(char *ln, size_t lz)
 	}
 	/* otherwise calc new bid/ask pair */
 	if (fabsd32(q.b - last.b) <= qunt && fabsd32(q.a - last.a) <= qunt) {
+		if (rptp) {
+			char buf[256U];
+			size_t len = 0U;
+			fwrite(ln, 1, pre - ln, stdout);
+			len += pxtostr(buf + len, sizeof(buf) - len, last.b);
+			buf[len++] = '\t';
+			len += pxtostr(buf + len, sizeof(buf) - len, last.a);
+			fwrite(buf, 1, len, stdout);
+			fwrite(on, 1, lz - (on - ln), stdout);
+		}
 		return 0;
 	}
 	/* otherwise print */
 	fwrite(ln, 1, lz, stdout);
 	/* and store state */
 	last = q;
+	return 0;
+}
+
+static int
+push_latm(const char *ln, size_t lz)
+{
+	static px_t lasm;
+	static quo_t last;
+	const char *pre;
+	quo_t q;
+	char *on;
+
+	/* metronome is up first */
+	if (UNLIKELY(strtotv(ln, &on) == NATV)) {
+		return -1;
+	}
+
+	/* instrument name, don't hash him */
+	if (UNLIKELY((on = strchr(++on, '\t')) == NULL)) {
+		return -1;
+	}
+	pre = ++on;
+
+	/* snarf quotes */
+	if (!(q.b = strtopx(on, &on)) || *on++ != '\t' ||
+	    !(q.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
+		return -1;
+	}
+	/* check against old midpoint */
+	if (lasm >= q.b && lasm <= q.a) {
+		if (rptp) {
+			char buf[256U];
+			size_t len = 0U;
+			fwrite(ln, 1, pre - ln, stdout);
+			len += pxtostr(buf + len, sizeof(buf) - len, last.b);
+			buf[len++] = '\t';
+			len += pxtostr(buf + len, sizeof(buf) - len, last.a);
+			fwrite(buf, 1, len, stdout);
+			fwrite(on, 1, lz - (on - ln), stdout);
+		}
+		return 0;
+	}
+	/* otherwise print */
+	fwrite(ln, 1, lz, stdout);
+	/* and store state */
+	last = q;
+	lasm = (q.a + q.b) / 2.df;
 	return 0;
 }
 
@@ -93,7 +152,7 @@ main(int argc, char *argv[])
 {
 /* grep -F 'EURUSD FAST Curncy' | cut -f1,5,6 */
 	static yuck_t argi[1U];
-
+	int(*push_beef)(const char*, size_t) = push_latm;
 	int rc = 0;
 
 	if (yuck_parse(argi, argc, argv) < 0) {
@@ -103,7 +162,10 @@ main(int argc, char *argv[])
 
 	if (argi->quantum_arg) {
 		qunt = strtopx(argi->quantum_arg, NULL);
+		push_beef = push_qunt;
 	}
+
+	rptp = argi->repeat_flag;
 
 	{
 		char *line = NULL;
