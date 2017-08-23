@@ -258,6 +258,18 @@ gentrades_LDFLAGS = $(AM_LDFLAGS)
 gentrades_LDADD = -lm
 BUILT_SOURCES += gentrades.yucc
 
+bin_PROGRAMS += pat
+pat_SOURCES = pat.c pat.yuck
+pat_SOURCES += tv.c tv.h
+pat_SOURCES += version.c version.h
+pat_CPPFLAGS = $(AM_CPPFLAGS)
+pat_CPPFLAGS += $(dfp754_CFLAGS)
+pat_CPPFLAGS += -DHAVE_VERSION_H
+pat_LDFLAGS = $(AM_LDFLAGS)
+pat_LDFLAGS += $(dfp754_LIBS)
+pat_LDADD = libmydfp.a -lm
+BUILT_SOURCES += pat.yucc
+
 ## doesn't really fit in, but what the heck
 bin_PROGRAMS += cdiff
 cdiff_SOURCES = cdiff.c cdiff.yuck
