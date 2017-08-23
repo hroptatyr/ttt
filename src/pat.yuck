@@ -1,0 +1,6 @@
+Usage: pat < QUOTES
+
+Explanation needed.
+
+  -a, --abs         Do not distinguish between directions,
+                    just track direction changes.
