@@ -41,6 +41,8 @@ typedef _Decimal64 qx_t;
 #define pxtostr		d32tostr
 #define strtoqx		strtod64
 #define qxtostr		d64tostr
+#define NANPX		NAND32
+#define isnanpx		isnand32
 
 /* relevant tick dimensions */
 typedef struct {
@@ -50,6 +52,13 @@ typedef struct {
 
 static px_t qunt = 0.df;
 static unsigned int rptp;
+
+
+static inline size_t
+npxtostr(char *restrict buf, size_t bsz, px_t p)
+{
+	return !isnanpx(p) ? pxtostr(buf, bsz, p) : 0;
+}
 
 
 static int
@@ -82,9 +91,9 @@ push_qunt(const char *ln, size_t lz)
 			char buf[256U];
 			size_t len = 0U;
 			fwrite(ln, 1, pre - ln, stdout);
-			len += pxtostr(buf + len, sizeof(buf) - len, last.b);
+			len += npxtostr(buf + len, sizeof(buf) - len, last.b);
 			buf[len++] = '\t';
-			len += pxtostr(buf + len, sizeof(buf) - len, last.a);
+			len += npxtostr(buf + len, sizeof(buf) - len, last.a);
 			fwrite(buf, 1, len, stdout);
 			fwrite(on, 1, lz - (on - ln), stdout);
 		}
@@ -118,19 +127,24 @@ push_latm(const char *ln, size_t lz)
 	pre = ++on;
 
 	/* snarf quotes */
-	if (!(q.b = strtopx(on, &on)) || *on++ != '\t' ||
-	    !(q.a = strtopx(on, &on)) || (*on != '\t' && *on != '\n')) {
-		return -1;
+	with (const char *str = on) {
+		q.b = strtopx(str, &on);
+		q.b = on > str ? q.b : NANPX;
 	}
+	with (const char *str = ++on) {
+		q.a = strtopx(str, &on);
+		q.a = on > str ? q.a : NANPX;
+	}
+
 	/* check against old midpoint */
 	if (lasm >= q.b && lasm <= q.a) {
 		if (rptp) {
 			char buf[256U];
 			size_t len = 0U;
 			fwrite(ln, 1, pre - ln, stdout);
-			len += pxtostr(buf + len, sizeof(buf) - len, last.b);
+			len += npxtostr(buf + len, sizeof(buf) - len, last.b);
 			buf[len++] = '\t';
-			len += pxtostr(buf + len, sizeof(buf) - len, last.a);
+			len += npxtostr(buf + len, sizeof(buf) - len, last.a);
 			fwrite(buf, 1, len, stdout);
 			fwrite(on, 1, lz - (on - ln), stdout);
 		}
