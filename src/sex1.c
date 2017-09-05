@@ -529,7 +529,7 @@ offline(FILE *qfp)
 }
 
 
-#include "sex.yucc"
+#include "sex1.yucc"
 
 int
 main(int argc, char *argv[])

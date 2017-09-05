@@ -1,6 +1,6 @@
 #!/usr/bin/clitoris  ## -*- shell-script -*-
 
-$ sex --exe-delay 0 -Q 1 "${srcdir}/PVC" <<EOF
+$ sex1 --exe-delay 0 -Q 1 "${srcdir}/PVC" <<EOF
 1482109247.100000000	LONG	PVCQ7 Comdty
 1482109248.500000000	SHORT	PVCQ7 Comdty
 1482109249.500000000	SHORT	PVCQ7 Comdty
