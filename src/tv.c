@@ -51,14 +51,14 @@ strtotv(const char *ln, char **endptr)
 	tv_t r;
 
 	/* time value up first */
-	with (long unsigned int s, x) {
-		if (UNLIKELY(!(s = strtoul(ln, &on, 10)) || on == NULL)) {
+	with (long long unsigned int s, x) {
+		if (UNLIKELY(!(s = strtoull(ln, &on, 10)) || on == NULL)) {
 			r = NATV;
 			goto out;
 		} else if (*on == '.') {
 			char *moron;
 
-			x = strtoul(++on, &moron, 10);
+			x = strtoull(++on, &moron, 10);
 			if (UNLIKELY(moron - on > 9U)) {
 				return NATV;
 			} else if ((moron - on) % 3U) {
@@ -96,7 +96,7 @@ strtotvu(const char *str, char **endptr)
 	char *on;
 	tvu_t r;
 
-	r.t = strtoul(str, &on, 10);
+	r.t = strtoll(str, &on, 10);
 	switch (*on++) {
 	secs:
 	case '\0':
@@ -190,8 +190,8 @@ strtotvu(const char *str, char **endptr)
 ssize_t
 tvtostr(char *restrict buf, size_t bsz, tv_t t)
 {
-	long unsigned int ts = t / NSECS;
-	long unsigned int tn = t % NSECS;
+	long long unsigned int ts = t / NSECS;
+	long long unsigned int tn = t % NSECS;
 	size_t i;
 
 	if (UNLIKELY(bsz < 19U)) {

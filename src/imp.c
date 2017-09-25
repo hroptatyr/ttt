@@ -131,7 +131,7 @@ send_eva(tv_t top, tv_t now, px_t pnl)
 	len = tvtostr(buf, sizeof(buf), now);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
-	len += snprintf(buf + len, sizeof(buf) - len, "%lu", now - top);
+	len += snprintf(buf + len, sizeof(buf) - len, "%lld", now - top);
 	buf[len++] = '\t';
 	len += pxtostr(buf + len, sizeof(buf) - len, pnl);
 	buf[len++] = '\n';
@@ -148,7 +148,7 @@ send_abs(tv_t UNUSED(top), tv_t now, px_t pnl)
 	len = tvtostr(buf, sizeof(buf), now);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
-	len += snprintf(buf + len, sizeof(buf) - len, "%lu", now % maxt);
+	len += snprintf(buf + len, sizeof(buf) - len, "%lld", now % maxt);
 	buf[len++] = '\t';
 	len += pxtostr(buf + len, sizeof(buf) - len, pnl);
 	buf[len++] = '\n';
@@ -165,7 +165,7 @@ send_sum(tv_t lag, double pnl, double dev, double skew, double kurt)
 	len = tvtostr(buf, sizeof(buf), metr);
 	buf[len++] = '\t';
 	len += (memcpy(buf + len, verb, strlenof(verb)), strlenof(verb));
-	len += snprintf(buf + len, sizeof(buf) - len, "%lu", lag);
+	len += snprintf(buf + len, sizeof(buf) - len, "%lld", lag);
 	buf[len++] = '\t';
 	len += snprintf(buf + len, sizeof(buf) - len, "%f", pnl);
 	buf[len++] = '\t';
@@ -488,7 +488,7 @@ Error: interval parameter must be positive.");
 	if ((abs_tod_p = !!argi->abs_tod_flag)) {
 		/* we need a maxt in this case */
 		if (!maxt) {
-			maxt = 86400 * NSECS;
+			maxt = 86400ULL * NSECS;
 		}
 	}
 
