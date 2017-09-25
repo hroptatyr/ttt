@@ -44,12 +44,12 @@
 
 /**
  * Timestamp type. */
-typedef long unsigned int tv_t;
+typedef long long unsigned int tv_t;
 
-#define NATV	((tv_t)-1LU)
+#define NATV	((tv_t)-1LLU)
 
 typedef struct {
-	tv_t t;
+	long long int t;
 	enum {
 		UNIT_NONE,
 		UNIT_NSECS,
