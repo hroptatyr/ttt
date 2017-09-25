@@ -18,8 +18,8 @@
 #include "nifty.h"
 
 /* command line params */
-static tv_t intv = 1U * NSECS;
-static tv_t offs = 0U * NSECS;
+static tvu_t intv = {1U, UNIT_SECS};
+static tvu_t offs = {0U, UNIT_SECS};
 static FILE *sfil;
 
 
@@ -100,7 +100,7 @@ push_beef(char *ln, size_t UNUSED(lz))
 			return;
 		}
 
-		slen = tvtostr(sbuf, sizeof(sbuf), (metr + 1ULL) * intv + offs);
+		slen = tvtostr(sbuf, sizeof(sbuf), (metr + 1ULL) * intv.t + offs.t);
 		/* copy over (lbuf has space for the metronome) */
 		memcpy(lbuf + (24UL - slen), sbuf, slen);
 		/* and out */
@@ -127,8 +127,8 @@ push_beef(char *ln, size_t UNUSED(lz))
 	}
 	/* align metronome to interval */
 	nmtr--;
-	nmtr -= offs;
-	nmtr /= intv;
+	nmtr -= offs.t;
+	nmtr /= intv.t;
 
 	/* do we need to draw another candle? */
 	for (; UNLIKELY(nmtr > metr); metr = next(nmtr)) {
@@ -164,101 +164,27 @@ main(int argc, char *argv[])
 	}
 
 	if (argi->interval_arg) {
-		char *on;
-
-		if (!(intv = strtoul(argi->interval_arg, &on, 10))) {
+		intv = strtotvu(argi->interval_arg, NULL);
+		if (!intv.t) {
 			errno = 0, serror("\
 Error: cannot read interval argument, must be positive.");
 			rc = 1;
 			goto out;
-		}
-		switch (*on) {
-		case '\0':
-		case 's':
-		case 'S':
-			/* user wants seconds, do they not? */
-			intv *= NSECS;
-			break;
-		case 'm':
-		case 'M':
-			switch (*++on) {
-			case '\0':
-				/* they want minutes, oh oh */
-				intv *= 60UL * NSECS;
-				break;
-			case 's':
-			case 'S':
-				/* milliseconds it is then */
-				intv *= USECS;
-				break;
-			default:
-				goto invalid_intv;
-			}
-			break;
-		case 'h':
-		case 'H':
-			/* them hours we use */
-			intv *= 60UL * 60UL * NSECS;
-			break;
-		default:
-		invalid_intv:
+		} else if (!intv.u) {
 			errno = 0, serror("\
-Error: invalid suffix in interval, use `ms', `s', `m', or `h'");
+Error: unknown suffix in interval argument, must be s, m, h, d, w, mo, y.");
 			rc = 1;
 			goto out;
 		}
 	}
 
 	if (argi->offset_arg) {
-		char *on;
-		long int o;
-
-		o = strtol(argi->offset_arg, &on, 10);
-
-		switch (*on) {
-		case '\0':
-		case 's':
-		case 'S':
-			/* user wants seconds, do they not? */
-			o *= NSECS;
-			break;
-		case 'm':
-		case 'M':
-			switch (*++on) {
-			case '\0':
-				/* they want minutes, oh oh */
-				o *= 60U * NSECS;
-				break;
-			case 's':
-			case 'S':
-				/* milliseconds it is then */
-				o *= USECS;
-				break;
-			default:
-				goto invalid_offs;
-			}
-			break;
-		case 'h':
-		case 'H':
-			/* them hours we use */
-			o *= 60U * 60U * NSECS;
-			break;
-		default:
-		invalid_offs:
+		offs = strtotvu(argi->offset_arg, NULL);
+		if (!intv.u) {
 			errno = 0, serror("\
-Error: invalid suffix in offset, use `ms', `s', `m', or `h'");
+Error: unknown suffix in offset argument, must be s, m, h, d, w, mo, y.");
 			rc = 1;
 			goto out;
-		}
-
-		/* canonicalise */
-		if (argi->stamps_arg) {
-			/* offset has a special meaning in stamps mode */
-			offs = o;
-		} else if (o > 0) {
-			offs = o % intv;
-		} else if (o < 0) {
-			offs = intv - (-o % intv);
 		}
 	}
 
@@ -270,7 +196,37 @@ Error: cannot open stamps file");
 			goto out;
 		}
 		/* reset intv to unit interval */
-		intv = 1ULL;
+		intv = (tvu_t){1, UNIT_NSECS};
+	}
+
+	/* assimilate offs and intv */
+	switch (intv.u) {
+	case UNIT_DAYS:
+		intv.t *= 86400LLU;
+	case UNIT_SECS:
+		intv.t *= NSECS;
+	case UNIT_NSECS:
+		/* good */
+		break;
+	default:
+		errno = 0, serror("\
+Error: snapshots timescale must be coercible to nanoseconds.");
+		rc = 1;
+		goto out;
+	}
+	switch (offs.u) {
+	case UNIT_DAYS:
+		offs.t *= 86400LLU;
+	case UNIT_SECS:
+		offs.t *= NSECS;
+	case UNIT_NSECS:
+		/* good */
+		break;
+	default:
+		errno = 0, serror("\
+Error: offset timescale must be coercible to nanoseconds.");
+		rc = 1;
+		goto out;
 	}
 
 	/* use a next routine du jour */
