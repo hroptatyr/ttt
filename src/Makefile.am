@@ -279,6 +279,15 @@ cdiff_CPPFLAGS += -DHAVE_VERSION_H
 cdiff_LDFLAGS = $(AM_LDFLAGS)
 BUILT_SOURCES += cdiff.yucc
 
+bin_PROGRAMS += align
+align_SOURCES = align.c align.yuck
+align_SOURCES += tv.c tv.h
+align_SOURCES += version.c version.h
+align_CPPFLAGS = $(AM_CPPFLAGS)
+align_CPPFLAGS += -DHAVE_VERSION_H
+align_LDFLAGS = $(AM_LDFLAGS)
+BUILT_SOURCES += align.yucc
+
 
 ## version rules
 version.c: version.c.in $(top_builddir)/.version
