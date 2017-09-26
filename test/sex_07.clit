@@ -1,6 +1,6 @@
 #!/usr/bin/clitoris  ## -*- shell-script -*-
 
-$ snap -i2 < "${srcdir}/EURUSD" > "EURUSD.snap"
+$ align -i2 < "${srcdir}/EURUSD" > "EURUSD.snap"
 $ sex1 --exe-delay 1 --absqty -Q 10000 "EURUSD.snap" <<EOF
 1461065880.000000000	LONG	EURUSD
 1461065881.000000000	CANCEL	EURUSD
