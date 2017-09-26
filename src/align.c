@@ -41,6 +41,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <errno.h>
+#include <sys/resource.h>
 #include "tv.h"
 #include "nifty.h"
 
@@ -48,6 +49,9 @@
 static tvu_t intv = {1U, UNIT_SECS};
 static tvu_t offs = {0U, UNIT_SECS};
 static FILE *sfil;
+static tv_t(*next)(tv_t);
+
+static tv_t metr;
 
 
 static __attribute__((format(printf, 1, 2))) void
@@ -64,6 +68,208 @@ serror(const char *fmt, ...)
 	}
 	fputc('\n', stderr);
 	return;
+}
+
+static tv_t
+_next_intv(tv_t newm)
+{
+	return ((((newm - 1ULL) - offs.t) / intv.t) + 1ULL) * intv.t;
+}
+
+static tv_t
+_next_stmp(tv_t newm)
+{
+	static char *line;
+	static size_t llen;
+
+	if (getline(&line, &llen, sfil) > 0 &&
+	    (newm = strtotv(line, NULL)) != NATV) {
+		return newm + offs.t;
+	}
+	/* otherwise it's the end of the road */
+	free(line);
+	line = NULL;
+	llen = 0UL;
+	return NATV;
+}
+
+static size_t
+get_maxfp(void)
+{
+	struct rlimit r;
+
+	if (getrlimit(RLIMIT_NOFILE, &r) < 0) {
+		return 0UL;
+	} else if (r.rlim_cur <= 3U) {
+		return 0UL;
+	}
+	return r.rlim_cur - 3UL;
+}
+
+static inline __attribute__((const, pure)) size_t
+min_z(size_t z1, size_t z2)
+{
+	return z1 <= z2 ? z1 : z2;
+}
+
+static size_t
+_next_2pow(size_t z)
+{
+	z--;
+	z |= z >> 1U;
+	z |= z >> 2U;
+	z |= z >> 4U;
+	z |= z >> 8U;
+	z |= z >> 16U;
+	z |= z >> 32U;
+	z++;
+	return z;
+}
+
+
+static int
+from_cmdln(char *const *fn, size_t nfn)
+{
+/* files in the parameter array */
+	const size_t maxnfp = get_maxfp();
+	struct {
+		/* current file, line and read count */
+		FILE *p;
+		char *line;
+		size_t llen;
+		size_t nrd;
+		/* offset past stamp and stamp */
+		off_t lix;
+		tv_t t;
+		/* previous line buffer */
+		char *pbuf;
+		size_t pbsz;
+		size_t plen;
+	} f[min_z(nfn, maxnfp)];
+	size_t nf = 0U;
+	size_t j;
+
+	memset(f, 0, sizeof(f));
+	for (j = 0U; j < nfn && nf < countof(f); j++) {
+		f[nf].p = fopen(fn[j], "r");
+		if (UNLIKELY(f[nf].p == NULL)) {
+			serror("\
+Error: cannot open file `%s'", fn[j]);
+			continue;
+		}
+		nf++;
+	}
+	if (j < nfn) {
+		errno = 0, serror("\
+Warning: only %zu files are used due to resource limits", nfn);
+	}
+
+	/* read first line */
+	for (size_t i = 0U; i < nf; i++) {
+		if (f[i].p == NULL) {
+			continue;
+		} else if (f[i].t > metr) {
+			continue;
+		}
+		do {
+			ssize_t nrd = getline(&f[i].line, &f[i].llen, f[i].p);
+			char *on;
+
+			if (nrd <= 0) {
+				fclose(f[i].p);
+				f[i].p = NULL;
+				f[i].t = NATV;
+				break;
+			}
+			/* massage line */
+			nrd -= f[i].line[nrd - 1] == '\n';
+			f[i].line[nrd] = '\0';
+			/* otherwise store line length */
+			f[i].nrd = nrd;
+			f[i].t = strtotv(f[i].line, &on);
+			f[i].lix = on - f[i].line;
+		} while (f[i].t == NATV);
+	}
+metr:
+	metr = NATV;
+	for (size_t i = 0U; i < nf; i++) {
+		if (f[i].t < metr) {
+			metr = f[i].t;
+		}
+	}
+	/* up the metronome */
+	if (UNLIKELY(metr == NATV || (metr = next(metr)) == NATV)) {
+		goto out;
+	}
+push:
+	/* push lines < METR */
+	for (size_t i = 0U; i < nf; i++) {
+		if (f[i].t <= metr) {
+			f[i].plen = f[i].nrd - f[i].lix;
+			if (UNLIKELY(f[i].pbsz <= f[i].plen)) {
+				f[i].pbsz = _next_2pow(f[i].llen);
+				f[i].pbuf = realloc(f[i].pbuf, f[i].pbsz);
+			}
+			/* and push */
+			memcpy(f[i].pbuf, f[i].line + f[i].lix, f[i].plen + 1U);
+		}
+	}
+	/* more lines now */
+	for (size_t i = j = 0U; i < nf; i++) {
+		if (f[i].p == NULL) {
+			continue;
+		} else if (f[i].t > metr) {
+			continue;
+		}
+		do {
+			ssize_t nrd = getline(&f[i].line, &f[i].llen, f[i].p);
+			char *on;
+
+			if (nrd <= 0) {
+				fclose(f[i].p);
+				f[i].p = NULL;
+				f[i].t = NATV;
+				break;
+			}
+			/* massage line */
+			nrd -= f[i].line[nrd - 1] == '\n';
+			f[i].line[nrd] = '\0';
+			/* otherwise store line length */
+			f[i].nrd = nrd;
+			f[i].t = strtotv(f[i].line, &on);
+			f[i].lix = on - f[i].line;
+		} while (f[i].t == NATV);
+		j++;
+	}
+	/* check if lines need pushing */
+	if (j) {
+		goto push;
+	}
+	/* align */
+	with (char buf[32U]) {
+		fwrite(buf, 1, tvtostr(buf, sizeof(buf), metr), stdout);
+	}
+	for (size_t i = 0U; i < nf; i++) {
+		if (f[i].plen) {
+			fwrite(f[i].pbuf, 1, f[i].plen, stdout);
+		} else {
+			fputc('\t', stdout);
+		}
+	}
+	fputc('\n', stdout);
+	goto metr;
+
+out:
+	/* and close */
+	for (size_t i = 0U; i < nf; i++) {
+		if (f[i].line != NULL) {
+			free(f[i].line);
+		}
+		if (f[i].pbuf != NULL) {
+			free(f[i].pbuf);
+		}
+	}
+	return 0;
 }
 
 
@@ -143,6 +349,17 @@ Error: snapshots timescale must be coercible to nanoseconds.");
 Error: offset timescale must be coercible to nanoseconds.");
 		rc = 1;
 		goto out;
+	}
+
+	/* use a next routine du jour */
+	next = !argi->stamps_arg ? _next_intv : _next_stmp;
+
+	if (argi->nargs > 0U) {
+		from_cmdln(argi->args, argi->nargs);
+	}
+
+	if (argi->stamps_arg) {
+		fclose(sfil);
 	}
 
 out:
