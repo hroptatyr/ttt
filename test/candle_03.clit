@@ -1,6 +1,6 @@
 #!/usr/bin/clitoris  ## -*- shell-script -*-
 
-$ snap -i2 < "${srcdir}/EURUSD" | candle
+$ align -i2 < "${srcdir}/EURUSD" | candle
 cndl	ccy	_1st	last	mindlt	maxdlt	minask	maxbid	minspr	maxspr	maxbsz	maxasz	maxbim	maxsim	maxdu	maxdd
 ALL	EURUSD	1461065878.000000000	1461065898.000000000	2.000000000	6.000000000	1.13324	1.13327	0.00001	0.00004	7.120000	4.690000	3.000000	3.310000	0.00008	-0.00003
 $

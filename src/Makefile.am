@@ -41,16 +41,6 @@ candle_LDFLAGS += $(dfp754_LIBS)
 candle_LDADD = libmydfp.a
 BUILT_SOURCES += candle.yucc
 
-bin_PROGRAMS += snap
-snap_SOURCES = snap.c snap.yuck
-snap_SOURCES += tv.c tv.h
-snap_SOURCES += version.c version.h
-snap_CPPFLAGS = $(AM_CPPFLAGS)
-snap_CPPFLAGS += -DHAVE_VERSION_H
-snap_LDFLAGS = $(AM_LDFLAGS)
-snap_LDADD = libmydfp.a
-BUILT_SOURCES += snap.yucc
-
 bin_PROGRAMS += quodist
 quodist_SOURCES = quodist.c quodist.yuck
 quodist_SOURCES += tv.c tv.h
