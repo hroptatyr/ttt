@@ -95,7 +95,7 @@ _next_stmp(tv_t newm)
 	static size_t llen;
 
 	if (UNLIKELY(line == NULL)) {
-		tv_t t;
+		tv_t t = NATV;
 
 		while (getline(&line, &llen, sfil) > 0 &&
 		       (t = strtotv(line, NULL)) + offs.t < newm);
