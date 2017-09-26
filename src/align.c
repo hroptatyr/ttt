@@ -267,6 +267,59 @@ out:
 	return (nf >= nfn) - 1;
 }
 
+static int
+from_stdin(void)
+{
+/* stdin without distinction */
+	struct buf_s this;
+	struct buf_s prev;
+	tv_t t = 0U;
+
+	memset(&this, 0, sizeof(this));
+	memset(&prev, 0, sizeof(prev));
+
+	/* read first line */
+	if (UNLIKELY((t = _fill(&this, stdin)) == NATV ||
+		     (metr = next(t)) == NATV)) {
+		goto out;
+	}
+
+	do {
+		/* push lines < METR */
+		while (t <= metr) {
+			prev.n = this.n - this.i;
+			if (UNLIKELY(prev.z < prev.n)) {
+				prev.z = _next_2pow(prev.n);
+				prev.b = realloc(prev.b, prev.z);
+			}
+			/* and push */
+			memcpy(prev.b, this.b + this.i, prev.n);
+			/* next line */
+			t = _fill(&this, stdin);
+		}
+		/* align */
+		with (char buf[32U]) {
+			fwrite(buf, 1, tvtostr(buf, sizeof(buf), metr), stdout);
+		}
+		if (prev.n) {
+			fwrite(prev.b, 1, prev.n, stdout);
+		} else {
+			fputc('\t', stdout);
+		}
+		fputc('\n', stdout);
+	} while (t < NATV && (metr = next(t)) < NATV);
+
+out:
+	/* and close */
+	if (this.b != NULL) {
+		free(this.b);
+	}
+	if (prev.b != NULL) {
+		free(prev.b);
+	}
+	return 0;
+}
+
 
 #include "align.yucc"
 
@@ -351,6 +404,8 @@ Error: offset timescale must be coercible to nanoseconds.");
 
 	if (argi->nargs > 0U) {
 		rc = from_cmdln(argi->args, argi->nargs) < 0;
+	} else {
+		rc = from_stdin() < 0;
 	}
 
 	if (argi->stamps_arg) {
