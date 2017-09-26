@@ -264,7 +264,7 @@ out:
 			free(prev[i].b);
 		}
 	}
-	return 0;
+	return (nf >= nfn) - 1;
 }
 
 
@@ -350,7 +350,7 @@ Error: offset timescale must be coercible to nanoseconds.");
 	next = !argi->stamps_arg ? _next_intv : _next_stmp;
 
 	if (argi->nargs > 0U) {
-		from_cmdln(argi->args, argi->nargs);
+		rc = from_cmdln(argi->args, argi->nargs) < 0;
 	}
 
 	if (argi->stamps_arg) {
