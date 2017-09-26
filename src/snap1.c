@@ -149,7 +149,7 @@ push_beef(char *ln, size_t UNUSED(lz))
 }
 
 
-#include "snap.yucc"
+#include "snap1.yucc"
 
 int
 main(int argc, char *argv[])
