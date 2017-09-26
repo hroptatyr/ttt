@@ -211,15 +211,17 @@ metr:
 push:
 	/* push lines < METR */
 	for (size_t i = 0U; i < nf; i++) {
-		if (t[i] <= metr) {
-			prev[i].n = this[i].n - this[i].i;
-			if (UNLIKELY(prev[i].z < prev[i].n)) {
-				prev[i].z = _next_2pow(prev[i].n);
-				prev[i].b = realloc(prev[i].b, prev[i].z);
-			}
-			/* and push */
-			memcpy(prev[i].b, this[i].b + this[i].i, prev[i].n);
+		if (t[i] > metr) {
+			/* push later */
+			continue;
 		}
+		prev[i].n = this[i].n - this[i].i;
+		if (UNLIKELY(prev[i].z < prev[i].n)) {
+			prev[i].z = _next_2pow(prev[i].n);
+			prev[i].b = realloc(prev[i].b, prev[i].z);
+		}
+		/* and push */
+		memcpy(prev[i].b, this[i].b + this[i].i, prev[i].n);
 	}
 	/* more lines now */
 	for (size_t i = j = 0U; i < nf; i++) {

@@ -1,7 +1,7 @@
-Usage: align TSDATA...
+Usage: align [TSDATA...]
 
 Align timestamped TSDATA...
-Like snap(1) but for multiple series.
+This regularises timeseries.
 
   -i, --interval=S      Shoot snaps every S seconds, default 1.
                         Can be suffixed with 'ms', 's', 'm', 'h' to
