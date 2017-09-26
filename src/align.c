@@ -80,6 +80,9 @@ serror(const char *fmt, ...)
 static tv_t
 _next_intv(tv_t newm)
 {
+	if (UNLIKELY(newm == NATV)) {
+		return NATV;
+	}
 	return ((((newm - 1ULL) - offs.t) / intv.t) + 1ULL) * intv.t + offs.t;
 }
 
@@ -205,7 +208,7 @@ metr:
 		}
 	}
 	/* up the metronome */
-	if (UNLIKELY(metr == NATV || (metr = next(metr)) == NATV)) {
+	if (UNLIKELY((metr = next(metr)) == NATV)) {
 		goto out;
 	}
 push:
@@ -307,7 +310,7 @@ from_stdin(void)
 			fputc('\t', stdout);
 		}
 		fputc('\n', stdout);
-	} while (t < NATV && (metr = next(t)) < NATV);
+	} while ((metr = next(t)) < NATV);
 
 out:
 	/* and close */
