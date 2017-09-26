@@ -92,8 +92,16 @@ _next_stmp(tv_t newm)
 	static char *line;
 	static size_t llen;
 
-	if (getline(&line, &llen, sfil) > 0 &&
-	    (newm = strtotv(line, NULL)) != NATV) {
+	if (UNLIKELY(line == NULL)) {
+		tv_t t;
+
+		while (getline(&line, &llen, sfil) > 0 &&
+		       (t = strtotv(line, NULL)) + offs.t < newm);
+		if (LIKELY(t < NATV)) {
+			return t + offs.t;
+		}
+	} else if (getline(&line, &llen, sfil) > 0 &&
+		   (newm = strtotv(line, NULL)) != NATV) {
 		return newm + offs.t;
 	}
 	/* otherwise it's the end of the road */
