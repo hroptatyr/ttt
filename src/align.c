@@ -80,7 +80,7 @@ serror(const char *fmt, ...)
 static tv_t
 _next_intv(tv_t newm)
 {
-	return ((((newm - 1ULL) - offs.t) / intv.t) + 1ULL) * intv.t;
+	return ((((newm - 1ULL) - offs.t) / intv.t) + 1ULL) * intv.t + offs.t;
 }
 
 static tv_t
