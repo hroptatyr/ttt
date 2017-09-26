@@ -53,6 +53,13 @@ static tv_t(*next)(tv_t);
 
 static tv_t metr;
 
+struct buf_s {
+	char *b;
+	size_t z;
+	off_t i;
+	size_t n;
+};
+
 
 static __attribute__((format(printf, 1, 2))) void
 serror(const char *fmt, ...)
@@ -126,33 +133,48 @@ _next_2pow(size_t z)
 	return z;
 }
 
+static tv_t
+_fill(struct buf_s *restrict tgt, FILE *fp)
+{
+	tv_t t;
+
+	do {
+		ssize_t nrd = getline(&tgt->b, &tgt->z, fp);
+		char *on;
+
+		if (nrd <= 0) {
+			return NATV;
+		}
+		/* massage line */
+		nrd -= tgt->b[nrd - 1] == '\n';
+		/* otherwise store line length */
+		tgt->n = nrd;
+		t = strtotv(tgt->b, &on);
+		tgt->i = on - tgt->b;
+	} while (t == NATV);
+	return t;
+}
+
 
 static int
 from_cmdln(char *const *fn, size_t nfn)
 {
 /* files in the parameter array */
 	const size_t maxnfp = get_maxfp();
-	struct {
-		/* current file, line and read count */
-		FILE *p;
-		char *line;
-		size_t llen;
-		size_t nrd;
-		/* offset past stamp and stamp */
-		off_t lix;
-		tv_t t;
-		/* previous line buffer */
-		char *pbuf;
-		size_t pbsz;
-		size_t plen;
-	} f[min_z(nfn, maxnfp)];
+	const size_t n = min_z(nfn, maxnfp);
+	FILE *f[n];
+	tv_t t[min_z(nfn, maxnfp)];
+	struct buf_s this[n];
+	struct buf_s prev[n];
 	size_t nf = 0U;
 	size_t j;
 
-	memset(f, 0, sizeof(f));
+	memset(this, 0, sizeof(this));
+	memset(prev, 0, sizeof(prev));
+	memset(t, 0, sizeof(t));
 	for (j = 0U; j < nfn && nf < countof(f); j++) {
-		f[nf].p = fopen(fn[j], "r");
-		if (UNLIKELY(f[nf].p == NULL)) {
+		f[nf] = fopen(fn[j], "r");
+		if (UNLIKELY(f[nf] == NULL)) {
 			serror("\
 Error: cannot open file `%s'", fn[j]);
 			continue;
@@ -166,35 +188,20 @@ Warning: only %zu files are used due to resource limits", nfn);
 
 	/* read first line */
 	for (size_t i = 0U; i < nf; i++) {
-		if (f[i].p == NULL) {
-			continue;
-		} else if (f[i].t > metr) {
-			continue;
+		if (f[i] == NULL) {
+			;
+		} else if (t[i] > metr) {
+			;
+		} else if (UNLIKELY((t[i] = _fill(this + i, f[i])) == NATV)) {
+			fclose(f[i]);
+			f[i] = NULL;
 		}
-		do {
-			ssize_t nrd = getline(&f[i].line, &f[i].llen, f[i].p);
-			char *on;
-
-			if (nrd <= 0) {
-				fclose(f[i].p);
-				f[i].p = NULL;
-				f[i].t = NATV;
-				break;
-			}
-			/* massage line */
-			nrd -= f[i].line[nrd - 1] == '\n';
-			f[i].line[nrd] = '\0';
-			/* otherwise store line length */
-			f[i].nrd = nrd;
-			f[i].t = strtotv(f[i].line, &on);
-			f[i].lix = on - f[i].line;
-		} while (f[i].t == NATV);
 	}
 metr:
 	metr = NATV;
 	for (size_t i = 0U; i < nf; i++) {
-		if (f[i].t < metr) {
-			metr = f[i].t;
+		if (t[i] < metr) {
+			metr = t[i];
 		}
 	}
 	/* up the metronome */
@@ -204,42 +211,28 @@ metr:
 push:
 	/* push lines < METR */
 	for (size_t i = 0U; i < nf; i++) {
-		if (f[i].t <= metr) {
-			f[i].plen = f[i].nrd - f[i].lix;
-			if (UNLIKELY(f[i].pbsz <= f[i].plen)) {
-				f[i].pbsz = _next_2pow(f[i].llen);
-				f[i].pbuf = realloc(f[i].pbuf, f[i].pbsz);
+		if (t[i] <= metr) {
+			prev[i].n = this[i].n - this[i].i;
+			if (UNLIKELY(prev[i].z < prev[i].n)) {
+				prev[i].z = _next_2pow(prev[i].n);
+				prev[i].b = realloc(prev[i].b, prev[i].z);
 			}
 			/* and push */
-			memcpy(f[i].pbuf, f[i].line + f[i].lix, f[i].plen + 1U);
+			memcpy(prev[i].b, this[i].b + this[i].i, prev[i].n);
 		}
 	}
 	/* more lines now */
 	for (size_t i = j = 0U; i < nf; i++) {
-		if (f[i].p == NULL) {
-			continue;
-		} else if (f[i].t > metr) {
-			continue;
+		if (f[i] == NULL) {
+			;
+		} else if (t[i] > metr) {
+			;
+		} else if (UNLIKELY((t[i] = _fill(this + i, f[i])) == NATV)) {
+			fclose(f[i]);
+			f[i] = NULL;
+		} else {
+			j++;
 		}
-		do {
-			ssize_t nrd = getline(&f[i].line, &f[i].llen, f[i].p);
-			char *on;
-
-			if (nrd <= 0) {
-				fclose(f[i].p);
-				f[i].p = NULL;
-				f[i].t = NATV;
-				break;
-			}
-			/* massage line */
-			nrd -= f[i].line[nrd - 1] == '\n';
-			f[i].line[nrd] = '\0';
-			/* otherwise store line length */
-			f[i].nrd = nrd;
-			f[i].t = strtotv(f[i].line, &on);
-			f[i].lix = on - f[i].line;
-		} while (f[i].t == NATV);
-		j++;
 	}
 	/* check if lines need pushing */
 	if (j) {
@@ -250,8 +243,8 @@ push:
 		fwrite(buf, 1, tvtostr(buf, sizeof(buf), metr), stdout);
 	}
 	for (size_t i = 0U; i < nf; i++) {
-		if (f[i].plen) {
-			fwrite(f[i].pbuf, 1, f[i].plen, stdout);
+		if (prev[i].n) {
+			fwrite(prev[i].b, 1, prev[i].n, stdout);
 		} else {
 			fputc('\t', stdout);
 		}
@@ -262,11 +255,11 @@ push:
 out:
 	/* and close */
 	for (size_t i = 0U; i < nf; i++) {
-		if (f[i].line != NULL) {
-			free(f[i].line);
+		if (this[i].b != NULL) {
+			free(this[i].b);
 		}
-		if (f[i].pbuf != NULL) {
-			free(f[i].pbuf);
+		if (prev[i].b != NULL) {
+			free(prev[i].b);
 		}
 	}
 	return 0;
