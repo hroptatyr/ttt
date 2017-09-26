@@ -43,6 +43,7 @@
 #include <errno.h>
 #include <sys/resource.h>
 #include "tv.h"
+#include "hash.h"
 #include "nifty.h"
 
 /* command line params */
@@ -166,6 +167,21 @@ _fill(struct buf_s *restrict tgt, FILE *fp)
 	return t;
 }
 
+static hx_t
+_hash(struct buf_s *restrict tgt)
+{
+	const char sep = tgt->b[tgt->i++];
+	const char *on = memchr(tgt->b + tgt->i, sep, tgt->n - tgt->i);
+	hx_t h;
+
+	if (UNLIKELY(on == NULL)) {
+		return 0U;
+	}
+	h = hash(tgt->b + tgt->i, on - (tgt->b + tgt->i));
+	tgt->i += on - (tgt->b + tgt->i);
+	return h;
+}
+
 
 static int
 from_cmdln(char *const *fn, size_t nfn)
@@ -174,12 +190,13 @@ from_cmdln(char *const *fn, size_t nfn)
 	const size_t maxnfp = get_maxfp();
 	const size_t n = min_z(nfn, maxnfp);
 	FILE *f[n];
-	tv_t t[min_z(nfn, maxnfp)];
+	tv_t t[n];
 	struct buf_s this[n];
 	struct buf_s prev[n];
 	size_t nf = 0U;
 	size_t j;
 
+	/* initialise */
 	memset(this, 0, sizeof(this));
 	memset(prev, 0, sizeof(prev));
 	memset(t, 0, sizeof(t));
@@ -279,6 +296,81 @@ out:
 }
 
 static int
+from_instr(char *const *in, size_t nin)
+{
+/* files in the parameter array */
+	struct buf_s prev[nin];
+	struct buf_s this;
+	hx_t h[nin];
+	tv_t t;
+
+	/* initialise */
+	memset(&this, 0, sizeof(this));
+	memset(prev, 0, sizeof(prev));
+	for (size_t i = 0U; i < nin; i++) {
+		h[i] = hash(in[i], strlen(in[i]));
+	}
+
+	/* read first line */
+	if (UNLIKELY((t = _fill(&this, stdin)) == NATV ||
+		     (metr = next(t)) == NATV)) {
+		goto out;
+	}
+
+	do {
+		/* push lines < METR */
+		for (; t <= metr; t = _fill(&this, stdin)) {
+			const hx_t g = _hash(&this);
+			size_t j;
+
+			if (UNLIKELY(g == 0U)) {
+				continue;
+			}
+			/* hashtable? */
+			for (j = 0U; j < nin; j++) {
+				if (h[j] == g) {
+					break;
+				}
+			}
+			if (UNLIKELY(j >= nin)) {
+				continue;
+			}
+			prev[j].n = this.n - this.i;
+			if (UNLIKELY(prev[j].z < prev[j].n)) {
+				prev[j].z = _next_2pow(prev[j].n);
+				prev[j].b = realloc(prev[j].b, prev[j].z);
+			}
+			/* and push */
+			memcpy(prev[j].b, this.b + this.i, prev[j].n);
+		}
+		/* align */
+		with (char buf[32U]) {
+			fwrite(buf, 1, tvtostr(buf, sizeof(buf), metr), stdout);
+		}
+		for (size_t i = 0U; i < nin; i++) {
+			if (prev[i].n) {
+				fwrite(prev[i].b, 1, prev[i].n, stdout);
+			} else {
+				fputc('\t', stdout);
+			}
+		}
+		fputc('\n', stdout);
+	} while ((metr = next(t)) < NATV);
+
+out:
+	/* and close */
+	if (this.b != NULL) {
+		free(this.b);
+	}
+	for (size_t i = 0U; i < nin; i++) {
+		if (prev[i].b != NULL) {
+			free(prev[i].b);
+		}
+	}
+	return 0;
+}
+
+static int
 from_stdin(void)
 {
 /* stdin without distinction */
@@ -286,6 +378,7 @@ from_stdin(void)
 	struct buf_s prev;
 	tv_t t = 0U;
 
+	/* initialise */
 	memset(&this, 0, sizeof(this));
 	memset(&prev, 0, sizeof(prev));
 
@@ -297,7 +390,7 @@ from_stdin(void)
 
 	do {
 		/* push lines < METR */
-		while (t <= metr) {
+		for (; t <= metr; t = _fill(&this, stdin)) {
 			prev.n = this.n - this.i;
 			if (UNLIKELY(prev.z < prev.n)) {
 				prev.z = _next_2pow(prev.n);
@@ -305,8 +398,6 @@ from_stdin(void)
 			}
 			/* and push */
 			memcpy(prev.b, this.b + this.i, prev.n);
-			/* next line */
-			t = _fill(&this, stdin);
 		}
 		/* align */
 		with (char buf[32U]) {
@@ -414,10 +505,13 @@ Error: offset timescale must be coercible to nanoseconds.");
 	next = !argi->stamps_arg ? _next_intv : _next_stmp;
 
 	if (argi->nargs > 0U) {
-		rc = from_cmdln(argi->args, argi->nargs) < 0;
+		rc = from_cmdln(argi->args, argi->nargs);
+	} else if (argi->instrument_nargs) {
+		rc = from_instr(argi->instrument_args, argi->instrument_nargs);
 	} else {
-		rc = from_stdin() < 0;
+		rc = from_stdin();
 	}
+	rc = rc < 0;
 
 	if (argi->stamps_arg) {
 		fclose(sfil);

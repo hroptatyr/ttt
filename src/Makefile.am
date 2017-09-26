@@ -272,6 +272,7 @@ BUILT_SOURCES += cdiff.yucc
 bin_PROGRAMS += align
 align_SOURCES = align.c align.yuck
 align_SOURCES += tv.c tv.h
+align_SOURCES += hash.c hash.h
 align_SOURCES += version.c version.h
 align_CPPFLAGS = $(AM_CPPFLAGS)
 align_CPPFLAGS += -DHAVE_VERSION_H

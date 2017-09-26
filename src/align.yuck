@@ -12,3 +12,5 @@ This regularises timeseries.
                         milliseconds, seconds, minutes, or hours.
                         Default: 0
   -S, --stamps=FILE     Align to times taken from FILE.
+
+  -I, --instrument=X... Look for X... in stdin input.
