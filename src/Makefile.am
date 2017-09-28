@@ -210,7 +210,7 @@ ewma_CPPFLAGS += $(dfp754_CFLAGS)
 ewma_CPPFLAGS += -DHAVE_VERSION_H
 ewma_LDFLAGS = $(AM_LDFLAGS)
 ewma_LDFLAGS += $(dfp754_LIBS)
-ewma_LDADD = libmydfp.a
+ewma_LDADD = libmydfp.a -lm
 BUILT_SOURCES += ewma.yucc
 
 bin_PROGRAMS += opt

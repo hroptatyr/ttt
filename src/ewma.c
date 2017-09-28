@@ -248,7 +248,7 @@ Error: halflife timescale must be coercible to nanoseconds.");
 			rc = 1;
 			goto out;
 		}
-		dcay = 1 - log(2.) * (double)NSECS / (double)half.t;
+		dcay = 1. - log(2.) * (double)NSECS / (double)half.t;
 	}
 
 	rc = from_stdin() < 0;
