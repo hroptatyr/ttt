@@ -1,0 +1,5 @@
+Usage: ewma < FILE
+
+Return EWMA.
+
+  -T, --halflife=T      Use halflife of T, can be suffixed.

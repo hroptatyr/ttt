@@ -200,6 +200,19 @@ sma_LDFLAGS += $(dfp754_LIBS)
 sma_LDADD = libmydfp.a
 BUILT_SOURCES += sma.yucc
 
+bin_PROGRAMS += ewma
+ewma_SOURCES = ewma.c ewma.yuck
+ewma_SOURCES += tv.c tv.h
+ewma_SOURCES += version.c version.h
+ewma_CPPFLAGS = $(AM_CPPFLAGS)
+ewma_CPPFLAGS += -D_GNU_SOURCE
+ewma_CPPFLAGS += $(dfp754_CFLAGS)
+ewma_CPPFLAGS += -DHAVE_VERSION_H
+ewma_LDFLAGS = $(AM_LDFLAGS)
+ewma_LDFLAGS += $(dfp754_LIBS)
+ewma_LDADD = libmydfp.a
+BUILT_SOURCES += ewma.yucc
+
 bin_PROGRAMS += opt
 opt_SOURCES = opt.c opt.yuck
 opt_SOURCES += tv.c tv.h
