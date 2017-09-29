@@ -1,0 +1,5 @@
+Usage: rolling < FILE
+
+Roll a window of fixed duration across FILE.
+
+  -i, --interval=S      Window length is S.

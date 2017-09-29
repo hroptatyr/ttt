@@ -179,6 +179,14 @@ xevent_CPPFLAGS = $(AM_CPPFLAGS)
 xevent_CPPFLAGS += -D_GNU_SOURCE
 BUILT_SOURCES += xevent.yucc
 
+bin_PROGRAMS += rolling
+rolling_SOURCES = rolling.c rolling.yuck
+rolling_SOURCES += tv.c tv.h
+rolling_SOURCES += version.c version.h
+rolling_CPPFLAGS = $(AM_CPPFLAGS)
+rolling_CPPFLAGS += -D_GNU_SOURCE
+BUILT_SOURCES += rolling.yucc
+
 bin_PROGRAMS += thours
 thours_SOURCES = thours.c thours.yuck
 thours_SOURCES += tv.c tv.h
