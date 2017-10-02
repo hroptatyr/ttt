@@ -115,8 +115,8 @@ push(tv_t m, const char *ln, size_t lz)
 		size_t nu_zoffs = zoffs * 2U;
 		metrs = realloc(metrs, nu_zoffs * sizeof(*metrs));
 		loffs = realloc(loffs, nu_zoffs * sizeof(*loffs));
-		memmove(metrs, metrs + zoffs, tail * sizeof(*metrs));
-		memmove(loffs, loffs + zoffs, tail * sizeof(*loffs));
+		memmove(metrs + zoffs, metrs, tail * sizeof(*metrs));
+		memmove(loffs + zoffs, loffs, tail * sizeof(*loffs));
 		tail += zoffs;
 		zoffs = nu_zoffs;
 	}
