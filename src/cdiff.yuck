@@ -1,3 +1,0 @@
-Usage: cdiff < FILE
-
-Cross out parts of the line that are identical to the previous.

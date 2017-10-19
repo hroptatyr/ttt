@@ -281,15 +281,6 @@ pat_LDFLAGS += $(dfp754_LIBS)
 pat_LDADD = libmydfp.a -lm
 BUILT_SOURCES += pat.yucc
 
-## doesn't really fit in, but what the heck
-bin_PROGRAMS += cdiff
-cdiff_SOURCES = cdiff.c cdiff.yuck
-cdiff_SOURCES += version.c version.h
-cdiff_CPPFLAGS = $(AM_CPPFLAGS)
-cdiff_CPPFLAGS += -DHAVE_VERSION_H
-cdiff_LDFLAGS = $(AM_LDFLAGS)
-BUILT_SOURCES += cdiff.yucc
-
 bin_PROGRAMS += align
 align_SOURCES = align.c align.yuck
 align_SOURCES += tv.c tv.h
